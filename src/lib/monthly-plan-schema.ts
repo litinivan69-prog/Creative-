@@ -9,10 +9,7 @@ import {
 const nonEmptyText = z.string().trim().min(1);
 const nonNegativeInt = z.number().int().min(0);
 const stringList = z.array(nonEmptyText);
-const dateOrCadenceMarker = nonEmptyText.refine(
-  (value) => /^\d{4}-\d{2}-\d{2}$/.test(value) || /^[a-z][a-z0-9 _-]{2,80}$/i.test(value),
-  "Use YYYY-MM-DD or a clear cadence marker.",
-);
+const dateOrCadenceMarker = z.string().trim().min(1).max(120);
 
 export const MonthlyPlanStatusSchema = z.enum(["draft", "ready_for_approval", "blocked"]);
 export const PlannedContentStatusSchema = z.enum(["planned", "blocked"]);
