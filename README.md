@@ -82,6 +82,14 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 
 Before Sprint 2, Sprint 1 still needs real end-to-end testing against PostgreSQL and the OpenAI API using a production-like client brief and Blueprint.
 
+## Automation Sprint 0
+
+- GitHub Actions CI runs automatically on pushes to `main` and on pull requests.
+- CI starts PostgreSQL 16 as a service, applies Prisma migrations, generates the Prisma client, typechecks, and builds the app.
+- Local Docker is no longer required for CI because GitHub Actions provides the PostgreSQL service.
+- The CI build uses a placeholder `OPENAI_API_KEY`; real OpenAI end-to-end tests require adding `OPENAI_API_KEY` as a GitHub secret.
+- Vercel and Neon setup is the next automation step.
+
 ## Data Model
 
 The Prisma schema includes:
