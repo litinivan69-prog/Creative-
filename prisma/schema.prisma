@@ -86,6 +86,7 @@ model MonthlyOperatingPlan {
 
   @@index([clientId])
   @@index([blueprintId])
+  @@unique([blueprintId, month])
 }
 
 model MonthlyPlanModule {

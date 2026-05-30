@@ -9,6 +9,10 @@ import {
 const nonEmptyText = z.string().trim().min(1);
 const nonNegativeInt = z.number().int().min(0);
 const stringList = z.array(nonEmptyText);
+const dateOrCadenceMarker = nonEmptyText.refine(
+  (value) => /^\d{4}-\d{2}-\d{2}$/.test(value) || /^[a-z][a-z0-9 _-]{2,80}$/i.test(value),
+  "Use YYYY-MM-DD or a clear cadence marker.",
+);
 
 export const MonthlyPlanStatusSchema = z.enum(["draft", "ready_for_approval", "blocked"]);
 export const PlannedContentStatusSchema = z.enum(["planned", "blocked"]);
@@ -39,7 +43,7 @@ export const PlannedContentItemSchema = z.object({
   format: nonEmptyText,
   topic: nonEmptyText.describe("Planning topic only. Do not generate final copy."),
   goal: nonEmptyText,
-  plannedDate: nonEmptyText.describe("YYYY-MM-DD date or a clear cadence marker if date is impossible."),
+  plannedDate: dateOrCadenceMarker.describe("YYYY-MM-DD date or a clear cadence marker if date is impossible."),
   approvalRequired: z.boolean(),
   autopublishEligible: z.boolean(),
   requiredInputs: stringList,
@@ -50,7 +54,7 @@ export const ManagerTaskSchema = z.object({
   title: nonEmptyText,
   description: nonEmptyText,
   priority: PrioritySchema,
-  dueDate: nonEmptyText.describe("YYYY-MM-DD date or a clear due cadence marker."),
+  dueDate: dateOrCadenceMarker.describe("YYYY-MM-DD date or a clear due cadence marker."),
   status: ManagerTaskStatusSchema,
 });
 

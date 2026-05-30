@@ -80,6 +80,8 @@ Client Presence Blueprint -> OpenAI structured planning -> Monthly Operating Pla
 
 Sprint 1 does not generate full post, article, email, or caption text. It only creates the operational plan and planned content items as structured data.
 
+Before Sprint 2, Sprint 1 still needs real end-to-end testing against PostgreSQL and the OpenAI API using a production-like client brief and Blueprint.
+
 ## Data Model
 
 The Prisma schema includes:

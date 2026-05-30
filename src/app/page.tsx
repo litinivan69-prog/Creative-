@@ -311,7 +311,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                     </div>
                     <form action={generateMonthlyPlan}>
                       <input type="hidden" name="blueprintId" value={latestBlueprint.id} />
-                      <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">
+                      <button
+                        disabled={latestBlueprint.nextRecommendedAction === "request_more_brief_data"}
+                        className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
+                      >
                         Generate Monthly Plan
                       </button>
                     </form>
