@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const nonEmptyText = z.string().trim().min(1);
 const nonNegativeInt = z.number().int().min(0);
+const confidenceScore = z.number().min(0).max(100);
 
 export const PrioritySchema = z.enum(["low", "medium", "high"]);
 
@@ -39,6 +40,13 @@ export const AutomationStatusSchema = z.enum([
   "manual",
   "unsupported",
   "needs_verification",
+]);
+
+export const NextRecommendedActionSchema = z.enum([
+  "request_more_brief_data",
+  "approve_blueprint",
+  "connect_integrations",
+  "generate_monthly_plan",
 ]);
 
 const BasePlatformRecommendationSchema = z.object({
@@ -105,7 +113,8 @@ export const IntegrationRequirementSchema = z.object({
 export const HumanReviewPolicySchema = z.object({
   defaultMode: z.enum(["manual", "assisted", "guardrailed_auto"]),
   alwaysReview: z.array(nonEmptyText),
-  canAutopublish: z.boolean(),
+  canAutopublish: z.array(nonEmptyText),
+  requiresApproval: z.array(nonEmptyText),
   escalationTriggers: z.array(nonEmptyText),
   maxRevisionLoops: z.number().int().min(0).max(10),
 });
@@ -130,8 +139,12 @@ export const RiskRuleSchema = z.object({
 export const ClientPresenceBlueprintSchema = z.object({
   clientSummary: nonEmptyText,
   businessGoals: z.array(nonEmptyText).min(1),
+  missingBriefFields: z.array(nonEmptyText).default([]),
+  assumptions: z.array(nonEmptyText).default([]),
+  confidenceScore,
+  nextRecommendedAction: NextRecommendedActionSchema,
   recommendedPlatforms: z.array(RecommendedPlatformSchema).min(1),
-  notRecommendedPlatforms: z.array(NotRecommendedPlatformSchema).min(1),
+  notRecommendedPlatforms: z.array(NotRecommendedPlatformSchema).default([]),
   selectedModules: z.array(PresenceModuleSchema).min(1),
   recommendedMonthlyContentScope: RecommendedMonthlyContentScopeSchema,
   publishingFrequency: z.object({
@@ -144,7 +157,7 @@ export const ClientPresenceBlueprintSchema = z.object({
       }),
     ).min(1),
   }),
-  integrationRequirements: z.array(IntegrationRequirementSchema).min(1),
+  integrationRequirements: z.array(IntegrationRequirementSchema).default([]),
   automationPlan: z.array(AutomationPlanSchema).min(1),
   riskRules: z.array(RiskRuleSchema).min(1),
   humanReviewPolicy: HumanReviewPolicySchema,
@@ -190,6 +203,10 @@ export function validateBlueprintForPersistence(input: unknown): ClientPresenceB
 
   if (blueprint.humanReviewPolicy.defaultMode !== blueprint.approvalMode) {
     throw new Error("Human review defaultMode must match the blueprint approvalMode.");
+  }
+
+  if (blueprint.confidenceScore < 60 && blueprint.nextRecommendedAction !== "request_more_brief_data") {
+    throw new Error("Blueprints with confidence below 60 must request more brief data.");
   }
 
   return blueprint;

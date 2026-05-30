@@ -247,6 +247,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   </div>
                   <div className="grid gap-2 text-sm">
                     <div className="rounded-md bg-slate-50 p-3">
+                      <p className="font-semibold text-slate-900">Confidence</p>
+                      <p className="text-slate-800">{latestBlueprint.confidenceScore}/100</p>
+                    </div>
+                    <div className="rounded-md bg-rose-50 p-3">
+                      <p className="font-semibold text-rose-900">Next action</p>
+                      <p className="text-rose-800">{latestBlueprint.nextRecommendedAction}</p>
+                    </div>
+                    <div className="rounded-md bg-slate-50 p-3">
                       <p className="font-semibold text-slate-900">Monthly units</p>
                       <p className="text-slate-800">
                         {latestBlueprint.totalContentUnitsMin}-{latestBlueprint.totalContentUnitsMax}
@@ -278,6 +286,21 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                     <h4 className="font-semibold text-slate-950">Recommended monthly content scope</h4>
                     <div className="mt-3">
                       <JsonBlock value={latestBlueprint.recommendedMonthlyContentScope} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <div>
+                    <h4 className="font-semibold text-slate-950">Missing brief fields</h4>
+                    <div className="mt-3">
+                      <JsonBlock value={latestBlueprint.missingBriefFields} />
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-slate-950">Assumptions</h4>
+                    <div className="mt-3">
+                      <JsonBlock value={latestBlueprint.assumptions} />
                     </div>
                   </div>
                 </div>

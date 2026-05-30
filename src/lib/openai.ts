@@ -27,7 +27,7 @@ export async function generateClientPresenceBlueprint(input: {
       {
         role: "system",
         content:
-          "You design adaptive AI-powered digital presence systems for businesses. Generate a custom Client Presence Blueprint from the brief. The Blueprint must be an executable product configuration, not only a strategic explanation. All volume, platform, automation, integration, and review decisions must be machine-readable. Do not use fixed deliverable packages, do not assume a fixed platform list, and make every platform/module recommendation traceable to the brief. Return only schema-valid structured data.",
+          "You design adaptive AI-powered digital presence systems for businesses. Generate a custom Client Presence Blueprint from the brief. The Blueprint must be an executable product configuration, not only a strategic explanation. All volume, platform, automation, integration, and review decisions must be machine-readable. Do not use fixed deliverable packages, do not assume a fixed platform list, and make every platform/module recommendation traceable to the brief. Do not invent missing details. If the brief is incomplete, list missingBriefFields and assumptions explicitly. confidenceScore must reflect how reliable the Blueprint is based on the brief, from 0 to 100. nextRecommendedAction must guide the manager to the next operational step. Return only schema-valid structured data.",
       },
       {
         role: "user",

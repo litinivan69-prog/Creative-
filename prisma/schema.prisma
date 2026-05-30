@@ -35,6 +35,10 @@ model ClientPresenceBlueprint {
   briefId                        String                   @unique
   clientSummary                  String
   businessGoals                  Json
+  missingBriefFields             Json                     @default("[]")
+  assumptions                    Json                     @default("[]")
+  confidenceScore                Int                      @default(0)
+  nextRecommendedAction          String                   @default("request_more_brief_data")
   notRecommendedPlatforms        Json
   recommendedMonthlyContentScope Json
   totalContentUnitsMin           Int                      @default(0)
