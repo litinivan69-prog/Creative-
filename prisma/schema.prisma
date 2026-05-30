@@ -1,0 +1,119 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Client {
+  id         String                    @id @default(cuid())
+  name       String
+  website    String?
+  industry   String?
+  createdAt  DateTime                  @default(now())
+  updatedAt  DateTime                  @updatedAt
+  briefs     ClientBrief[]
+  blueprints ClientPresenceBlueprint[]
+}
+
+model ClientBrief {
+  id        String                   @id @default(cuid())
+  clientId  String
+  rawBrief  String
+  createdAt DateTime                 @default(now())
+  client    Client                   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  blueprint ClientPresenceBlueprint?
+
+  @@index([clientId])
+}
+
+model ClientPresenceBlueprint {
+  id                             String                   @id @default(cuid())
+  clientId                       String
+  briefId                        String                   @unique
+  clientSummary                  String
+  businessGoals                  Json
+  notRecommendedPlatforms        Json
+  recommendedMonthlyContentScope Json
+  totalContentUnitsMin           Int                      @default(0)
+  totalContentUnitsMax           Int                      @default(0)
+  publishingFrequency            Json
+  integrationRequirements        Json                     @default("[]")
+  humanReviewPolicy              Json                     @default("{}")
+  approvalMode                   String
+  managerAttentionLevel          String
+  rawBlueprintJson               Json
+  createdAt                      DateTime                 @default(now())
+  updatedAt                      DateTime                 @updatedAt
+  client                         Client                   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  brief                          ClientBrief              @relation(fields: [briefId], references: [id], onDelete: Cascade)
+  selectedModules                PresenceModule[]
+  platformRecommendations        PlatformRecommendation[]
+  automationPlans                AutomationPlan[]
+  riskRules                      RiskRule[]
+
+  @@index([clientId])
+}
+
+model PresenceModule {
+  id                   String                  @id @default(cuid())
+  blueprintId          String
+  moduleType           String                  @default("custom")
+  name                 String
+  purpose              String
+  rationale            String
+  priority             String
+  monthlyContentScope  Json
+  blueprint            ClientPresenceBlueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+
+  @@index([blueprintId])
+}
+
+model PlatformRecommendation {
+  id                    String                  @id @default(cuid())
+  blueprintId           String
+  platformName          String
+  platformType          String                  @default("other")
+  recommendation        String
+  priority              String                  @default("medium")
+  automationStatus      String                  @default("needs_verification")
+  requiredCredentials   Json                    @default("[]")
+  permissionsNeeded     Json                    @default("[]")
+  contentFormats        Json                    @default("[]")
+  rationale             String
+  contentRole           String
+  suggestedFrequency    String
+  automationOpportunity String
+  blueprint             ClientPresenceBlueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+
+  @@index([blueprintId])
+}
+
+model AutomationPlan {
+  id              String                  @id @default(cuid())
+  blueprintId     String
+  name            String
+  trigger         String
+  action          String
+  humanCheckpoint String
+  toolCategory    String
+  priority        String
+  blueprint       ClientPresenceBlueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+
+  @@index([blueprintId])
+}
+
+model RiskRule {
+  id               String                  @id @default(cuid())
+  blueprintId      String
+  ruleName         String
+  riskDescription  String
+  preventionAction String
+  severity         String
+  approvalRequired Boolean
+  blueprint        ClientPresenceBlueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+
+  @@index([blueprintId])
+}
