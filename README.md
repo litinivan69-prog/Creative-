@@ -1,10 +1,12 @@
 # Adaptive Presence OS
 
-Sprint 0 MVP for an adaptive AI-powered digital presence operating system.
+Sprint 0 and Sprint 1 MVP for an adaptive AI-powered digital presence operating system.
 
-The first working flow is:
+The first working flows are:
 
 Client Brief -> OpenAI structured analysis -> Client Presence Blueprint -> PostgreSQL via Prisma -> admin dashboard.
+
+Client Presence Blueprint -> OpenAI structured planning -> Monthly Operating Plan -> PostgreSQL via Prisma -> admin dashboard.
 
 ## Stack
 
@@ -68,6 +70,16 @@ Client Brief -> OpenAI structured analysis -> Client Presence Blueprint -> Postg
 - Store the full raw structured blueprint and normalized child entities.
 - View client summary, business goals, platform recommendations, selected modules, monthly scope, cadence, automations, risk rules, approval mode, and manager attention level.
 
+## What Sprint 1 Includes
+
+- Generate a Monthly Operating Plan from an existing Client Presence Blueprint.
+- Block monthly plan generation when `nextRecommendedAction` is `request_more_brief_data`.
+- Validate the generated monthly plan against the Blueprint before saving.
+- Store the full raw structured monthly plan and normalized child entities.
+- View active modules, selected platforms, planned content items, manager tasks, approval strategy, autopublish strategy, and risk summary.
+
+Sprint 1 does not generate full post, article, email, or caption text. It only creates the operational plan and planned content items as structured data.
+
 ## Data Model
 
 The Prisma schema includes:
@@ -79,5 +91,10 @@ The Prisma schema includes:
 - `PlatformRecommendation`
 - `AutomationPlan`
 - `RiskRule`
+- `MonthlyOperatingPlan`
+- `MonthlyPlanModule`
+- `MonthlyPlanPlatform`
+- `PlannedContentItem`
+- `ManagerTask`
 
 The blueprint intentionally stores platform names and module names as generated data. There is no fixed platform list and no fixed deliverable package baked into the application.

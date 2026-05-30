@@ -3,9 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { Prisma } from "@prisma/client";
-import { generateClientPresenceBlueprint } from "@/lib/openai";
+import { generateClientPresenceBlueprint, generateMonthlyOperatingPlan } from "@/lib/openai";
 import { prisma } from "@/lib/prisma";
 import { validateBlueprintForPersistence } from "@/lib/blueprint-schema";
+import { validateMonthlyPlanForBlueprint } from "@/lib/monthly-plan-schema";
 
 function formText(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -13,6 +14,26 @@ function formText(formData: FormData, key: string) {
 
 function errorRedirect(message: string): never {
   redirect(`/?error=${encodeURIComponent(message)}`);
+}
+
+function blueprintErrorRedirect(blueprintId: string, message: string): never {
+  redirect(`/?blueprint=${blueprintId}&error=${encodeURIComponent(message)}`);
+}
+
+function currentMonth() {
+  return new Date().toISOString().slice(0, 7);
+}
+
+function stringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function jsonObject(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function jsonArray(value: unknown) {
+  return Array.isArray(value) ? value : [];
 }
 
 export async function createClient(formData: FormData) {
@@ -196,4 +217,167 @@ export async function generateBlueprint(formData: FormData) {
 
   revalidatePath("/");
   redirect(`/?blueprint=${createdId}`);
+}
+
+export async function generateMonthlyPlan(formData: FormData) {
+  const blueprintId = formText(formData, "blueprintId");
+
+  const blueprint = await prisma.clientPresenceBlueprint.findUnique({
+    where: { id: blueprintId },
+    include: {
+      client: true,
+      selectedModules: true,
+      platformRecommendations: true,
+      riskRules: true,
+      monthlyPlans: {
+        orderBy: { createdAt: "desc" },
+      },
+    },
+  });
+
+  if (!blueprint) {
+    errorRedirect("Blueprint not found.");
+  }
+
+  if (blueprint.nextRecommendedAction === "request_more_brief_data") {
+    blueprintErrorRedirect(
+      blueprint.id,
+      "Monthly plan generation is blocked because this Blueprint needs more brief data first.",
+    );
+  }
+
+  const month = currentMonth();
+  const existingPlan = blueprint.monthlyPlans.find((plan) => plan.month === month);
+
+  if (existingPlan) {
+    redirect(`/?blueprint=${blueprint.id}&plan=${existingPlan.id}&notice=${encodeURIComponent("Monthly plan already exists for this month.")}`);
+  }
+
+  const recommendedPlatforms = blueprint.platformRecommendations.filter(
+    (platform) => platform.recommendation === "recommended",
+  );
+
+  const humanReviewPolicy = jsonObject(blueprint.humanReviewPolicy) as {
+    canAutopublish?: unknown;
+    requiresApproval?: unknown;
+    defaultMode?: string;
+  };
+
+  const integrationRequirements = jsonArray(blueprint.integrationRequirements)
+    .filter((item): item is { platformName?: unknown; required?: unknown } => Boolean(item))
+    .map((item) => ({
+      platformName: typeof item.platformName === "string" ? item.platformName : "",
+      required: item.required === true,
+    }))
+    .filter((item) => item.platformName);
+
+  const blueprintPayload = {
+    id: blueprint.id,
+    clientSummary: blueprint.clientSummary,
+    businessGoals: blueprint.businessGoals,
+    confidenceScore: blueprint.confidenceScore,
+    nextRecommendedAction: blueprint.nextRecommendedAction,
+    selectedModules: blueprint.selectedModules,
+    recommendedPlatforms,
+    recommendedMonthlyContentScope: blueprint.recommendedMonthlyContentScope,
+    publishingFrequency: blueprint.publishingFrequency,
+    integrationRequirements: blueprint.integrationRequirements,
+    humanReviewPolicy: blueprint.humanReviewPolicy,
+    riskRules: blueprint.riskRules,
+  };
+
+  let createdId: string;
+
+  try {
+    const generated = await generateMonthlyOperatingPlan({
+      clientName: blueprint.client.name,
+      month,
+      blueprint: blueprintPayload,
+    });
+
+    const plan = validateMonthlyPlanForBlueprint(generated, {
+      selectedModuleTypes: blueprint.selectedModules.map((module) => module.moduleType),
+      recommendedPlatformNames: recommendedPlatforms.map((platform) => platform.platformName),
+      humanReviewPolicy: {
+        defaultMode: humanReviewPolicy.defaultMode,
+        canAutopublish: stringArray(humanReviewPolicy.canAutopublish),
+        requiresApproval: stringArray(humanReviewPolicy.requiresApproval),
+      },
+      integrationRequirements,
+      riskRules: blueprint.riskRules.map((rule) => ({
+        severity: rule.severity,
+        approvalRequired: rule.approvalRequired,
+      })),
+    });
+
+    const created = await prisma.monthlyOperatingPlan.create({
+      data: {
+        clientId: blueprint.clientId,
+        blueprintId: blueprint.id,
+        month: plan.month,
+        status: plan.status,
+        summary: plan.summary,
+        totalPlannedUnits: plan.totalPlannedUnits,
+        approvalStrategy: plan.approvalStrategy,
+        autopublishStrategy: plan.autopublishStrategy,
+        riskSummary: plan.riskSummary,
+        rawPlanJson: plan as unknown as Prisma.InputJsonValue,
+        modules: {
+          create: plan.activeModules.map((module) => ({
+            moduleType: module.moduleType,
+            name: module.name,
+            priority: module.priority,
+            plannedUnitsMin: module.plannedUnitsMin,
+            plannedUnitsMax: module.plannedUnitsMax,
+            rationale: module.rationale,
+          })),
+        },
+        platforms: {
+          create: plan.selectedPlatforms.map((platform) => ({
+            platformName: platform.platformName,
+            platformType: platform.platformType,
+            automationStatus: platform.automationStatus,
+            plannedCadence: platform.plannedCadence,
+            contentFormats: platform.contentFormats,
+            requiresIntegrationBeforeLaunch: platform.requiresIntegrationBeforeLaunch,
+            rationale: platform.rationale,
+          })),
+        },
+        plannedContentItems: {
+          create: plan.plannedContentItems.map((item) => ({
+            moduleType: item.moduleType,
+            platformName: item.platformName,
+            format: item.format,
+            topic: item.topic,
+            goal: item.goal,
+            plannedDate: item.plannedDate,
+            approvalRequired: item.approvalRequired,
+            autopublishEligible: item.autopublishEligible,
+            requiredInputs: item.requiredInputs,
+            status: item.status,
+          })),
+        },
+        managerTasks: {
+          create: plan.managerTasks.map((task) => ({
+            title: task.title,
+            description: task.description,
+            priority: task.priority,
+            dueDate: task.dueDate,
+            status: task.status,
+          })),
+        },
+      },
+    });
+
+    createdId = created.id;
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Monthly plan generation failed. Check the Blueprint and try again.";
+    blueprintErrorRedirect(blueprint.id, `Monthly plan generation failed: ${message}`);
+  }
+
+  revalidatePath("/");
+  redirect(`/?blueprint=${blueprint.id}&plan=${createdId}`);
 }

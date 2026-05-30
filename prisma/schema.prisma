@@ -16,6 +16,7 @@ model Client {
   updatedAt  DateTime                  @updatedAt
   briefs     ClientBrief[]
   blueprints ClientPresenceBlueprint[]
+  monthlyPlans MonthlyOperatingPlan[]
 }
 
 model ClientBrief {
@@ -57,8 +58,94 @@ model ClientPresenceBlueprint {
   platformRecommendations        PlatformRecommendation[]
   automationPlans                AutomationPlan[]
   riskRules                      RiskRule[]
+  monthlyPlans                   MonthlyOperatingPlan[]
 
   @@index([clientId])
+}
+
+model MonthlyOperatingPlan {
+  id                 String                @id @default(cuid())
+  clientId           String
+  blueprintId        String
+  month              String
+  status             String
+  summary            String
+  totalPlannedUnits  Int
+  approvalStrategy   String
+  autopublishStrategy String
+  riskSummary        String
+  rawPlanJson        Json
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  client             Client                @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  blueprint          ClientPresenceBlueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+  modules            MonthlyPlanModule[]
+  platforms          MonthlyPlanPlatform[]
+  plannedContentItems PlannedContentItem[]
+  managerTasks       ManagerTask[]
+
+  @@index([clientId])
+  @@index([blueprintId])
+}
+
+model MonthlyPlanModule {
+  id              String               @id @default(cuid())
+  monthlyPlanId   String
+  moduleType      String
+  name            String
+  priority        String
+  plannedUnitsMin Int
+  plannedUnitsMax Int
+  rationale       String
+  monthlyPlan     MonthlyOperatingPlan @relation(fields: [monthlyPlanId], references: [id], onDelete: Cascade)
+
+  @@index([monthlyPlanId])
+}
+
+model MonthlyPlanPlatform {
+  id                              String               @id @default(cuid())
+  monthlyPlanId                   String
+  platformName                    String
+  platformType                    String
+  automationStatus                String
+  plannedCadence                  String
+  contentFormats                  Json                 @default("[]")
+  requiresIntegrationBeforeLaunch Boolean
+  rationale                       String
+  monthlyPlan                     MonthlyOperatingPlan @relation(fields: [monthlyPlanId], references: [id], onDelete: Cascade)
+
+  @@index([monthlyPlanId])
+}
+
+model PlannedContentItem {
+  id                  String               @id @default(cuid())
+  monthlyPlanId       String
+  moduleType          String
+  platformName        String
+  format              String
+  topic               String
+  goal                String
+  plannedDate         String
+  approvalRequired    Boolean
+  autopublishEligible Boolean
+  requiredInputs      Json                 @default("[]")
+  status              String
+  monthlyPlan         MonthlyOperatingPlan @relation(fields: [monthlyPlanId], references: [id], onDelete: Cascade)
+
+  @@index([monthlyPlanId])
+}
+
+model ManagerTask {
+  id            String               @id @default(cuid())
+  monthlyPlanId String
+  title         String
+  description   String
+  priority      String
+  dueDate       String
+  status        String
+  monthlyPlan   MonthlyOperatingPlan @relation(fields: [monthlyPlanId], references: [id], onDelete: Cascade)
+
+  @@index([monthlyPlanId])
 }
 
 model PresenceModule {
