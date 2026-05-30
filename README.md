@@ -90,6 +90,12 @@ Before Sprint 2, Sprint 1 still needs real end-to-end testing against PostgreSQL
 - The CI build uses a placeholder `OPENAI_API_KEY`; real OpenAI end-to-end tests require adding `OPENAI_API_KEY` as a GitHub secret.
 - Vercel and Neon setup is the next automation step.
 
+## Vercel Deployment
+
+- Vercel requires `DATABASE_URL` to point to a real cloud PostgreSQL database, not `localhost`.
+- Vercel build runs `prisma migrate deploy` before `next build`.
+- `OPENAI_API_KEY` must be set in Vercel environment variables for real Blueprint generation.
+
 ## Data Model
 
 The Prisma schema includes:

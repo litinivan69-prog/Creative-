@@ -9,6 +9,7 @@
     "lint": "next lint",
     "tsc": "tsc",
     "smoke:test": "tsx scripts/smoke-test.ts",
+    "vercel-build": "prisma migrate deploy && prisma generate && next build",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
   },
