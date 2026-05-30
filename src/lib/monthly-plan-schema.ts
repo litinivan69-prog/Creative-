@@ -43,7 +43,7 @@ export const PlannedContentItemSchema = z.object({
   format: nonEmptyText,
   topic: nonEmptyText.describe("Planning topic only. Do not generate final copy."),
   goal: nonEmptyText,
-  plannedDate: dateOrCadenceMarker.describe("YYYY-MM-DD date or a clear cadence marker if date is impossible."),
+  plannedDate: dateOrCadenceMarker,
   approvalRequired: z.boolean(),
   autopublishEligible: z.boolean(),
   requiredInputs: stringList,
@@ -54,7 +54,7 @@ export const ManagerTaskSchema = z.object({
   title: nonEmptyText,
   description: nonEmptyText,
   priority: PrioritySchema,
-  dueDate: dateOrCadenceMarker.describe("YYYY-MM-DD date or a clear due cadence marker."),
+  dueDate: dateOrCadenceMarker,
   status: ManagerTaskStatusSchema,
 });
 
