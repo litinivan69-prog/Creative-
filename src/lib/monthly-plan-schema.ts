@@ -65,7 +65,7 @@ export const MonthlyOperatingPlanSchema = z.object({
   riskSummary: nonEmptyText,
   activeModules: z.array(MonthlyPlanModuleSchema).min(1),
   selectedPlatforms: z.array(MonthlyPlanPlatformSchema).min(1),
-  plannedContentItems: z.array(PlannedContentItemSchema),
+  plannedContentItems: z.array(PlannedContentItemSchema).min(1),
   managerTasks: z.array(ManagerTaskSchema),
 });
 
@@ -129,8 +129,8 @@ export function validateMonthlyPlanForBlueprint(
 ): MonthlyOperatingPlan {
   const plan = MonthlyOperatingPlanSchema.parse(input);
 
-  if (plan.totalPlannedUnits !== plan.plannedContentItems.length) {
-    throw new Error("totalPlannedUnits must match plannedContentItems count.");
+  if (plan.totalPlannedUnits < plan.plannedContentItems.length) {
+    throw new Error("totalPlannedUnits must be greater than or equal to plannedContentItems count.");
   }
 
   const allowedModules = normalizedSet(context.selectedModuleTypes);
