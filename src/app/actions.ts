@@ -304,6 +304,7 @@ export async function generateMonthlyPlan(formData: FormData) {
     const generated = await generateMonthlyOperatingPlan({
       clientName: blueprint.client.name,
       month,
+      allowedPlatformNames: recommendedPlatforms.map((platform) => platform.platformName),
       blueprint: blueprintPayload,
     });
 
