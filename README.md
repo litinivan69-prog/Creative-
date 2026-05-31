@@ -106,6 +106,13 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Planned content items can include week, campaign theme, content pillar, channel role, and sequence reason.
 - This is the first step toward the future Marketing Brain.
 
+## Sprint 2.2 Visual Product Foundation
+
+- The internal app is framed as Adaptive Presence OS by Creative.
+- The Manager Console now uses a premium dashboard shell with clearer workspace hierarchy.
+- Blueprint, Monthly Plan, and Content Draft review areas are easier to scan during daily operations.
+- Calendar and Events are visible future product areas without adding unfinished integrations or publishing logic.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.
