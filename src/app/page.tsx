@@ -18,15 +18,30 @@ type SearchParams = Promise<{
   notice?: string;
 }>;
 
-const navigation = [
-  { label: "Overview", href: "#overview", glyph: "O" },
-  { label: "Clients", href: "#clients", glyph: "C" },
-  { label: "Blueprints", href: "#blueprints", glyph: "B" },
-  { label: "Monthly Plans", href: "#monthly-plan", glyph: "M" },
-  { label: "Drafts", href: "#drafts", glyph: "D" },
-  { label: "Calendar", href: "#calendar", glyph: "C" },
-  { label: "Events", href: "#events", glyph: "E" },
-  { label: "Settings", href: "#settings", glyph: "S" },
+const navigationGroups = [
+  {
+    label: "Operate",
+    items: [
+      { label: "Overview", href: "#overview", glyph: "O" },
+      { label: "Clients", href: "#clients", glyph: "C" },
+      { label: "Calendar", href: "#calendar", glyph: "C" },
+    ],
+  },
+  {
+    label: "Review",
+    items: [
+      { label: "Approvals", href: "#approvals", glyph: "A" },
+      { label: "Drafts", href: "#drafts", glyph: "D" },
+      { label: "Events", href: "#events", glyph: "E" },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { label: "Reports", href: "#reports", glyph: "R" },
+      { label: "Settings", href: "#settings", glyph: "S" },
+    ],
+  },
 ];
 
 const panelClass = "rounded-lg border border-stone-200 bg-white shadow-[0_1px_2px_rgba(28,36,38,0.04)]";
@@ -191,6 +206,7 @@ type CalendarPreviewItem = {
   channelRole: string | null;
   sequenceReason: string | null;
   contentDraft: {
+    id: string;
     status: string;
   } | null;
 };
@@ -209,12 +225,26 @@ function groupCalendarItems(items: CalendarPreviewItem[]) {
   }));
 }
 
+function formatStatus(value: string) {
+  return value.replaceAll("_", " ");
+}
+
+function suggestsVisualAsset(format: string) {
+  return ["visual", "video", "reel", "story", "image", "photo", "carousel", "short"].some((token) =>
+    format.toLowerCase().includes(token),
+  );
+}
+
 function CalendarPreview({
   groups,
   month,
+  blueprintId,
+  generationBlocked,
 }: {
   groups: ReturnType<typeof groupCalendarItems>;
   month: string;
+  blueprintId?: string;
+  generationBlocked: boolean;
 }) {
   return (
     <section id="calendar" className={`${panelClass} scroll-mt-24 p-5 sm:p-6`}>
@@ -239,17 +269,35 @@ function CalendarPreview({
               </div>
               <div className="mt-3 grid gap-2">
                 {group.items.map((item) => (
-                  <div key={item.id} className="rounded-md border border-stone-200 bg-white p-3">
+                  <div key={item.id} className="rounded-md border border-stone-200 bg-white p-3 shadow-[0_1px_1px_rgba(28,36,38,0.03)]">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <StatusBadge tone="teal">{item.platformName}</StatusBadge>
                       <StatusBadge>{item.format}</StatusBadge>
+                      {suggestsVisualAsset(item.format) ? <StatusBadge tone="amber">Visual asset</StatusBadge> : null}
                     </div>
                     <p className="mt-2 text-sm font-semibold leading-5 text-stone-900">{item.topic}</p>
                     <p className="mt-1 text-xs text-stone-400">{item.plannedDate}</p>
                     <div className="mt-2 flex flex-wrap gap-1.5">
-                      <StatusBadge tone={item.status === "planned" ? "green" : "amber"}>{item.status}</StatusBadge>
-                      {item.approvalRequired ? <StatusBadge tone="amber">Approval</StatusBadge> : null}
-                      {item.contentDraft ? <StatusBadge tone="green">Draft: {item.contentDraft.status}</StatusBadge> : null}
+                      <StatusBadge tone={item.status === "planned" ? "teal" : "amber"}>{formatStatus(item.status)}</StatusBadge>
+                      {item.approvalRequired ? <StatusBadge tone="amber">Needs review</StatusBadge> : null}
+                      {item.contentDraft ? <StatusBadge tone="green">Draft ready</StatusBadge> : null}
+                    </div>
+                    <div className="mt-3 border-t border-stone-100 pt-3">
+                      {item.contentDraft ? (
+                        <a href={`#draft-${item.contentDraft.id}`} className="text-xs font-bold text-teal-700 transition hover:text-teal-900">
+                          Review draft
+                        </a>
+                      ) : (
+                        <form action={generateContentDraftForItem}>
+                          <input type="hidden" name="plannedContentItemId" value={item.id} />
+                          <PendingSubmitButton
+                            pendingLabel="Generating..."
+                            className="rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-bold text-stone-700 transition hover:border-teal-500 hover:text-teal-800 disabled:cursor-wait disabled:text-stone-400"
+                          >
+                            Generate draft
+                          </PendingSubmitButton>
+                        </form>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -258,8 +306,28 @@ function CalendarPreview({
           ))}
         </div>
       ) : (
-        <div className="mt-5">
-          <EmptyState>Generate a Monthly Operating Plan to populate the operations calendar.</EmptyState>
+        <div className="mt-5 rounded-lg border border-dashed border-teal-300 bg-teal-50/70 p-5">
+          <p className="text-sm font-semibold text-teal-950">Your operating calendar is ready for its first plan.</p>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-teal-800">
+            Generate a Monthly Operating Plan to turn the Blueprint into week-based content operations, review queues,
+            and draft tasks.
+          </p>
+          {blueprintId ? (
+            <form action={generateMonthlyPlan} className="mt-4">
+              <input type="hidden" name="blueprintId" value={blueprintId} />
+              <PendingSubmitButton
+                pendingLabel="Generating Monthly Plan..."
+                disabled={generationBlocked}
+                className={primaryButtonClass}
+              >
+                Generate Monthly Plan
+              </PendingSubmitButton>
+            </form>
+          ) : (
+            <a href="#clients" className="mt-4 inline-flex text-sm font-bold text-teal-800 transition hover:text-teal-950">
+              Start with client intake
+            </a>
+          )}
         </div>
       )}
     </section>
@@ -349,13 +417,22 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
     currentMonthlyPlan ??
     latestBlueprint?.monthlyPlans[0] ??
     null;
-  const savedBriefCount = clients.reduce((count, client) => count + client.briefs.length, 0);
-  const blueprintCount = clients.reduce((count, client) => count + client.blueprints.length, 0);
   const draftCount =
     selectedMonthlyPlan?.plannedContentItems.filter((item) => item.contentDraft).length ?? 0;
   const calendarGroups = groupCalendarItems(selectedMonthlyPlan?.plannedContentItems ?? []);
   const approvalQueueCount =
     selectedMonthlyPlan?.plannedContentItems.filter((item) => item.approvalRequired).length ?? 0;
+  const withoutDraftCount =
+    selectedMonthlyPlan?.plannedContentItems.filter((item) => !item.contentDraft).length ?? 0;
+  const integrationTaskCount =
+    selectedMonthlyPlan?.managerTasks.filter((task) =>
+      ["integration", "connect", "credential", "access", "permission", "auth", "интеграц", "подключ", "доступ"].some(
+        (token) => `${task.title} ${task.description}`.toLowerCase().includes(token),
+      ),
+    ).length ?? 0;
+  const firstCalendarGroup = calendarGroups[0];
+  const recentlyPreparedItems =
+    selectedMonthlyPlan?.plannedContentItems.filter((item) => item.contentDraft).slice(0, 3) ?? [];
 
   return (
     <div className="min-h-screen bg-[#f4f5f2] text-stone-900">
@@ -373,23 +450,29 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
         </div>
 
         <nav className="flex-1 px-3 py-5">
-          <p className="px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-stone-500">Workspace</p>
-          <div className="mt-3 grid gap-1">
-            {navigation.map((item, index) => (
-              <a
-                key={item.label}
-                href={item.href}
-                className={`flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition ${
-                  index === 0
-                    ? "bg-white/10 font-semibold text-white"
-                    : "text-stone-400 hover:bg-white/5 hover:text-white"
-                }`}
-              >
-                <span className="flex h-5 w-5 items-center justify-center rounded border border-white/15 text-[10px] font-bold">
-                  {item.glyph}
-                </span>
-                {item.label}
-              </a>
+          <div className="grid gap-5">
+            {navigationGroups.map((group) => (
+              <div key={group.label}>
+                <p className="px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-stone-500">{group.label}</p>
+                <div className="mt-2 grid gap-1">
+                  {group.items.map((item) => (
+                    <a
+                      key={item.label}
+                      href={item.href}
+                      className={`flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition ${
+                        item.label === "Overview"
+                          ? "bg-white/10 font-semibold text-white"
+                          : "text-stone-400 hover:bg-white/5 hover:text-white"
+                      }`}
+                    >
+                      <span className="flex h-5 w-5 items-center justify-center rounded border border-white/15 text-[10px] font-bold">
+                        {item.glyph}
+                      </span>
+                      {item.label}
+                    </a>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         </nav>
@@ -450,15 +533,90 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
               </div>
 
               <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <MetricCard label="Clients" value={clients.length} detail="Active workspace records" />
-                <MetricCard label="Saved briefs" value={savedBriefCount} detail="Raw strategic inputs" tone="teal" />
-                <MetricCard label="Blueprints" value={blueprintCount} detail="Executable presence systems" tone="amber" />
-                <MetricCard label="Drafts in view" value={draftCount} detail="Generated for manager review" />
+                <MetricCard label="Needs review" value={approvalQueueCount} detail="Planned items awaiting approval" tone="amber" />
+                <MetricCard label="Draft ready" value={draftCount} detail="Prepared for manager review" tone="teal" />
+                <MetricCard label="Without draft" value={withoutDraftCount} detail="Planned items still to prepare" />
+                <MetricCard label="Integration tasks" value={integrationTaskCount} detail="Access work before launch" tone={integrationTaskCount > 0 ? "rose" : "stone"} />
               </div>
             </section>
 
+            <section id="approvals" className="mt-7 grid scroll-mt-24 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+              <article className={`${panelClass} p-5 sm:p-6`}>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Today / current focus</p>
+                    <h2 className="mt-1 text-xl font-semibold text-stone-950">Today needs attention</h2>
+                    <p className="mt-2 text-sm leading-6 text-stone-500">
+                      The live operating queue derived from this client&apos;s Blueprint and current Monthly Plan.
+                    </p>
+                  </div>
+                  <StatusBadge tone={approvalQueueCount + integrationTaskCount > 0 ? "amber" : "green"}>
+                    {approvalQueueCount + integrationTaskCount > 0 ? "Action needed" : "Clear"}
+                  </StatusBadge>
+                </div>
+                <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                    <p className="text-xs font-bold text-amber-900">Items requiring approval</p>
+                    <p className="mt-2 text-2xl font-semibold text-stone-950">{approvalQueueCount}</p>
+                  </div>
+                  <div className="rounded-lg border border-teal-200 bg-teal-50 p-4">
+                    <p className="text-xs font-bold text-teal-900">Generated drafts</p>
+                    <p className="mt-2 text-2xl font-semibold text-stone-950">{draftCount}</p>
+                  </div>
+                  <div className="rounded-lg border border-stone-200 bg-stone-50 p-4">
+                    <p className="text-xs font-bold text-stone-700">Items without drafts</p>
+                    <p className="mt-2 text-2xl font-semibold text-stone-950">{withoutDraftCount}</p>
+                  </div>
+                  <div className="rounded-lg border border-rose-200 bg-rose-50 p-4">
+                    <p className="text-xs font-bold text-rose-900">Integration tasks</p>
+                    <p className="mt-2 text-2xl font-semibold text-stone-950">{integrationTaskCount}</p>
+                  </div>
+                </div>
+                <div className="mt-4 rounded-lg border border-stone-200 bg-stone-50 px-4 py-3">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-stone-400">Blueprint next action</p>
+                  <p className="mt-1 text-sm font-semibold text-stone-800">
+                    {latestBlueprint?.nextRecommendedAction ?? "Create a client brief and generate a Blueprint."}
+                  </p>
+                </div>
+              </article>
+
+              <article className={`${panelClass} p-5`}>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Monthly plan status</p>
+                  {selectedMonthlyPlan ? <StatusBadge tone="green">{formatStatus(selectedMonthlyPlan.status)}</StatusBadge> : <StatusBadge tone="amber">Not generated</StatusBadge>}
+                </div>
+                {selectedMonthlyPlan ? (
+                  <div className="mt-4">
+                    <p className="text-2xl font-semibold text-stone-950">{selectedMonthlyPlan.month}</p>
+                    <p className="mt-2 text-sm leading-6 text-stone-500">{selectedMonthlyPlan.summary}</p>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <StatusBadge tone="teal">{selectedMonthlyPlan.totalPlannedUnits} planned units</StatusBadge>
+                      <StatusBadge>{selectedMonthlyPlan.plannedContentItems.length} calendar items</StatusBadge>
+                    </div>
+                    <a href="#monthly-plan" className="mt-4 inline-flex text-sm font-bold text-teal-700 transition hover:text-teal-900">
+                      Open monthly plan
+                    </a>
+                  </div>
+                ) : (
+                  <div className="mt-4">
+                    <p className="text-sm leading-6 text-stone-500">
+                      Generate a Monthly Operating Plan to activate the operating calendar and draft queue.
+                    </p>
+                    <a href="#calendar" className="mt-4 inline-flex text-sm font-bold text-teal-700 transition hover:text-teal-900">
+                      Open calendar setup
+                    </a>
+                  </div>
+                )}
+              </article>
+            </section>
+
             <section className="mt-7 grid items-start gap-5 2xl:grid-cols-[minmax(0,1fr)_360px]">
-              <CalendarPreview groups={calendarGroups} month={selectedMonthlyPlan?.month ?? currentMonth()} />
+              <CalendarPreview
+                groups={calendarGroups}
+                month={selectedMonthlyPlan?.month ?? currentMonth()}
+                blueprintId={latestBlueprint?.id}
+                generationBlocked={latestBlueprint?.nextRecommendedAction === "request_more_brief_data"}
+              />
               <div className="grid gap-5">
                 <article className={`${panelClass} p-5`}>
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -469,13 +627,29 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                     <StatusBadge tone="amber">Preview only</StatusBadge>
                   </div>
                   <p className="mt-3 text-sm leading-6 text-stone-500">
-                    A simplified client-facing view of the same operating plan. Auth and approval actions come later.
+                    A calm, simplified view of the same operating plan. Auth and approval actions come later.
                   </p>
-                  <div className="mt-4 grid grid-cols-2 gap-2">
-                    <MetricCard label="Awaiting approval" value={approvalQueueCount} tone="amber" />
-                    <MetricCard label="Planned publications" value={selectedMonthlyPlan?.plannedContentItems.length ?? 0} tone="teal" />
-                    <MetricCard label="Published" value="-" detail="Coming later" />
-                    <MetricCard label="New reviews" value="-" detail="Events coming later" />
+                  <div className="mt-4 grid gap-2">
+                    <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5">
+                      <p className="text-xs font-bold text-amber-900">Awaiting your approval</p>
+                      <p className="mt-1 text-sm text-amber-800">{approvalQueueCount} planned items need review.</p>
+                    </div>
+                    <div className="rounded-md border border-teal-200 bg-teal-50 px-3 py-2.5">
+                      <p className="text-xs font-bold text-teal-900">Planned this week</p>
+                      <p className="mt-1 text-sm text-teal-800">
+                        {firstCalendarGroup ? `${firstCalendarGroup.items.length} items in ${firstCalendarGroup.label}.` : "Your first weekly plan will appear here."}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2.5">
+                      <p className="text-xs font-bold text-stone-700">Recently prepared</p>
+                      <p className="mt-1 text-sm text-stone-500">
+                        {recentlyPreparedItems.length > 0 ? `${recentlyPreparedItems.length} drafts are ready to review.` : "Prepared drafts will appear here."}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2.5">
+                      <p className="text-xs font-bold text-stone-700">New reviews / events</p>
+                      <p className="mt-1 text-sm text-stone-500">Coming soon with the future events stream.</p>
+                    </div>
                   </div>
                 </article>
 
@@ -499,6 +673,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
 
             <div className="mt-7 grid items-start gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
               <aside id="clients" className="grid scroll-mt-24 gap-5 xl:sticky xl:top-24">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-stone-400">Setup and intake</p>
+                  <p className="mt-1 text-sm leading-6 text-stone-500">Secondary controls for onboarding and brief updates.</p>
+                </div>
                 <section className={`${panelClass} p-5`}>
                   <SectionTitle eyebrow="Client intake" title="Create client" />
                   <form action={createClient} className="mt-5 grid gap-3">
@@ -852,7 +1030,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                                   <p className="font-semibold text-stone-950">{platform.platformName}</p>
                                   <p className="mt-1 text-xs font-bold text-teal-700">{platform.platformType} &middot; {platform.automationStatus}</p>
                                 </div>
-                                {platform.requiresIntegrationBeforeLaunch ? <StatusBadge tone="rose">Integration needed</StatusBadge> : <StatusBadge tone="green">Ready</StatusBadge>}
+                                {platform.requiresIntegrationBeforeLaunch ? <StatusBadge tone="rose">Integration required</StatusBadge> : <StatusBadge tone="green">Ready</StatusBadge>}
                               </div>
                               <p className="mt-2 leading-6 text-stone-500">{platform.plannedCadence}</p>
                               <p className="mt-2 text-xs text-stone-400">{Array.isArray(platform.contentFormats) ? platform.contentFormats.join(", ") : ""}</p>
@@ -875,9 +1053,19 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                       <div className="mt-3 grid gap-3 lg:grid-cols-2">
                         {calendarGroups.map((group) => (
                           <article key={group.label} className="rounded-lg border border-stone-200 bg-stone-50/70 p-4">
-                            <div className="flex items-center justify-between gap-3">
-                              <p className="font-semibold text-stone-950">{group.label}</p>
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div>
+                                <p className="font-semibold text-stone-950">{group.label}</p>
+                                <p className="mt-1 text-xs leading-5 text-stone-500">
+                                  {Array.from(new Set(group.items.map((item) => item.campaignTheme).filter(Boolean))).join(", ") || "Cross-channel operating theme"}
+                                </p>
+                              </div>
                               <StatusBadge>{group.items.length} items</StatusBadge>
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-1.5 border-y border-stone-200 py-2">
+                              {Array.from(new Set(group.items.map((item) => item.platformName))).map((platform) => (
+                                <StatusBadge key={platform} tone="teal">{platform}</StatusBadge>
+                              ))}
                             </div>
                             <div className="mt-3 grid gap-3">
                               {group.items.map((item) => (
@@ -888,16 +1076,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                                     {item.campaignTheme ? <StatusBadge tone="amber">{item.campaignTheme}</StatusBadge> : null}
                                   </div>
                                   <p className="mt-2 text-sm font-semibold leading-5 text-stone-900">{item.topic}</p>
-                                  {item.channelRole ? (
-                                    <p className="mt-2 text-xs leading-5 text-stone-500">
-                                      <span className="font-bold text-stone-700">Channel role:</span> {item.channelRole}
-                                    </p>
-                                  ) : null}
-                                  {item.sequenceReason ? (
-                                    <p className="mt-1 text-xs leading-5 text-stone-500">
-                                      <span className="font-bold text-stone-700">Sequence:</span> {item.sequenceReason}
-                                    </p>
-                                  ) : null}
+                                  <div className="mt-2 grid gap-1 text-xs leading-5 text-stone-500">
+                                    {item.channelRole ? <p><span className="font-bold text-stone-700">Role:</span> {item.channelRole}</p> : null}
+                                    {item.sequenceReason ? <p className="line-clamp-2"><span className="font-bold text-stone-700">Sequence:</span> {item.sequenceReason}</p> : null}
+                                  </div>
                                 </div>
                               ))}
                             </div>
@@ -956,7 +1138,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                                 <td className="px-3 py-3">
                                   {item.contentDraft ? (
                                     <a href={`#draft-${item.contentDraft.id}`} className="inline-flex rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-900 transition hover:bg-teal-100">
-                                      {item.contentDraft.status}
+                                      Draft ready
                                     </a>
                                   ) : (
                                     <form action={generateContentDraftForItem}>
@@ -989,7 +1171,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                                   <p className="mt-1 text-xs text-stone-400">{draft.topic}</p>
                                 </div>
                                 <div className="flex flex-wrap gap-2">
-                                  <StatusBadge>{draft.status}</StatusBadge>
+                                  <StatusBadge tone={draft.status === "approved" ? "green" : "amber"}>{formatStatus(draft.status)}</StatusBadge>
                                   <StatusBadge tone={draft.riskLevel === "high" ? "rose" : draft.riskLevel === "medium" ? "amber" : "green"}>risk: {draft.riskLevel}</StatusBadge>
                                 </div>
                               </div>
@@ -1016,7 +1198,12 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                             </article>
                           );
                         })}
-                        {selectedMonthlyPlan.plannedContentItems.every((item) => !item.contentDraft) ? <EmptyState>No content drafts generated yet.</EmptyState> : null}
+                        {selectedMonthlyPlan.plannedContentItems.every((item) => !item.contentDraft) ? (
+                          <EmptyState>
+                            Drafts are generated from planned content items. Choose a calendar item or table row and use
+                            Generate Draft to prepare the first review-ready object.
+                          </EmptyState>
+                        ) : null}
                       </div>
                     </div>
 
@@ -1045,7 +1232,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   </section>
                 ) : null}
 
-                <div className="grid gap-4 lg:grid-cols-2">
+                <div id="reports" className="grid scroll-mt-24 gap-4 lg:grid-cols-2">
                   <div className="scroll-mt-24">
                     <PreviewCard title="Calendar operations" glyph="C" copy="Daily content operations will show planned posts, drafts, approvals, visuals, videos, and publishing status." />
                   </div>

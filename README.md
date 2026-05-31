@@ -120,6 +120,13 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - A Client Preview panel shows the future approval-focused Client Portal direction.
 - Calendar and Events areas clarify the next operational product layers without adding real auth or publishing.
 
+## Sprint 2.4 Manager Console Polish
+
+- The Manager Console now uses a stronger command-center hierarchy with a derived attention queue.
+- Calendar cards and Client Preview are more product-like and easier to scan during daily operations.
+- Intake forms remain available as secondary onboarding controls.
+- No auth, publishing, or external integrations were added.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.
