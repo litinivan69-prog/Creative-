@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Adaptive Presence OS",
-  description: "Adaptive Presence OS by Creative: internal manager console for digital presence operations.",
+  description: "Adaptive Presence OS by Creative: внутренняя панель менеджера для управления цифровым присутствием.",
 };
 
 export default function RootLayout({
@@ -12,7 +12,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="ru">
       <body>{children}</body>
     </html>
   );

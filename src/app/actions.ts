@@ -81,7 +81,7 @@ async function updateDraftWorkflow(
   const comment = formText(formData, "comment");
 
   if (!contentDraftId) {
-    errorRedirect("Content draft is required.");
+    errorRedirect("Не выбран черновик.");
   }
 
   const draft = await prisma.contentDraft.findUnique({
@@ -94,7 +94,7 @@ async function updateDraftWorkflow(
   });
 
   if (!draft) {
-    errorRedirect("Content draft not found.");
+    errorRedirect("Черновик не найден.");
   }
 
   await prisma.$transaction([
@@ -124,7 +124,7 @@ export async function createClient(formData: FormData) {
   const industry = formText(formData, "industry");
 
   if (!name) {
-    throw new Error("Client name is required.");
+    throw new Error("Укажите название клиента.");
   }
 
   await prisma.client.create({
@@ -143,7 +143,7 @@ export async function addClientBrief(formData: FormData) {
   const rawBrief = formText(formData, "rawBrief");
 
   if (!clientId || !rawBrief) {
-    throw new Error("Client and brief are required.");
+    throw new Error("Выберите клиента и добавьте бриф.");
   }
 
   await prisma.clientBrief.create({
@@ -161,7 +161,7 @@ export async function updateClientBrief(formData: FormData) {
   const rawBrief = formText(formData, "rawBrief");
 
   if (!briefId || !rawBrief) {
-    errorRedirect("Brief text is required.");
+    errorRedirect("Добавьте текст брифа.");
   }
 
   const existingBrief = await prisma.clientBrief.findUnique({
@@ -170,7 +170,7 @@ export async function updateClientBrief(formData: FormData) {
   });
 
   if (!existingBrief) {
-    errorRedirect("Brief not found.");
+    errorRedirect("Бриф не найден.");
   }
 
   await prisma.$transaction(async (tx) => {
@@ -187,7 +187,7 @@ export async function updateClientBrief(formData: FormData) {
   });
 
   revalidatePath("/");
-  redirect("/?notice=Brief%20updated.%20Generate%20a%20fresh%20blueprint%20when%20ready.");
+  redirect(`/?notice=${encodeURIComponent("Бриф обновлён. Когда будете готовы, сгенерируйте новый Blueprint.")}`);
 }
 
 export async function generateBlueprint(formData: FormData) {
@@ -199,7 +199,7 @@ export async function generateBlueprint(formData: FormData) {
   });
 
   if (!brief) {
-    throw new Error("Brief not found.");
+    throw new Error("Бриф не найден.");
   }
 
   if (brief.blueprint) {
@@ -293,8 +293,8 @@ export async function generateBlueprint(formData: FormData) {
     const message =
       error instanceof Error
         ? error.message
-        : "OpenAI generation failed. Check the brief and try again.";
-    errorRedirect(`Blueprint generation failed: ${message}`);
+        : "OpenAI не смог обработать бриф. Проверьте данные и попробуйте ещё раз.";
+    errorRedirect(`Не удалось сгенерировать Blueprint: ${message}`);
   }
 
   revalidatePath("/");
@@ -318,13 +318,13 @@ export async function generateMonthlyPlan(formData: FormData) {
   });
 
   if (!blueprint) {
-    errorRedirect("Blueprint not found.");
+    errorRedirect("Blueprint не найден.");
   }
 
   if (blueprint.nextRecommendedAction === "request_more_brief_data") {
     blueprintErrorRedirect(
       blueprint.id,
-      "Monthly plan generation is blocked because this Blueprint needs more brief data first.",
+      "Сначала добавьте недостающие данные в бриф. После этого можно будет сгенерировать месячный план.",
     );
   }
 
@@ -332,7 +332,7 @@ export async function generateMonthlyPlan(formData: FormData) {
   const existingPlan = blueprint.monthlyPlans.find((plan) => plan.month === month);
 
   if (existingPlan) {
-    redirect(`/?blueprint=${blueprint.id}&plan=${existingPlan.id}&notice=${encodeURIComponent("Monthly plan already exists for this month.")}`);
+    redirect(`/?blueprint=${blueprint.id}&plan=${existingPlan.id}&notice=${encodeURIComponent("Месячный план за этот период уже существует.")}`);
   }
 
   const recommendedPlatforms = blueprint.platformRecommendations.filter(
@@ -462,8 +462,8 @@ export async function generateMonthlyPlan(formData: FormData) {
     const message =
       error instanceof Error
         ? error.message
-        : "Monthly plan generation failed. Check the Blueprint and try again.";
-    blueprintErrorRedirect(blueprint.id, `Monthly plan generation failed: ${message}`);
+        : "Не удалось сгенерировать месячный план. Проверьте Blueprint и попробуйте ещё раз.";
+    blueprintErrorRedirect(blueprint.id, `Не удалось сгенерировать месячный план: ${message}`);
   }
 
   revalidatePath("/");
@@ -487,7 +487,7 @@ export async function generateContentDraftForItem(formData: FormData) {
   });
 
   if (!item) {
-    errorRedirect("Planned content item not found.");
+    errorRedirect("Запланированный материал не найден.");
   }
 
   const plan = item.monthlyPlan;
@@ -495,7 +495,7 @@ export async function generateContentDraftForItem(formData: FormData) {
 
   if (item.contentDraft) {
     redirect(
-      `/?blueprint=${blueprint.id}&plan=${plan.id}&notice=${encodeURIComponent("A draft already exists for this planned content item.")}#drafts`,
+      `/?blueprint=${blueprint.id}&plan=${plan.id}&notice=${encodeURIComponent("Для этого материала уже существует черновик.")}#drafts`,
     );
   }
 
@@ -567,13 +567,13 @@ export async function generateContentDraftForItem(formData: FormData) {
     const message =
       error instanceof Error
         ? error.message
-        : "Draft generation failed. Check the planned content item and try again.";
-    monthlyPlanErrorRedirect(blueprint.id, plan.id, `Content draft generation failed: ${message}`);
+        : "Не удалось сгенерировать черновик. Проверьте материал и попробуйте ещё раз.";
+    monthlyPlanErrorRedirect(blueprint.id, plan.id, `Не удалось сгенерировать черновик: ${message}`);
   }
 
   revalidatePath("/");
   redirect(
-    `/?blueprint=${blueprint.id}&plan=${plan.id}&notice=${encodeURIComponent("Content draft generated for manager review.")}#drafts`,
+    `/?blueprint=${blueprint.id}&plan=${plan.id}&notice=${encodeURIComponent("Черновик сгенерирован и готов к проверке менеджером.")}#drafts`,
   );
 }
 
@@ -581,7 +581,7 @@ export async function submitDraftForReview(formData: FormData) {
   await updateDraftWorkflow(formData, {
     status: "needs_review",
     action: "submitted_for_review",
-    notice: "Content draft submitted for review.",
+    notice: "Черновик отправлен на проверку.",
   });
 }
 
@@ -589,7 +589,7 @@ export async function sendDraftToClient(formData: FormData) {
   await updateDraftWorkflow(formData, {
     status: "sent_to_client",
     action: "sent_to_client",
-    notice: "Content draft marked as sent to client.",
+    notice: "Черновик отмечен как отправленный клиенту.",
   });
 }
 
@@ -597,7 +597,7 @@ export async function requestDraftChanges(formData: FormData) {
   await updateDraftWorkflow(formData, {
     status: "client_changes_requested",
     action: "changes_requested",
-    notice: "Draft changes requested.",
+    notice: "Для черновика запрошены правки.",
   });
 }
 
@@ -605,7 +605,7 @@ export async function approveDraft(formData: FormData) {
   await updateDraftWorkflow(formData, {
     status: "approved",
     action: "approved",
-    notice: "Content draft approved.",
+    notice: "Черновик согласован.",
   });
 }
 
@@ -613,7 +613,7 @@ export async function rejectDraft(formData: FormData) {
   await updateDraftWorkflow(formData, {
     status: "rejected",
     action: "rejected",
-    notice: "Content draft rejected.",
+    notice: "Черновик отклонён.",
   });
 }
 
@@ -621,6 +621,6 @@ export async function markDraftReadyToSchedule(formData: FormData) {
   await updateDraftWorkflow(formData, {
     status: "ready_to_schedule",
     action: "marked_ready_to_schedule",
-    notice: "Content draft marked ready to schedule.",
+    notice: "Черновик готов к планированию.",
   });
 }

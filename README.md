@@ -146,6 +146,13 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Managers can move drafts through review states and inspect the review event timeline.
 - No real client auth, notifications, or publishing were added.
 
+## Sprint RU-1 Russian-first UI
+
+- Russian-first UI copy was added for the Manager Console.
+- Code, schemas, and API contracts remain in English.
+- The product remains Adaptive Presence OS by Creative.
+- The Russian market is the primary go-to-market context.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.
