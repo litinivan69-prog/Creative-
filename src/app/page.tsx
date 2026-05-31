@@ -12,6 +12,8 @@ import {
   generateMonthlyPlan,
   markDraftReadyToSchedule,
   markCreativeVariantNeedsReview,
+  markCreativeVariantQualityFailed,
+  markCreativeVariantQualityPassed,
   markScheduledPublicationNeedsAssets,
   markScheduledPublicationReady,
   markScheduledPublicationScheduled,
@@ -298,6 +300,13 @@ function formatStatus(value: string) {
     other: "Другое",
     generated: "Сгенерировано",
     openai: "OpenAI",
+    google_later: "Google позже",
+    image_text: "Текст в изображении",
+    overlay_later: "Текст добавим позже",
+    no_text: "Без текста",
+    unchecked: "Не проверено",
+    passed: "Качество ок",
+    needs_manual_review: "Нужна ручная проверка",
   };
 
   return labels[value] ?? value.replaceAll("_", " ");
@@ -412,6 +421,13 @@ type GeneratedCreativeVariantPreview = {
   mimeType: string;
   status: string;
   source: string;
+  provider: string;
+  model: string | null;
+  quality: string | null;
+  size: string | null;
+  textMode: string | null;
+  qualityStatus: string;
+  qualityNotes: string | null;
   notes: string | null;
 };
 
@@ -987,6 +1003,17 @@ function creativeVariantTone(status: string): "neutral" | "teal" | "amber" | "ro
   return tones[status] ?? "neutral";
 }
 
+function creativeVariantQualityTone(status: string): "neutral" | "teal" | "amber" | "rose" | "green" {
+  const tones: Record<string, "neutral" | "teal" | "amber" | "rose" | "green"> = {
+    unchecked: "neutral",
+    needs_manual_review: "amber",
+    passed: "green",
+    failed: "rose",
+  };
+
+  return tones[status] ?? "neutral";
+}
+
 function CreativeVariantAction({
   action,
   variantId,
@@ -1218,7 +1245,10 @@ function CreativeAssetLayer({
                     <div>
                       <p className="text-sm font-semibold text-stone-950">Сгенерированные визуалы</p>
                       <p className="mt-1 text-xs leading-5 text-stone-500">
-                        Генерация использует OpenAI API и может расходовать кредиты.
+                        Premium Visual Engine создаёт клиентские варианты через OpenAI API и может расходовать кредиты.
+                      </p>
+                      <p className="mt-1 text-xs leading-5 text-stone-400">
+                        Сейчас используется OpenAI. Поддержка Nano Banana / Gemini Image будет добавлена отдельным провайдером.
                       </p>
                     </div>
                     {asset.generatedVariants.length > 0 ? (
@@ -1243,10 +1273,21 @@ function CreativeAssetLayer({
                           <div className="p-3">
                             <div className="flex flex-wrap gap-1.5">
                               <StatusBadge tone={creativeVariantTone(variant.status)}>{formatStatus(variant.status)}</StatusBadge>
-                              <StatusBadge>{formatStatus(variant.source)}</StatusBadge>
+                              <StatusBadge>{formatStatus(variant.provider)}</StatusBadge>
+                              {variant.model ? <StatusBadge>{variant.model}</StatusBadge> : null}
+                              {variant.quality ? <StatusBadge>{variant.quality}</StatusBadge> : null}
+                              {variant.size ? <StatusBadge>{variant.size}</StatusBadge> : null}
+                              {variant.textMode ? <StatusBadge>{formatStatus(variant.textMode)}</StatusBadge> : null}
+                              <StatusBadge tone={creativeVariantQualityTone(variant.qualityStatus)}>{formatStatus(variant.qualityStatus)}</StatusBadge>
                             </div>
                             <p className="mt-3 text-sm font-semibold text-stone-900">{variant.variantTitle}</p>
                             {variant.notes ? <p className="mt-2 text-xs leading-5 text-stone-500">{variant.notes}</p> : null}
+                            <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-900">
+                              Перед отправкой клиенту проверьте текст, лица, руки, логотипы и медицинские утверждения.
+                            </p>
+                            {variant.qualityNotes ? (
+                              <p className="mt-2 text-xs leading-5 text-stone-500"><span className="font-bold text-stone-700">Проверка качества:</span> {variant.qualityNotes}</p>
+                            ) : null}
                             <details className="mt-3 rounded-md border border-stone-200 bg-white">
                               <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-stone-700">Показать prompt</summary>
                               <div className="grid gap-2 border-t border-stone-200 p-3 text-xs leading-5 text-stone-600">
@@ -1276,6 +1317,26 @@ function CreativeAssetLayer({
                                 Удалить
                               </CreativeVariantAction>
                             </div>
+                            <div className="mt-3 grid gap-2 rounded-md border border-stone-200 bg-white p-3">
+                              <p className="text-xs font-bold text-stone-700">Ручная проверка качества</p>
+                              <div className="flex flex-wrap gap-2">
+                                <CreativeVariantAction action={markCreativeVariantQualityPassed} variantId={variant.id} tone="green">
+                                  Качество ок
+                                </CreativeVariantAction>
+                                <form action={markCreativeVariantQualityFailed} className="flex min-w-0 flex-1 flex-wrap gap-2">
+                                  <input type="hidden" name="creativeVariantId" value={variant.id} />
+                                  <input
+                                    type="text"
+                                    name="qualityNotes"
+                                    className="min-w-44 flex-1 rounded-md border border-stone-200 bg-white px-2.5 py-1.5 text-xs text-stone-700 outline-none focus:border-teal-500"
+                                    placeholder="Комментарий к проблеме, необязательно"
+                                  />
+                                  <PendingSubmitButton pendingLabel="Сохраняем..." className="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-bold text-rose-800 transition hover:bg-rose-100">
+                                    Есть проблемы
+                                  </PendingSubmitButton>
+                                </form>
+                              </div>
+                            </div>
                           </div>
                         </article>
                       ))}
@@ -1284,12 +1345,15 @@ function CreativeAssetLayer({
                     <div className="mt-3 rounded-lg border border-dashed border-teal-300 bg-teal-50/70 p-4">
                       <p className="text-sm font-semibold text-teal-950">Пока нет сгенерированных визуалов.</p>
                       <p className="mt-1 text-xs leading-5 text-teal-800">
-                        Создайте первый вариант по текущему ТЗ. Генерация использует OpenAI API и может расходовать кредиты.
+                        Premium Visual Engine создаст первый вариант по текущему ТЗ. Генерация использует OpenAI API и может расходовать кредиты.
+                      </p>
+                      <p className="mt-1 text-xs leading-5 text-teal-700">
+                        Сейчас используется OpenAI. Поддержка Nano Banana / Gemini Image будет добавлена отдельным провайдером.
                       </p>
                       <form action={generateCreativeVisualVariantForAsset} className="mt-3">
                         <input type="hidden" name="creativeAssetId" value={asset.id} />
                         <PendingSubmitButton pendingLabel="Генерируем визуал..." className={`${primaryButtonClass} w-full justify-center py-3`}>
-                          Сгенерировать визуал через AI
+                          Сгенерировать премиум-визуал
                         </PendingSubmitButton>
                       </form>
                     </div>

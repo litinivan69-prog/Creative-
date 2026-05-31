@@ -9,7 +9,28 @@ import { CreativeAssetBriefSchema } from "@/lib/creative-asset-schema";
 import { MonthlyOperatingPlanSchema } from "@/lib/monthly-plan-schema";
 
 const model = process.env.OPENAI_MODEL ?? "gpt-4.1-mini";
-const imageModel = process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-1";
+const imageModel = process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-2";
+
+const visualProviders = ["openai", "google_later"] as const;
+type VisualProvider = (typeof visualProviders)[number];
+
+const visualTextModes = ["image_text", "overlay_later", "no_text"] as const;
+type VisualTextMode = (typeof visualTextModes)[number];
+
+const imageQualities = ["low", "medium", "high", "auto"] as const;
+type ImageQuality = (typeof imageQualities)[number];
+
+const imageSizes = ["auto", "1024x1024", "1536x1024", "1024x1536"] as const;
+type ImageSize = (typeof imageSizes)[number];
+
+function configuredValue<T extends string>(value: string | undefined, allowed: readonly T[], fallback: T): T {
+  return allowed.includes(value as T) ? (value as T) : fallback;
+}
+
+const visualProvider = configuredValue(process.env.VISUAL_PROVIDER, visualProviders, "openai");
+const visualTextMode = configuredValue(process.env.VISUAL_TEXT_MODE, visualTextModes, "image_text");
+const imageQuality = configuredValue(process.env.OPENAI_IMAGE_QUALITY, imageQualities, "high");
+const imageSize = configuredValue(process.env.OPENAI_IMAGE_SIZE ?? "auto", imageSizes, "1024x1024");
 
 export async function generateClientPresenceBlueprint(input: {
   clientName: string;
@@ -222,7 +243,7 @@ export async function generateCreativeAssetBrief(input: {
   return response.output_parsed;
 }
 
-export async function generateCreativeVisualVariant(input: {
+type CreativeVisualVariantInput = {
   clientName: string;
   clientIndustry?: string | null;
   creativeAsset: {
@@ -247,22 +268,37 @@ export async function generateCreativeVisualVariant(input: {
     riskLevel: string;
     approvalRequired: boolean;
   };
-}) {
-  if (!process.env.OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY is not configured.");
+};
+
+function textRenderingInstruction(input: CreativeVisualVariantInput, mode: VisualTextMode) {
+  if (mode === "image_text" && input.creativeAsset.textOnAsset) {
+    return [
+      `Render only this exact short Russian text inside the image: "${input.creativeAsset.textOnAsset}".`,
+      "Use clean premium typography. Preserve every Cyrillic letter exactly. Add no extra text, labels, captions, or invented words.",
+    ].join(" ");
   }
 
-  const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
+  if (mode === "overlay_later" && input.creativeAsset.textOnAsset) {
+    return [
+      "Do not render any text inside the image. Leave clean negative space for a later design overlay.",
+      `The future overlay copy will be: "${input.creativeAsset.textOnAsset}".`,
+    ].join(" ");
+  }
 
-  const prompt = [
-    "Create one polished, brand-safe square social media visual.",
+  return "Do not render any text, letters, captions, labels, watermarks, signage, or logos inside the image.";
+}
+
+function premiumVisualPrompt(input: CreativeVisualVariantInput, textMode: VisualTextMode) {
+  return [
+    "Create one premium client-facing social media visual. Act as a senior art director, advertising photographer, and SMM designer.",
     `Client: ${input.clientName}.`,
     `Industry: ${input.clientIndustry || "not provided"}.`,
-    `Asset type: ${input.creativeAsset.assetType}.`,
+    `Platform: ${input.scheduledPublication.platformName}.`,
+    `Publication format: ${input.scheduledPublication.format}.`,
+    `Publication topic: ${input.scheduledPublication.topic}.`,
+    `Creative asset type: ${input.creativeAsset.assetType}.`,
     `Creative brief title: ${input.creativeAsset.title}.`,
-    `Creative direction: ${input.creativeAsset.brief}`,
+    `Creative brief: ${input.creativeAsset.brief}`,
     input.creativeAsset.formatRequirements
       ? `Format requirements: ${input.creativeAsset.formatRequirements}`
       : null,
@@ -272,32 +308,59 @@ export async function generateCreativeVisualVariant(input: {
     input.creativeAsset.notes
       ? `Brand and safety notes: ${input.creativeAsset.notes}`
       : null,
-    `Publication platform: ${input.scheduledPublication.platformName}.`,
-    `Publication format: ${input.scheduledPublication.format}.`,
-    `Publication topic: ${input.scheduledPublication.topic}.`,
     `Draft title: ${input.contentDraft.draftTitle}.`,
     `Draft context: ${input.contentDraft.draftBody}`,
-    input.creativeAsset.textOnAsset
-      ? `Place only this exact text on the image: "${input.creativeAsset.textOnAsset}". Keep typography readable and minimal.`
-      : "Do not place any text, captions, labels, watermarks, or logos on the image.",
-    "Use a clear composition, restrained professional mood, realistic objects and scenes, and a contemporary premium visual style.",
-    "Avoid fake logos, unsupported claims, guarantees, certifications, before-and-after comparisons, unrealistic outcomes, misleading medical imagery, and unsafe medical, legal, or financial promises.",
+    "Produce a realistic premium advertising photograph or high-end editorial visual appropriate to the asset type. Use an intentional focal point, clean composition, restrained color discipline, thoughtful lighting, and platform-native framing.",
+    "Avoid cheap stock-photo aesthetics, generic AI poster composition, decorative clutter, fake clinic or company names, fake logos, fake text, fake certificates, fake reviews, unsupported medical claims, guarantees, before-and-after comparisons, and unrealistic treatment or business results.",
+    "When people appear, render natural anatomy, credible hands, expressive but realistic faces, and professional context. Do not depict misleading procedures or outcomes.",
+    textRenderingInstruction(input, textMode),
     input.contentDraft.riskLevel !== "low" || input.contentDraft.approvalRequired
-      ? "Keep the image conservative, factual, clean, non-misleading, and suitable for mandatory human review."
+      ? "Use a conservative, factual, calm, non-misleading visual direction suitable for mandatory human review."
       : null,
-    "Generate the image only. Do not add explanations.",
+    "Generate exactly one finished visual. Do not add an explanation.",
   ]
     .filter(Boolean)
     .join("\n");
+}
 
-  const response = await openai.images.generate({
-    model: imageModel,
-    prompt,
-    n: 1,
-    size: "1024x1024",
-    quality: "low",
-    output_format: "png",
+async function generateVisualWithOpenAI(input: CreativeVisualVariantInput) {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error("OPENAI_API_KEY is not configured.");
+  }
+
+  const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
   });
+
+  const prompt = premiumVisualPrompt(input, visualTextMode);
+
+  let selectedSize: ImageSize = imageSize;
+  let response;
+
+  try {
+    response = await openai.images.generate({
+      model: imageModel,
+      prompt,
+      n: 1,
+      size: selectedSize,
+      quality: imageQuality,
+      output_format: "png",
+    });
+  } catch (error) {
+    if (selectedSize !== "auto") {
+      throw error;
+    }
+
+    selectedSize = "1024x1024";
+    response = await openai.images.generate({
+      model: imageModel,
+      prompt,
+      n: 1,
+      size: selectedSize,
+      quality: imageQuality,
+      output_format: "png",
+    });
+  }
 
   const image = response.data?.[0];
 
@@ -310,5 +373,19 @@ export async function generateCreativeVisualVariant(input: {
     revisedPrompt: image.revised_prompt ?? null,
     imageBase64: image.b64_json,
     mimeType: "image/png",
+    provider: "openai",
+    model: imageModel,
+    quality: imageQuality,
+    size: selectedSize,
+    textMode: visualTextMode,
   };
+}
+
+export async function generateCreativeVisualVariant(input: CreativeVisualVariantInput) {
+  if (visualProvider === "openai") {
+    return generateVisualWithOpenAI(input);
+  }
+
+  // TODO: Google Nano Banana / Gemini Image provider will be added after API credentials and SDK choice are confirmed.
+  throw new Error(`Visual provider is not implemented yet: ${visualProvider satisfies VisualProvider}.`);
 }

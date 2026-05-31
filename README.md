@@ -203,7 +203,17 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Generated variants are stored as base64 in PostgreSQL for the MVP.
 - Variants can be reviewed, approved, rejected, or deleted.
 - No external object storage, publishing, Figma integration, or video generation was added.
-- Set `OPENAI_IMAGE_MODEL` to choose the image model. The current default is `gpt-image-1`, matching the installed OpenAI SDK.
+- Set `OPENAI_IMAGE_MODEL` to choose the image model.
+
+## Sprint 5C.1 Premium Visual Engine
+
+- Premium Visual Engine was added.
+- OpenAI visual generation now supports configurable provider, model, quality, size, and text rendering mode.
+- `gpt-image-2` is the intended premium default where available.
+- The provider abstraction is ready for a future Google Nano Banana / Gemini Image adapter.
+- Generated variants store provider, model, quality, size, text mode, and manual quality-review metadata.
+- Manual quality review was added before client-facing use.
+- External object storage is still not added.
 
 ## Automation Sprint 0
 
@@ -218,7 +228,8 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Vercel requires `DATABASE_URL` to point to a real cloud PostgreSQL database, not `localhost`.
 - Vercel build runs `prisma migrate deploy` before `next build`.
 - `OPENAI_API_KEY` must be set in Vercel environment variables for real Blueprint generation.
-- `OPENAI_IMAGE_MODEL` can be set in Vercel environment variables for visual generation. The default is `gpt-image-1`.
+- `VISUAL_PROVIDER`, `OPENAI_IMAGE_MODEL`, `OPENAI_IMAGE_QUALITY`, `OPENAI_IMAGE_SIZE`, and `VISUAL_TEXT_MODE` can be set in Vercel environment variables for visual generation.
+- The premium defaults are `openai`, `gpt-image-2`, `high`, `auto`, and `image_text`.
 
 ## Data Model
 

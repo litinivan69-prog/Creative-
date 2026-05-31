@@ -1292,7 +1292,14 @@ export async function generateCreativeVisualVariantForAsset(formData: FormData) 
         imageBase64: variant.imageBase64,
         mimeType: variant.mimeType,
         status: "generated",
-        source: "openai",
+        source: variant.provider,
+        provider: variant.provider,
+        model: variant.model,
+        quality: variant.quality,
+        size: variant.size,
+        textMode: variant.textMode,
+        qualityStatus: "needs_manual_review",
+        qualityNotes: "Проверьте читаемость текста, лица, руки, медицинские утверждения и соответствие ТЗ.",
         notes: null,
       },
     });
@@ -1300,7 +1307,7 @@ export async function generateCreativeVisualVariantForAsset(formData: FormData) 
     monthlyPlanErrorRedirect(
       asset.blueprintId,
       asset.monthlyPlanId,
-      "Не удалось сгенерировать визуал через OpenAI. Проверьте настройки API и попробуйте ещё раз.",
+      "Не удалось сгенерировать визуал через визуальный движок. Проверьте настройки API и попробуйте ещё раз.",
     );
   }
 
@@ -1403,4 +1410,51 @@ export async function deleteCreativeVariant(formData: FormData) {
   redirect(
     `/?blueprint=${variant.blueprintId}&plan=${variant.monthlyPlanId}&notice=${encodeURIComponent("Вариант визуала удалён.")}#assets`,
   );
+}
+
+async function updateCreativeVariantQuality(
+  formData: FormData,
+  qualityStatus: "passed" | "failed",
+  notice: string,
+) {
+  const creativeVariantId = formText(formData, "creativeVariantId");
+  const qualityNotes = formText(formData, "qualityNotes");
+
+  if (!creativeVariantId) {
+    errorRedirect("Не выбран вариант визуала.");
+  }
+
+  const variant = await prisma.generatedCreativeVariant.findUnique({
+    where: { id: creativeVariantId },
+    select: {
+      id: true,
+      blueprintId: true,
+      monthlyPlanId: true,
+    },
+  });
+
+  if (!variant) {
+    errorRedirect("Вариант визуала не найден.");
+  }
+
+  await prisma.generatedCreativeVariant.update({
+    where: { id: variant.id },
+    data: {
+      qualityStatus,
+      qualityNotes: qualityNotes || null,
+    },
+  });
+
+  revalidatePath("/");
+  redirect(
+    `/?blueprint=${variant.blueprintId}&plan=${variant.monthlyPlanId}&notice=${encodeURIComponent(notice)}#assets`,
+  );
+}
+
+export async function markCreativeVariantQualityPassed(formData: FormData) {
+  await updateCreativeVariantQuality(formData, "passed", "Качество варианта визуала подтверждено.");
+}
+
+export async function markCreativeVariantQualityFailed(formData: FormData) {
+  await updateCreativeVariantQuality(formData, "failed", "Для варианта визуала отмечены проблемы качества.");
 }
