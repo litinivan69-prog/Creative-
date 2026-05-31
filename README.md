@@ -215,6 +215,14 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Manual quality review was added before client-facing use.
 - External object storage is still not added.
 
+## Sprint UI-1 Manager Console Cleanup
+
+- The Manager Console layout was stabilized without changing business logic.
+- The Overview was simplified with compact operational previews and workspace shortcuts.
+- Status colors were unified and the sidebar was softened.
+- Review, scheduling, creative asset, and visual production sections were made more compact.
+- Creative brief, prompt, metadata, and secondary controls are now disclosed progressively when needed.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.

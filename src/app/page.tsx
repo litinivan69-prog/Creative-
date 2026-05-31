@@ -69,13 +69,21 @@ const navigationGroups = [
   },
 ];
 
+const pageBackgroundClass = "min-h-screen bg-[#f6f6f3] text-stone-900";
 const panelClass = "rounded-lg border border-stone-200 bg-white shadow-[0_1px_2px_rgba(28,36,38,0.04)]";
+const cardHeaderClass = "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between";
+const mutedTextClass = "text-sm leading-6 text-stone-500";
+const sectionClass = `${panelClass} mt-7 scroll-mt-24 p-5 sm:p-6`;
+const twoColumnLayoutClass = "grid gap-5 xl:grid-cols-2";
+const compactGridClass = "grid gap-3 sm:grid-cols-2 xl:grid-cols-3";
 const inputClass =
   "rounded-md border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-teal-600 focus:ring-2 focus:ring-teal-100";
 const primaryButtonClass =
-  "rounded-md bg-stone-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300 disabled:text-stone-600";
+  "rounded-md bg-teal-800 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-teal-900 disabled:cursor-not-allowed disabled:bg-stone-300 disabled:text-stone-600";
 const secondaryButtonClass =
   "rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-800 transition hover:border-stone-400 hover:bg-stone-50 disabled:cursor-wait disabled:text-stone-400";
+const destructiveButtonClass =
+  "rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-800 transition hover:bg-rose-100 disabled:cursor-wait disabled:text-rose-400";
 
 function SectionTitle({
   eyebrow,
@@ -115,6 +123,14 @@ function StatusBadge({
       {children}
     </span>
   );
+}
+
+function operationalStatusTone(status: string): "neutral" | "teal" | "amber" | "rose" | "green" {
+  if (["approved", "ready", "ready_to_schedule", "passed", "published"].includes(status)) return "green";
+  if (["needs_review", "needs_assets", "needed", "needs_manual_review", "sent_to_client", "in_production"].includes(status)) return "amber";
+  if (["rejected", "failed", "blocked", "client_changes_requested"].includes(status)) return "rose";
+  if (["generated", "scheduled", "brief_ready", "planned"].includes(status)) return "teal";
+  return "neutral";
 }
 
 function ConnectionBadge({ label, active = true }: { label: string; active?: boolean }) {
@@ -352,17 +368,7 @@ function formatReviewAction(action: string) {
 }
 
 function draftStatusTone(status: string): "neutral" | "teal" | "amber" | "rose" | "green" {
-  const tones: Record<string, "neutral" | "teal" | "amber" | "rose" | "green"> = {
-    draft: "neutral",
-    needs_review: "amber",
-    sent_to_client: "teal",
-    client_changes_requested: "rose",
-    approved: "green",
-    rejected: "rose",
-    ready_to_schedule: "green",
-  };
-
-  return tones[status] ?? "neutral";
+  return operationalStatusTone(status);
 }
 
 type DraftReviewEventPreview = {
@@ -496,7 +502,7 @@ function DraftWorkflowForm({
   const tones = {
     primary: "bg-stone-950 text-white hover:bg-stone-800 disabled:bg-stone-400",
     secondary: "border border-stone-300 bg-white text-stone-700 hover:border-stone-400 hover:bg-stone-50 disabled:text-stone-400",
-    danger: "border border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100 disabled:text-rose-400",
+    danger: destructiveButtonClass,
   };
 
   return (
@@ -640,7 +646,7 @@ function ReviewQueue({ groups }: { groups: ReturnType<typeof groupDraftsByStatus
   const draftCount = groups.reduce((total, group) => total + group.drafts.length, 0);
 
   return (
-    <section id="review-queue" className={`${panelClass} mt-7 scroll-mt-24 p-5 sm:p-6`}>
+    <section id="review-queue" className={sectionClass}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Процесс согласования</p>
@@ -665,22 +671,26 @@ function ReviewQueue({ groups }: { groups: ReturnType<typeof groupDraftsByStatus
                   const latestEvent = draft.reviewEvents.at(-1);
 
                   return (
-                    <article key={draft.id} className="rounded-lg border border-stone-200 bg-stone-50/50 p-4">
+                    <article key={draft.id} className="min-w-0 rounded-lg border border-stone-200 bg-stone-50/50 p-3">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
+                        <div className="min-w-0">
                           <p className="text-xs font-bold uppercase tracking-[0.08em] text-teal-700">{draft.platformName} &middot; {draft.format}</p>
-                          <h4 className="mt-2 font-semibold leading-6 text-stone-950">{draft.draftTitle}</h4>
-                          <p className="mt-1 text-xs leading-5 text-stone-400">{draft.topic}</p>
+                          <h4 className="mt-2 line-clamp-2 font-semibold leading-6 text-stone-950">{draft.draftTitle}</h4>
+                          <p className="mt-1 line-clamp-1 text-xs leading-5 text-stone-400">{draft.topic}</p>
                         </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          <StatusBadge tone={draftStatusTone(draft.status)}>{formatDraftStatus(draft.status)}</StatusBadge>
-                          <StatusBadge tone={draft.riskLevel === "high" ? "rose" : draft.riskLevel === "medium" ? "amber" : "green"}>Риск: {formatStatus(draft.riskLevel)}</StatusBadge>
-                          {draft.approvalRequired ? <StatusBadge tone="amber">Нужно согласование</StatusBadge> : null}
-                        </div>
+                        <StatusBadge tone={draftStatusTone(draft.status)}>{formatDraftStatus(draft.status)}</StatusBadge>
                       </div>
-                      <p className="mt-3 line-clamp-3 whitespace-pre-wrap text-sm leading-6 text-stone-600">{draft.draftBody}</p>
+                      <p className="mt-3 text-xs leading-5 text-stone-500">
+                        Риск: <span className="font-semibold text-stone-700">{formatStatus(draft.riskLevel)}</span>
+                        {draft.approvalRequired ? " · нужно согласование" : " · согласование необязательно"}
+                      </p>
+                      <p className="mt-2 line-clamp-2 whitespace-pre-wrap text-sm leading-6 text-stone-600">{draft.draftBody}</p>
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-xs font-bold text-teal-700">Показать текст</summary>
+                        <p className="mt-2 whitespace-pre-wrap rounded-md border border-stone-200 bg-white p-3 text-sm leading-6 text-stone-600">{draft.draftBody}</p>
+                      </details>
                       {latestEvent ? (
-                        <p className="mt-3 rounded-md border border-stone-200 bg-white px-3 py-2 text-xs leading-5 text-stone-500">
+                        <p className="mt-3 line-clamp-2 rounded-md border border-stone-200 bg-white px-3 py-2 text-xs leading-5 text-stone-500">
                           Последнее событие: <span className="font-bold text-stone-700">{formatReviewAction(latestEvent.action)}</span>. Участник: {formatReviewActor(latestEvent.actorType)}
                           {latestEvent.comment ? ` - ${latestEvent.comment}` : ""}
                         </p>
@@ -708,16 +718,7 @@ function ReviewQueue({ groups }: { groups: ReturnType<typeof groupDraftsByStatus
 }
 
 function scheduledPublicationTone(status: string): "neutral" | "teal" | "amber" | "rose" | "green" {
-  const tones: Record<string, "neutral" | "teal" | "amber" | "rose" | "green"> = {
-    scheduled: "teal",
-    needs_assets: "amber",
-    ready: "green",
-    published: "green",
-    skipped: "neutral",
-    failed: "rose",
-  };
-
-  return tones[status] ?? "neutral";
+  return operationalStatusTone(status);
 }
 
 function ScheduledPublicationAction({
@@ -767,8 +768,8 @@ function SchedulingLayer({
   );
 
   return (
-    <section id="scheduling" className={`${panelClass} mt-7 scroll-mt-24 p-5 sm:p-6`}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <section id="scheduling" className={sectionClass}>
+      <div className={cardHeaderClass}>
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Внутреннее планирование</p>
           <h2 className="mt-1 text-xl font-semibold text-stone-950">Планирование публикаций</h2>
@@ -779,7 +780,7 @@ function SchedulingLayer({
         <StatusBadge tone={publications.length > 0 ? "teal" : "neutral"}>{publications.length} запланировано</StatusBadge>
       </div>
 
-      <div className="mt-5 grid gap-5 xl:grid-cols-2">
+      <div className={`mt-5 ${twoColumnLayoutClass}`}>
         <div>
           <h3 className="text-sm font-semibold text-stone-950">Готовы к планированию</h3>
           <div className="mt-3 grid gap-3">
@@ -842,7 +843,7 @@ function SchedulingLayer({
                   {publication.scheduledTime ? `, ${publication.scheduledTime}` : ""}
                 </p>
                 {publication.timezone ? <p className="mt-1 text-xs text-stone-400">{publication.timezone}</p> : null}
-                {publication.notes ? <p className="mt-3 rounded-md bg-stone-50 px-3 py-2 text-sm leading-6 text-stone-600">{publication.notes}</p> : null}
+                {publication.notes ? <p className="mt-3 line-clamp-2 rounded-md bg-stone-50 px-3 py-2 text-sm leading-6 text-stone-600">{publication.notes}</p> : null}
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   {publication.creativeAssets.length > 0 ? (
                     <>
@@ -872,8 +873,21 @@ function SchedulingLayer({
                   </p>
                 ) : null}
 
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {publication.status !== "ready" ? (
+                    <ScheduledPublicationAction action={markScheduledPublicationReady} publicationId={publication.id} tone="green">
+                      Готово
+                    </ScheduledPublicationAction>
+                  ) : (
+                    <StatusBadge tone="green">Готово к размещению</StatusBadge>
+                  )}
+                  <a href="#assets" className="inline-flex items-center text-xs font-bold text-teal-800 transition hover:text-teal-950">
+                    Открыть креативы
+                  </a>
+                </div>
+
                 <details className="mt-3 rounded-md border border-stone-200 bg-stone-50/70">
-                  <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-stone-700">Изменить дату, время или заметку</summary>
+                  <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-stone-700">Управление публикацией</summary>
                   <form action={updateScheduledPublication} className="grid gap-2 border-t border-stone-200 p-3 sm:grid-cols-2">
                     <input type="hidden" name="scheduledPublicationId" value={publication.id} />
                     <label className="grid gap-1 text-xs font-bold text-stone-600">
@@ -892,33 +906,27 @@ function SchedulingLayer({
                       Сохранить изменения
                     </PendingSubmitButton>
                   </form>
+                  <div className="flex flex-wrap gap-2 border-t border-stone-200 p-3">
+                    {publication.status !== "needs_assets" ? (
+                      <ScheduledPublicationAction action={markScheduledPublicationNeedsAssets} publicationId={publication.id} tone="amber">
+                        Нужен визуал
+                      </ScheduledPublicationAction>
+                    ) : null}
+                    {publication.status !== "scheduled" ? (
+                      <ScheduledPublicationAction action={markScheduledPublicationScheduled} publicationId={publication.id} tone="teal">
+                        Запланировано
+                      </ScheduledPublicationAction>
+                    ) : null}
+                    {publication.status !== "skipped" ? (
+                      <ScheduledPublicationAction action={markScheduledPublicationSkipped} publicationId={publication.id}>
+                        Пропустить
+                      </ScheduledPublicationAction>
+                    ) : null}
+                    <ScheduledPublicationAction action={unschedulePublication} publicationId={publication.id} tone="rose">
+                      Снять с расписания
+                    </ScheduledPublicationAction>
+                  </div>
                 </details>
-
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {publication.status !== "needs_assets" ? (
-                    <ScheduledPublicationAction action={markScheduledPublicationNeedsAssets} publicationId={publication.id} tone="amber">
-                      Нужен визуал
-                    </ScheduledPublicationAction>
-                  ) : null}
-                  {publication.status !== "scheduled" ? (
-                    <ScheduledPublicationAction action={markScheduledPublicationScheduled} publicationId={publication.id} tone="teal">
-                      Запланировано
-                    </ScheduledPublicationAction>
-                  ) : null}
-                  {publication.status !== "ready" ? (
-                    <ScheduledPublicationAction action={markScheduledPublicationReady} publicationId={publication.id} tone="green">
-                      Готово
-                    </ScheduledPublicationAction>
-                  ) : null}
-                  {publication.status !== "skipped" ? (
-                    <ScheduledPublicationAction action={markScheduledPublicationSkipped} publicationId={publication.id}>
-                      Пропустить
-                    </ScheduledPublicationAction>
-                  ) : null}
-                  <ScheduledPublicationAction action={unschedulePublication} publicationId={publication.id} tone="rose">
-                    Снять с расписания
-                  </ScheduledPublicationAction>
-                </div>
               </article>
             ))}
             {publications.length === 0 ? (
@@ -951,16 +959,7 @@ const creativeAssetStatusOptions = [
 ];
 
 function creativeAssetTone(status: string): "neutral" | "teal" | "amber" | "rose" | "green" {
-  const tones: Record<string, "neutral" | "teal" | "amber" | "rose" | "green"> = {
-    needed: "amber",
-    brief_ready: "teal",
-    in_production: "teal",
-    needs_review: "amber",
-    approved: "green",
-    rejected: "rose",
-  };
-
-  return tones[status] ?? "neutral";
+  return operationalStatusTone(status);
 }
 
 function CreativeAssetSourceBadge({ source, compact = false }: { source: string; compact?: boolean }) {
@@ -993,25 +992,11 @@ function CreativeAssetStatusAction({
 }
 
 function creativeVariantTone(status: string): "neutral" | "teal" | "amber" | "rose" | "green" {
-  const tones: Record<string, "neutral" | "teal" | "amber" | "rose" | "green"> = {
-    generated: "teal",
-    needs_review: "amber",
-    approved: "green",
-    rejected: "rose",
-  };
-
-  return tones[status] ?? "neutral";
+  return operationalStatusTone(status);
 }
 
 function creativeVariantQualityTone(status: string): "neutral" | "teal" | "amber" | "rose" | "green" {
-  const tones: Record<string, "neutral" | "teal" | "amber" | "rose" | "green"> = {
-    unchecked: "neutral",
-    needs_manual_review: "amber",
-    passed: "green",
-    failed: "rose",
-  };
-
-  return tones[status] ?? "neutral";
+  return operationalStatusTone(status);
 }
 
 function CreativeVariantAction({
@@ -1072,8 +1057,8 @@ function CreativeAssetLayer({
   );
 
   return (
-    <section id="assets" className={`${panelClass} mt-7 scroll-mt-24 p-5 sm:p-6`}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <section id="assets" className={sectionClass}>
+      <div className={cardHeaderClass}>
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Производство визуалов</p>
           <h2 className="mt-1 text-xl font-semibold text-stone-950">Креативные материалы</h2>
@@ -1089,7 +1074,7 @@ function CreativeAssetLayer({
         </div>
       </div>
 
-      <div className="mt-5 grid gap-5 xl:grid-cols-2">
+      <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(280px,0.8fr)_minmax(0,1.2fr)]">
         <div>
           <h3 className="text-sm font-semibold text-stone-950">Нужно подготовить ТЗ</h3>
           <div className="mt-3 grid gap-3">
@@ -1181,7 +1166,7 @@ function CreativeAssetLayer({
           <h3 className="text-sm font-semibold text-stone-950">Материалы в производстве</h3>
           <div className="mt-3 grid gap-3">
             {assets.map((asset) => (
-              <article key={asset.id} className="rounded-lg border border-stone-200 bg-white p-4">
+              <article key={asset.id} className="min-w-0 rounded-lg border border-stone-200 bg-white p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <div className="flex flex-wrap gap-1.5">
@@ -1194,17 +1179,20 @@ function CreativeAssetLayer({
                   </div>
                   <StatusBadge tone={creativeAssetTone(asset.status)}>{formatStatus(asset.status)}</StatusBadge>
                 </div>
-                <p className="mt-3 text-sm leading-6 text-stone-700">{asset.brief}</p>
-                <div className="mt-3 grid gap-2 text-xs leading-5 text-stone-600">
+                <p className="mt-3 line-clamp-2 text-sm leading-6 text-stone-700">{asset.brief}</p>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {asset.approvalRequired ? <StatusBadge tone="amber">Нужно согласование</StatusBadge> : null}
+                  <StatusBadge>{asset.scheduledPublication.scheduledDate}{asset.scheduledPublication.scheduledTime ? `, ${asset.scheduledPublication.scheduledTime}` : ""}</StatusBadge>
+                  <CreativeAssetVisualStatus variants={asset.generatedVariants} />
+                </div>
+                <details className="mt-3 rounded-md border border-stone-200 bg-stone-50/70">
+                  <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-stone-700">Открыть производство и ТЗ</summary>
+                  <div className="border-t border-stone-200 p-3">
+                <div className="grid gap-2 text-xs leading-5 text-stone-600">
                   {asset.formatRequirements ? <p><span className="font-bold text-stone-800">Формат:</span> {asset.formatRequirements}</p> : null}
                   {asset.textOnAsset ? <p><span className="font-bold text-stone-800">Текст:</span> {asset.textOnAsset}</p> : null}
                   {asset.references ? <p><span className="font-bold text-stone-800">Референсы:</span> {asset.references}</p> : null}
                   {asset.notes ? <p><span className="font-bold text-stone-800">Заметка:</span> {asset.notes}</p> : null}
-                </div>
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {asset.approvalRequired ? <StatusBadge tone="amber">Нужно согласование</StatusBadge> : <StatusBadge>Согласование необязательно</StatusBadge>}
-                  <StatusBadge>{asset.scheduledPublication.scheduledDate}{asset.scheduledPublication.scheduledTime ? `, ${asset.scheduledPublication.scheduledTime}` : ""}</StatusBadge>
-                  <CreativeAssetVisualStatus variants={asset.generatedVariants} />
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {creativeAssetStatusOptions.map((status) =>
@@ -1262,26 +1250,31 @@ function CreativeAssetLayer({
                   </div>
 
                   {asset.generatedVariants.length > 0 ? (
-                    <div className="mt-3 grid gap-3">
+                    <div className="mt-3 grid gap-3 md:grid-cols-2">
                       {asset.generatedVariants.map((variant) => (
                         <article key={variant.id} className="overflow-hidden rounded-lg border border-stone-200 bg-stone-50/60">
                           <img
                             src={`data:${variant.mimeType};base64,${variant.imageBase64}`}
                             alt={variant.variantTitle}
-                            className="aspect-square w-full bg-stone-100 object-cover"
+                            className="aspect-square max-h-80 w-full bg-stone-100 object-contain"
                           />
                           <div className="p-3">
                             <div className="flex flex-wrap gap-1.5">
                               <StatusBadge tone={creativeVariantTone(variant.status)}>{formatStatus(variant.status)}</StatusBadge>
-                              <StatusBadge>{formatStatus(variant.provider)}</StatusBadge>
-                              {variant.model ? <StatusBadge>{variant.model}</StatusBadge> : null}
-                              {variant.quality ? <StatusBadge>{variant.quality}</StatusBadge> : null}
-                              {variant.size ? <StatusBadge>{variant.size}</StatusBadge> : null}
-                              {variant.textMode ? <StatusBadge>{formatStatus(variant.textMode)}</StatusBadge> : null}
                               <StatusBadge tone={creativeVariantQualityTone(variant.qualityStatus)}>{formatStatus(variant.qualityStatus)}</StatusBadge>
                             </div>
                             <p className="mt-3 text-sm font-semibold text-stone-900">{variant.variantTitle}</p>
                             {variant.notes ? <p className="mt-2 text-xs leading-5 text-stone-500">{variant.notes}</p> : null}
+                            <details className="mt-3 rounded-md border border-stone-200 bg-white">
+                              <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-stone-600">Технически</summary>
+                              <p className="border-t border-stone-200 px-3 py-2 text-[11px] leading-5 text-stone-500">
+                                {formatStatus(variant.provider)}
+                                {variant.model ? ` · ${variant.model}` : ""}
+                                {variant.quality ? ` · ${variant.quality}` : ""}
+                                {variant.size ? ` · ${variant.size}` : ""}
+                                {variant.textMode ? ` · ${formatStatus(variant.textMode)}` : ""}
+                              </p>
+                            </details>
                             <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-900">
                               Перед отправкой клиенту проверьте текст, лица, руки, логотипы и медицинские утверждения.
                             </p>
@@ -1313,30 +1306,33 @@ function CreativeAssetLayer({
                                   Отклонить
                                 </CreativeVariantAction>
                               ) : null}
-                              <CreativeVariantAction action={deleteCreativeVariant} variantId={variant.id}>
-                                Удалить
-                              </CreativeVariantAction>
                             </div>
-                            <div className="mt-3 grid gap-2 rounded-md border border-stone-200 bg-white p-3">
-                              <p className="text-xs font-bold text-stone-700">Ручная проверка качества</p>
-                              <div className="flex flex-wrap gap-2">
-                                <CreativeVariantAction action={markCreativeVariantQualityPassed} variantId={variant.id} tone="green">
-                                  Качество ок
-                                </CreativeVariantAction>
-                                <form action={markCreativeVariantQualityFailed} className="flex min-w-0 flex-1 flex-wrap gap-2">
-                                  <input type="hidden" name="creativeVariantId" value={variant.id} />
-                                  <input
-                                    type="text"
-                                    name="qualityNotes"
-                                    className="min-w-44 flex-1 rounded-md border border-stone-200 bg-white px-2.5 py-1.5 text-xs text-stone-700 outline-none focus:border-teal-500"
-                                    placeholder="Комментарий к проблеме, необязательно"
-                                  />
-                                  <PendingSubmitButton pendingLabel="Сохраняем..." className="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-bold text-rose-800 transition hover:bg-rose-100">
-                                    Есть проблемы
-                                  </PendingSubmitButton>
-                                </form>
+                            <details className="mt-3 rounded-md border border-stone-200 bg-white">
+                              <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-stone-700">Дополнительные действия</summary>
+                              <div className="grid gap-3 border-t border-stone-200 p-3">
+                                <p className="text-xs font-bold text-stone-700">Ручная проверка качества</p>
+                                <div className="flex flex-wrap gap-2">
+                                  <CreativeVariantAction action={markCreativeVariantQualityPassed} variantId={variant.id} tone="green">
+                                    Качество ок
+                                  </CreativeVariantAction>
+                                  <CreativeVariantAction action={deleteCreativeVariant} variantId={variant.id}>
+                                    Удалить
+                                  </CreativeVariantAction>
+                                  <form action={markCreativeVariantQualityFailed} className="flex min-w-0 flex-1 flex-wrap gap-2">
+                                    <input type="hidden" name="creativeVariantId" value={variant.id} />
+                                    <input
+                                      type="text"
+                                      name="qualityNotes"
+                                      className="min-w-44 flex-1 rounded-md border border-stone-200 bg-white px-2.5 py-1.5 text-xs text-stone-700 outline-none focus:border-teal-500"
+                                      placeholder="Комментарий к проблеме, необязательно"
+                                    />
+                                    <PendingSubmitButton pendingLabel="Сохраняем..." className={destructiveButtonClass}>
+                                      Есть проблемы
+                                    </PendingSubmitButton>
+                                  </form>
+                                </div>
                               </div>
-                            </div>
+                            </details>
                           </div>
                         </article>
                       ))}
@@ -1359,6 +1355,8 @@ function CreativeAssetLayer({
                     </div>
                   )}
                 </div>
+                  </div>
+                </details>
               </article>
             ))}
             {assets.length === 0 ? (
@@ -1374,6 +1372,115 @@ function CreativeAssetLayer({
 function suggestsVisualAsset(format: string) {
   return ["visual", "video", "reel", "story", "image", "photo", "carousel", "short"].some((token) =>
     format.toLowerCase().includes(token),
+  );
+}
+
+function WorkspaceSwitcher() {
+  const items = [
+    { label: "Обзор", href: "#overview" },
+    { label: "Согласования", href: "#review-queue" },
+    { label: "Календарь", href: "#calendar" },
+    { label: "Планирование", href: "#scheduling" },
+    { label: "Креативы", href: "#assets" },
+  ];
+
+  return (
+    <nav aria-label="Рабочие зоны" className="mt-5 overflow-x-auto rounded-lg border border-stone-200 bg-white p-1.5 shadow-[0_1px_2px_rgba(28,36,38,0.04)]">
+      <div className="flex min-w-max gap-1">
+        {items.map((item, index) => (
+          <a
+            key={item.href}
+            href={item.href}
+            className={`rounded-md px-3 py-2 text-xs font-bold transition ${
+              index === 0 ? "bg-teal-800 text-white" : "text-stone-600 hover:bg-stone-100 hover:text-stone-950"
+            }`}
+          >
+            {item.label}
+          </a>
+        ))}
+      </div>
+    </nav>
+  );
+}
+
+function OverviewPreviews({
+  drafts,
+  publications,
+  assets,
+}: {
+  drafts: DraftQueueItem[];
+  publications: ScheduledPublicationPreview[];
+  assets: CreativeAssetPreview[];
+}) {
+  const reviewDrafts = drafts.filter((draft) => ["draft", "needs_review", "sent_to_client", "client_changes_requested"].includes(draft.status)).slice(0, 3);
+  const calendarPublications = publications.slice(0, 3);
+  const creativeAssets = assets.filter((asset) => asset.status !== "approved").slice(0, 3);
+
+  return (
+    <section className={`mt-7 ${compactGridClass}`}>
+      <article className={`${panelClass} min-w-0 p-4`}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-teal-700">Согласования</p>
+            <h3 className="mt-1 font-semibold text-stone-950">Короткая очередь</h3>
+          </div>
+          <StatusBadge tone={reviewDrafts.length > 0 ? "amber" : "green"}>{reviewDrafts.length}</StatusBadge>
+        </div>
+        <div className="mt-3 grid gap-2">
+          {reviewDrafts.map((draft) => (
+            <div key={draft.id} className="min-w-0 rounded-md border border-stone-200 bg-stone-50/70 p-3">
+              <p className="truncate text-[11px] font-bold uppercase tracking-[0.08em] text-teal-700">{draft.platformName} &middot; {draft.format}</p>
+              <p className="mt-1 line-clamp-1 text-sm font-semibold text-stone-900">{draft.draftTitle}</p>
+              <p className="mt-1 text-xs text-stone-500">{formatDraftStatus(draft.status)}</p>
+            </div>
+          ))}
+          {reviewDrafts.length === 0 ? <p className={mutedTextClass}>Нет черновиков, требующих внимания.</p> : null}
+        </div>
+        <a href="#review-queue" className="mt-4 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">Открыть согласования</a>
+      </article>
+
+      <article className={`${panelClass} min-w-0 p-4`}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-teal-700">Календарь</p>
+            <h3 className="mt-1 font-semibold text-stone-950">Ближайшие публикации</h3>
+          </div>
+          <StatusBadge tone="teal">{calendarPublications.length}</StatusBadge>
+        </div>
+        <div className="mt-3 grid gap-2">
+          {calendarPublications.map((publication) => (
+            <div key={publication.id} className="min-w-0 rounded-md border border-stone-200 bg-stone-50/70 p-3">
+              <p className="truncate text-[11px] font-bold uppercase tracking-[0.08em] text-teal-700">{publication.scheduledDate}{publication.scheduledTime ? `, ${publication.scheduledTime}` : ""}</p>
+              <p className="mt-1 line-clamp-1 text-sm font-semibold text-stone-900">{publication.topic}</p>
+              <p className="mt-1 text-xs text-stone-500">{publication.platformName} &middot; {formatStatus(publication.status)}</p>
+            </div>
+          ))}
+          {calendarPublications.length === 0 ? <p className={mutedTextClass}>Публикации с датой пока не запланированы.</p> : null}
+        </div>
+        <a href="#calendar" className="mt-4 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">Открыть календарь</a>
+      </article>
+
+      <article className={`${panelClass} min-w-0 p-4`}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-teal-700">Креативы</p>
+            <h3 className="mt-1 font-semibold text-stone-950">Материалы в работе</h3>
+          </div>
+          <StatusBadge tone={creativeAssets.length > 0 ? "amber" : "green"}>{creativeAssets.length}</StatusBadge>
+        </div>
+        <div className="mt-3 grid gap-2">
+          {creativeAssets.map((asset) => (
+            <div key={asset.id} className="min-w-0 rounded-md border border-stone-200 bg-stone-50/70 p-3">
+              <p className="truncate text-[11px] font-bold uppercase tracking-[0.08em] text-teal-700">{asset.scheduledPublication.platformName} &middot; {formatStatus(asset.assetType)}</p>
+              <p className="mt-1 line-clamp-1 text-sm font-semibold text-stone-900">{asset.title}</p>
+              <p className="mt-1 text-xs text-stone-500">{formatStatus(asset.status)}</p>
+            </div>
+          ))}
+          {creativeAssets.length === 0 ? <p className={mutedTextClass}>Нет креативов, требующих внимания.</p> : null}
+        </div>
+        <a href="#assets" className="mt-4 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">Открыть креативы</a>
+      </article>
+    </section>
   );
 }
 
@@ -1992,16 +2099,16 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
     ).length ?? 0);
 
   return (
-    <div className="min-h-screen bg-[#f4f5f2] text-stone-900">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 border-r border-stone-800 bg-[#172226] text-stone-200 lg:flex lg:flex-col">
-        <div className="border-b border-white/10 px-5 py-5">
+    <div className={pageBackgroundClass}>
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 border-r border-stone-200 bg-[#f8f8f5] text-stone-700 lg:flex lg:flex-col">
+        <div className="border-b border-stone-200 px-5 py-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-500 text-sm font-bold text-white">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-800 text-sm font-bold text-white">
               AP
             </div>
             <div>
-              <p className="text-sm font-semibold text-white">Adaptive Presence</p>
-              <p className="mt-0.5 text-xs text-stone-400">OS by Creative</p>
+              <p className="text-sm font-semibold text-stone-950">Adaptive Presence</p>
+              <p className="mt-0.5 text-xs text-stone-500">OS by Creative</p>
             </div>
           </div>
         </div>
@@ -2010,7 +2117,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
           <div className="grid gap-5">
             {navigationGroups.map((group) => (
               <div key={group.label}>
-                <p className="px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-stone-500">{group.label}</p>
+                <p className="px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-stone-400">{group.label}</p>
                 <div className="mt-2 grid gap-1">
                   {group.items.map((item) => (
                     <a
@@ -2018,11 +2125,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                       href={item.href}
                       className={`flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition ${
                         item.label === "Обзор"
-                          ? "bg-white/10 font-semibold text-white"
-                          : "text-stone-400 hover:bg-white/5 hover:text-white"
+                          ? "border border-stone-200 bg-white font-semibold text-stone-950 shadow-[0_1px_2px_rgba(28,36,38,0.04)]"
+                          : "text-stone-500 hover:bg-white hover:text-stone-950"
                       }`}
                     >
-                      <span className="flex h-5 w-5 items-center justify-center rounded border border-white/15 text-[10px] font-bold">
+                      <span className="flex h-5 w-5 items-center justify-center rounded border border-stone-200 bg-white text-[10px] font-bold text-stone-600">
                         {item.glyph}
                       </span>
                       {item.label}
@@ -2034,16 +2141,16 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
           </div>
         </nav>
 
-        <div id="settings" className="grid gap-3 border-t border-white/10 px-4 py-4">
-          <div className="rounded-md border border-white/10 bg-white/5 p-3">
-            <p className="text-xs font-semibold text-white">AI-помощник</p>
-            <p className="mt-1 text-xs leading-5 text-stone-400">Помощь по клиентам и текущим задачам.</p>
+        <div id="settings" className="grid gap-3 border-t border-stone-200 px-4 py-4">
+          <div className="rounded-md border border-stone-200 bg-white p-3">
+            <p className="text-xs font-semibold text-stone-800">AI-помощник</p>
+            <p className="mt-1 text-xs leading-5 text-stone-500">Помощь по клиентам и текущим задачам.</p>
           </div>
           <div className="flex items-center gap-3 px-1">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-500 text-xs font-bold text-white">M</div>
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-800 text-xs font-bold text-white">M</div>
             <div>
-              <p className="text-xs font-semibold text-stone-200">Профиль менеджера</p>
-              <p className="mt-0.5 text-[11px] text-stone-500">Операционная команда Creative</p>
+              <p className="text-xs font-semibold text-stone-700">Профиль менеджера</p>
+              <p className="mt-0.5 text-[11px] text-stone-400">Операционная команда Creative</p>
             </div>
           </div>
         </div>
@@ -2106,8 +2213,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                     черновики.
                   </p>
                 </div>
-                <p className="text-xs font-semibold text-stone-400">Текущий цикл: {currentMonth()}</p>
+              <p className="text-xs font-semibold text-stone-400">Текущий цикл: {currentMonth()}</p>
               </div>
+
+              <WorkspaceSwitcher />
 
               <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <MetricCard label="Требует проверки" value={needsManagerReviewCount} detail="Черновики во внутренней очереди" tone="amber" />
@@ -2224,6 +2333,12 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 )}
               </article>
             </section>
+
+            <OverviewPreviews
+              drafts={contentDrafts}
+              publications={selectedMonthlyPlan?.scheduledPublications ?? []}
+              assets={creativeAssets}
+            />
 
             <ReviewQueue groups={reviewQueueGroups} />
 
@@ -2756,7 +2871,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                         {selectedMonthlyPlan.plannedContentItems.filter((item) => item.contentDraft).map((item) => {
                           const draft = item.contentDraft!;
                           return (
-                            <article id={`draft-${draft.id}`} key={draft.id} className="scroll-mt-24 rounded-lg border border-stone-200 bg-white p-5">
+                            <article id={`draft-${draft.id}`} key={draft.id} className="scroll-mt-24 rounded-lg border border-stone-200 bg-white p-4">
                               <div className="flex flex-col gap-3 border-b border-stone-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
                                 <div className="flex items-start gap-3">
                                   <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-md border border-dashed border-stone-300 bg-stone-50 text-[9px] font-bold uppercase tracking-[0.1em] text-stone-400">
@@ -2775,7 +2890,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                               </div>
                               <div className="mt-4">
                                 <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-stone-400">Превью текста</p>
-                                <p className="mt-2 line-clamp-6 whitespace-pre-wrap text-sm leading-7 text-stone-700">{draft.draftBody}</p>
+                                <p className="mt-2 line-clamp-2 whitespace-pre-wrap text-sm leading-7 text-stone-700">{draft.draftBody}</p>
                                 <details className="mt-3">
                                   <summary className="cursor-pointer text-xs font-bold text-teal-700">Открыть полный черновик</summary>
                                   <p className="mt-3 whitespace-pre-wrap rounded-md border border-stone-200 bg-stone-50 p-3 text-sm leading-7 text-stone-700">{draft.draftBody}</p>
@@ -2785,14 +2900,16 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                                 <StatusBadge tone={draft.approvalRequired ? "amber" : "green"}>Согласование: {draft.approvalRequired ? "обязательно" : "не требуется"}</StatusBadge>
                                 <StatusBadge tone={draft.autopublishEligible ? "green" : "neutral"}>Автопубликация: {draft.autopublishEligible ? "доступна" : "нет"}</StatusBadge>
                               </div>
-                              <div className="mt-4">
-                                <p className="text-xs font-bold uppercase tracking-[0.1em] text-stone-400">Заметки к черновику</p>
-                                {Array.isArray(draft.draftNotes) && draft.draftNotes.length > 0 ? (
-                                  <ul className="mt-2 grid gap-2">
-                                    {draft.draftNotes.map((note) => <li key={String(note)} className="rounded-md bg-stone-50 px-3 py-2 text-sm leading-6 text-stone-600">{String(note)}</li>)}
-                                  </ul>
-                                ) : <p className="mt-2 text-sm text-stone-400">Заметок к черновику нет.</p>}
-                              </div>
+                              <details className="mt-4 rounded-md border border-stone-200 bg-stone-50/70">
+                                <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-stone-700">Заметки к черновику</summary>
+                                <div className="border-t border-stone-200 p-3">
+                                  {Array.isArray(draft.draftNotes) && draft.draftNotes.length > 0 ? (
+                                    <ul className="grid gap-2">
+                                      {draft.draftNotes.map((note) => <li key={String(note)} className="rounded-md bg-white px-3 py-2 text-sm leading-6 text-stone-600">{String(note)}</li>)}
+                                    </ul>
+                                  ) : <p className="text-sm text-stone-400">Заметок к черновику нет.</p>}
+                                </div>
+                              </details>
                               <div className="mt-4">
                                 <ReviewEventTimeline events={draft.reviewEvents} />
                               </div>
