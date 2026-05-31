@@ -169,13 +169,18 @@ export function validateMonthlyPlanForBlueprint(
 
     const canAutopublish = autopublishTokens.some((token) => matchesPolicyToken(item, token));
     if (item.autopublishEligible && !canAutopublish) {
-      throw new Error(`Autopublish eligibility violates humanReviewPolicy for ${item.topic}.`);
+      item.autopublishEligible = false;
+      item.approvalRequired = true;
     }
 
     const mustApprove =
       highApprovalRisk || requiresApprovalTokens.some((token) => matchesPolicyToken(item, token));
-    if (mustApprove && !item.approvalRequired) {
-      throw new Error(`Approval is required by Blueprint policy for ${item.topic}.`);
+    if (mustApprove) {
+      item.approvalRequired = true;
+    }
+
+    if (highApprovalRisk) {
+      item.autopublishEligible = false;
     }
   }
 
@@ -186,7 +191,7 @@ export function validateMonthlyPlanForBlueprint(
     );
 
     if (selectedPlatform && !selectedPlatform.requiresIntegrationBeforeLaunch) {
-      throw new Error(`Required integration must be marked before launch for ${integration.platformName}.`);
+      selectedPlatform.requiresIntegrationBeforeLaunch = true;
     }
 
     if (selectedPlatform && !hasIntegrationTask(plan, integration.platformName)) {
