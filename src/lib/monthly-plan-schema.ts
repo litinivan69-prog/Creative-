@@ -121,9 +121,19 @@ function hasIntegrationTask(plan: MonthlyOperatingPlan, platformName: string) {
     const text = normalize(`${task.title} ${task.description}`);
     return (
       text.includes(normalizedPlatform) &&
-      ["integration", "connect", "credential", "auth", "access", "permission"].some((keyword) =>
-        text.includes(keyword),
-      )
+      [
+        "integration",
+        "connect",
+        "credential",
+        "auth",
+        "access",
+        "permission",
+        "подключ",
+        "интеграц",
+        "доступ",
+        "права",
+        "аккаунт",
+      ].some((keyword) => text.includes(keyword))
     );
   });
 }
@@ -195,12 +205,18 @@ export function validateMonthlyPlanForBlueprint(
       (platform) => normalize(platform.platformName) === normalize(integration.platformName),
     );
 
-    if (selectedPlatform && !selectedPlatform.requiresIntegrationBeforeLaunch) {
+    if (selectedPlatform) {
       selectedPlatform.requiresIntegrationBeforeLaunch = true;
     }
 
     if (selectedPlatform && !hasIntegrationTask(plan, integration.platformName)) {
-      throw new Error(`Missing manager integration task for ${integration.platformName}.`);
+      plan.managerTasks.push({
+        title: `Connect ${integration.platformName} integration`,
+        description: `Add required credentials, access, permissions, and integration setup for ${integration.platformName} before launch.`,
+        priority: "high",
+        dueDate: "before launch",
+        status: "open",
+      });
     }
   }
 
