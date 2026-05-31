@@ -2,6 +2,7 @@ import {
   createClient,
   addClientBrief,
   generateBlueprint,
+  generateContentDraftForItem,
   generateMonthlyPlan,
   updateClientBrief,
 } from "@/app/actions";
@@ -80,7 +81,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
               include: {
                 modules: true,
                 platforms: true,
-                plannedContentItems: true,
+                plannedContentItems: {
+                  include: { contentDraft: true },
+                },
                 managerTasks: true,
               },
             },
@@ -106,7 +109,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
               include: {
                 modules: true,
                 platforms: true,
-                plannedContentItems: true,
+                plannedContentItems: {
+                  include: { contentDraft: true },
+                },
                 managerTasks: true,
               },
             },
@@ -128,11 +133,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
       <div className="mx-auto flex max-w-7xl flex-col gap-6">
         <header className="flex flex-col gap-2 border-b border-slate-200 pb-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-sm font-semibold text-teal-700">Sprint 0 + Sprint 1</p>
+            <p className="text-sm font-semibold text-teal-700">Sprint 0 + Sprint 1 + Sprint 2</p>
             <h1 className="text-3xl font-semibold text-slate-950">Adaptive Presence OS</h1>
           </div>
           <p className="max-w-2xl text-sm leading-6 text-slate-600">
-            Client brief to executable Blueprint to monthly operating plan, saved in PostgreSQL with Prisma and displayed for managers.
+            Client brief to executable Blueprint to monthly operating plan to review-ready content drafts, saved in PostgreSQL with Prisma.
           </p>
         </header>
 
@@ -651,6 +656,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                               <th className="px-3 py-3">Approval</th>
                               <th className="px-3 py-3">Autopublish</th>
                               <th className="px-3 py-3">Status</th>
+                              <th className="px-3 py-3">Draft</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-200">
@@ -669,10 +675,105 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                                   {item.autopublishEligible ? "Eligible" : "No"}
                                 </td>
                                 <td className="px-3 py-3 text-slate-700">{item.status}</td>
+                                <td className="px-3 py-3">
+                                  {item.contentDraft ? (
+                                    <a
+                                      href={`#draft-${item.contentDraft.id}`}
+                                      className="inline-flex rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-900 hover:bg-teal-100"
+                                    >
+                                      {item.contentDraft.status}
+                                    </a>
+                                  ) : (
+                                    <form action={generateContentDraftForItem}>
+                                      <input type="hidden" name="plannedContentItemId" value={item.id} />
+                                      <PendingSubmitButton
+                                        pendingLabel="Generating Draft..."
+                                        className="whitespace-nowrap rounded-md bg-slate-950 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:cursor-wait disabled:bg-slate-500"
+                                      >
+                                        Generate Draft
+                                      </PendingSubmitButton>
+                                    </form>
+                                  )}
+                                </td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
+                      </div>
+                    </div>
+
+                    <div id="drafts" className="mt-6 scroll-mt-6">
+                      <div>
+                        <h5 className="font-semibold text-slate-950">Content drafts</h5>
+                        <p className="mt-1 text-sm leading-6 text-slate-600">
+                          Drafts are generated one planned item at a time for manager review. Nothing is published
+                          automatically.
+                        </p>
+                      </div>
+                      <div className="mt-3 grid gap-3">
+                        {selectedMonthlyPlan.plannedContentItems
+                          .filter((item) => item.contentDraft)
+                          .map((item) => {
+                            const draft = item.contentDraft!;
+
+                            return (
+                              <article
+                                id={`draft-${draft.id}`}
+                                key={draft.id}
+                                className="scroll-mt-6 rounded-md border border-slate-200 p-4"
+                              >
+                                <div className="flex flex-col gap-3 border-b border-slate-200 pb-3 sm:flex-row sm:items-start sm:justify-between">
+                                  <div>
+                                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-teal-700">
+                                      {draft.platformName} · {draft.format}
+                                    </p>
+                                    <h6 className="mt-1 font-semibold text-slate-950">{draft.draftTitle}</h6>
+                                    <p className="mt-1 text-xs text-slate-500">{draft.topic}</p>
+                                  </div>
+                                  <div className="flex flex-wrap gap-2 text-xs font-semibold">
+                                    <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-700">
+                                      {draft.status}
+                                    </span>
+                                    <span className="rounded-md bg-rose-50 px-2 py-1 text-rose-800">
+                                      risk: {draft.riskLevel}
+                                    </span>
+                                  </div>
+                                </div>
+                                <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                                  {draft.draftBody}
+                                </p>
+                                <div className="mt-4 grid gap-3 border-t border-slate-200 pt-3 text-sm sm:grid-cols-2">
+                                  <p className="text-slate-700">
+                                    <span className="font-semibold text-slate-950">Approval:</span>{" "}
+                                    {draft.approvalRequired ? "Required" : "Not required"}
+                                  </p>
+                                  <p className="text-slate-700">
+                                    <span className="font-semibold text-slate-950">Autopublish:</span>{" "}
+                                    {draft.autopublishEligible ? "Eligible" : "No"}
+                                  </p>
+                                </div>
+                                <div className="mt-4">
+                                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                                    Draft notes
+                                  </p>
+                                  {Array.isArray(draft.draftNotes) && draft.draftNotes.length > 0 ? (
+                                    <ul className="mt-2 grid gap-2 text-sm leading-6 text-slate-600">
+                                      {draft.draftNotes.map((note) => (
+                                        <li key={String(note)} className="rounded-md bg-slate-50 px-3 py-2">
+                                          {String(note)}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <p className="mt-2 text-sm text-slate-500">No draft notes.</p>
+                                  )}
+                                </div>
+                              </article>
+                            );
+                          })}
+                        {selectedMonthlyPlan.plannedContentItems.every((item) => !item.contentDraft) ? (
+                          <EmptyState>No content drafts generated yet.</EmptyState>
+                        ) : null}
                       </div>
                     </div>
 

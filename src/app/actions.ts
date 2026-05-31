@@ -3,9 +3,17 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { Prisma } from "@prisma/client";
-import { generateClientPresenceBlueprint, generateMonthlyOperatingPlan } from "@/lib/openai";
+import {
+  generateClientPresenceBlueprint,
+  generateContentDraft,
+  generateMonthlyOperatingPlan,
+} from "@/lib/openai";
 import { prisma } from "@/lib/prisma";
 import { validateBlueprintForPersistence } from "@/lib/blueprint-schema";
+import {
+  isSensitiveContent,
+  validateContentDraftForPersistence,
+} from "@/lib/content-draft-schema";
 import { validateMonthlyPlanForBlueprint } from "@/lib/monthly-plan-schema";
 
 function formText(formData: FormData, key: string) {
@@ -18,6 +26,10 @@ function errorRedirect(message: string): never {
 
 function blueprintErrorRedirect(blueprintId: string, message: string): never {
   redirect(`/?blueprint=${blueprintId}&error=${encodeURIComponent(message)}`);
+}
+
+function monthlyPlanErrorRedirect(blueprintId: string, planId: string, message: string): never {
+  redirect(`/?blueprint=${blueprintId}&plan=${planId}&error=${encodeURIComponent(message)}`);
 }
 
 function currentMonth() {
@@ -380,4 +392,105 @@ export async function generateMonthlyPlan(formData: FormData) {
 
   revalidatePath("/");
   redirect(`/?blueprint=${blueprint.id}&plan=${createdId}`);
+}
+
+export async function generateContentDraftForItem(formData: FormData) {
+  const plannedContentItemId = formText(formData, "plannedContentItemId");
+
+  const item = await prisma.plannedContentItem.findUnique({
+    where: { id: plannedContentItemId },
+    include: {
+      contentDraft: true,
+      monthlyPlan: {
+        include: {
+          client: true,
+          blueprint: true,
+        },
+      },
+    },
+  });
+
+  if (!item) {
+    errorRedirect("Planned content item not found.");
+  }
+
+  const plan = item.monthlyPlan;
+  const blueprint = plan.blueprint;
+
+  if (item.contentDraft) {
+    redirect(
+      `/?blueprint=${blueprint.id}&plan=${plan.id}&notice=${encodeURIComponent("A draft already exists for this planned content item.")}#drafts`,
+    );
+  }
+
+  try {
+    const generated = await generateContentDraft({
+      clientName: plan.client.name,
+      blueprintSummary: blueprint.clientSummary,
+      monthlyPlanSummary: plan.summary,
+      plannedContentItem: {
+        moduleType: item.moduleType,
+        platformName: item.platformName,
+        format: item.format,
+        topic: item.topic,
+        goal: item.goal,
+        plannedDate: item.plannedDate,
+        approvalRequired: item.approvalRequired,
+        autopublishEligible: item.autopublishEligible,
+        requiredInputs: item.requiredInputs,
+        status: item.status,
+      },
+      approvalStrategy: plan.approvalStrategy,
+      riskSummary: plan.riskSummary,
+      platform: item.platformName,
+      format: item.format,
+      topic: item.topic,
+      goal: item.goal,
+    });
+
+    const draft = validateContentDraftForPersistence(generated, {
+      plannedItemApprovalRequired: item.approvalRequired,
+      plannedItemAutopublishEligible: item.autopublishEligible,
+      sensitiveContent: isSensitiveContent([
+        plan.client.industry,
+        blueprint.clientSummary,
+        plan.riskSummary,
+        item.topic,
+        item.goal,
+        generated.draftTitle,
+        generated.draftBody,
+      ]),
+    });
+
+    await prisma.contentDraft.create({
+      data: {
+        clientId: plan.clientId,
+        blueprintId: plan.blueprintId,
+        monthlyPlanId: plan.id,
+        plannedContentItemId: item.id,
+        platformName: item.platformName,
+        format: item.format,
+        topic: item.topic,
+        goal: item.goal,
+        draftTitle: draft.draftTitle,
+        draftBody: draft.draftBody,
+        draftNotes: draft.draftNotes,
+        status: draft.status,
+        approvalRequired: draft.approvalRequired,
+        autopublishEligible: draft.autopublishEligible,
+        riskLevel: draft.riskLevel,
+      },
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Draft generation failed. Check the planned content item and try again.";
+    monthlyPlanErrorRedirect(blueprint.id, plan.id, `Content draft generation failed: ${message}`);
+  }
+
+  revalidatePath("/");
+  redirect(
+    `/?blueprint=${blueprint.id}&plan=${plan.id}&notice=${encodeURIComponent("Content draft generated for manager review.")}#drafts`,
+  );
 }

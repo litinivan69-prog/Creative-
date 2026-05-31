@@ -4,6 +4,7 @@ import {
   ClientPresenceBlueprintSchema,
   validateBlueprintForPersistence,
 } from "@/lib/blueprint-schema";
+import { ContentDraftSchema } from "@/lib/content-draft-schema";
 import { MonthlyOperatingPlanSchema } from "@/lib/monthly-plan-schema";
 
 const model = process.env.OPENAI_MODEL ?? "gpt-4.1-mini";
@@ -91,6 +92,63 @@ export async function generateMonthlyOperatingPlan(input: {
 
   if (!response.output_parsed) {
     throw new Error("The model did not return a parseable monthly operating plan.");
+  }
+
+  return response.output_parsed;
+}
+
+export async function generateContentDraft(input: {
+  clientName: string;
+  blueprintSummary: string;
+  monthlyPlanSummary: string;
+  plannedContentItem: unknown;
+  approvalStrategy: string;
+  riskSummary: string;
+  platform: string;
+  format: string;
+  topic: string;
+  goal: string;
+}) {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error("OPENAI_API_KEY is not configured.");
+  }
+
+  const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+
+  const response = await openai.responses.parse({
+    model,
+    input: [
+      {
+        role: "system",
+        content:
+          "Generate exactly one safe content draft for one planned content item. Respect the requested platform, format, topic, and goal. The result is a manager-review draft only: do not publish anything. Do not make medical, legal, financial, safety, or guaranteed claims. Do not invent factual claims, prices, doctors, licenses, cases, certifications, or guarantees. For healthcare, clinic, safety, reputation-sensitive, regulated, medical, legal, or financial content, set approvalRequired=true, autopublishEligible=false, and status=needs_review. If unsure, set approvalRequired=true, autopublishEligible=false, and status=needs_review. The draft must be useful, safe, and ready for manager review. Return only schema-valid structured data.",
+      },
+      {
+        role: "user",
+        content: [
+          `Client name: ${input.clientName}`,
+          `Blueprint summary: ${input.blueprintSummary}`,
+          `Monthly plan summary: ${input.monthlyPlanSummary}`,
+          `Approval strategy: ${input.approvalStrategy}`,
+          `Risk summary: ${input.riskSummary}`,
+          `Platform: ${input.platform}`,
+          `Format: ${input.format}`,
+          `Topic: ${input.topic}`,
+          `Goal: ${input.goal}`,
+          "Planned content item JSON:",
+          JSON.stringify(input.plannedContentItem, null, 2),
+        ].join("\n"),
+      },
+    ],
+    text: {
+      format: zodTextFormat(ContentDraftSchema, "content_draft"),
+    },
+  });
+
+  if (!response.output_parsed) {
+    throw new Error("The model did not return a parseable content draft.");
   }
 
   return response.output_parsed;

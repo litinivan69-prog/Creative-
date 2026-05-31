@@ -1,12 +1,14 @@
 # Adaptive Presence OS
 
-Sprint 0 and Sprint 1 MVP for an adaptive AI-powered digital presence operating system.
+Sprint 0, Sprint 1, and Sprint 2 MVP for an adaptive AI-powered digital presence operating system.
 
 The first working flows are:
 
 Client Brief -> OpenAI structured analysis -> Client Presence Blueprint -> PostgreSQL via Prisma -> admin dashboard.
 
 Client Presence Blueprint -> OpenAI structured planning -> Monthly Operating Plan -> PostgreSQL via Prisma -> admin dashboard.
+
+Planned Content Item -> OpenAI structured draft generation -> Content Draft -> manager review.
 
 ## Stack
 
@@ -89,6 +91,15 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Neon database works.
 - OpenAI Structured Outputs work after validation hardening.
 
+## What Sprint 2 Includes
+
+- Add the Content Draft Layer.
+- Generate one structured Content Draft from one `PlannedContentItem`.
+- Store drafts in PostgreSQL via Prisma and show them in the internal Manager Console.
+- Keep drafts review-ready without publishing them automatically.
+- Require manager or client approval when the plan or safety rules require it.
+- Preserve safety rules for healthcare, legal, financial, regulated, and reputation-sensitive content.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.
@@ -119,5 +130,6 @@ The Prisma schema includes:
 - `MonthlyPlanPlatform`
 - `PlannedContentItem`
 - `ManagerTask`
+- `ContentDraft`
 
 The blueprint intentionally stores platform names and module names as generated data. There is no fixed platform list and no fixed deliverable package baked into the application.

@@ -17,6 +17,7 @@ model Client {
   briefs     ClientBrief[]
   blueprints ClientPresenceBlueprint[]
   monthlyPlans MonthlyOperatingPlan[]
+  contentDrafts ContentDraft[]
 }
 
 model ClientBrief {
@@ -59,6 +60,7 @@ model ClientPresenceBlueprint {
   automationPlans                AutomationPlan[]
   riskRules                      RiskRule[]
   monthlyPlans                   MonthlyOperatingPlan[]
+  contentDrafts                  ContentDraft[]
 
   @@index([clientId])
 }
@@ -83,6 +85,7 @@ model MonthlyOperatingPlan {
   platforms          MonthlyPlanPlatform[]
   plannedContentItems PlannedContentItem[]
   managerTasks       ManagerTask[]
+  contentDrafts       ContentDraft[]
 
   @@index([clientId])
   @@index([blueprintId])
@@ -132,7 +135,37 @@ model PlannedContentItem {
   requiredInputs      Json                 @default("[]")
   status              String
   monthlyPlan         MonthlyOperatingPlan @relation(fields: [monthlyPlanId], references: [id], onDelete: Cascade)
+  contentDraft        ContentDraft?
 
+  @@index([monthlyPlanId])
+}
+
+model ContentDraft {
+  id                   String                  @id @default(cuid())
+  clientId             String
+  blueprintId          String
+  monthlyPlanId        String
+  plannedContentItemId String                  @unique
+  platformName         String
+  format               String
+  topic                String
+  goal                 String
+  draftTitle           String
+  draftBody            String
+  draftNotes           Json                    @default("[]")
+  status               String
+  approvalRequired     Boolean
+  autopublishEligible  Boolean
+  riskLevel            String
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+  client               Client                  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  blueprint            ClientPresenceBlueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+  monthlyPlan          MonthlyOperatingPlan    @relation(fields: [monthlyPlanId], references: [id], onDelete: Cascade)
+  plannedContentItem   PlannedContentItem      @relation(fields: [plannedContentItemId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([blueprintId])
   @@index([monthlyPlanId])
 }
 
