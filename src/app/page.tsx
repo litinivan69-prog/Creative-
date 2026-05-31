@@ -1,19 +1,24 @@
 import {
   addClientBrief,
   approveDraft,
+  approveCreativeVariant,
   createCreativeAssetBrief,
   createClient,
+  deleteCreativeVariant,
   generateBlueprint,
   generateContentDraftForItem,
   generateCreativeAssetBriefForPublication,
+  generateCreativeVisualVariantForAsset,
   generateMonthlyPlan,
   markDraftReadyToSchedule,
+  markCreativeVariantNeedsReview,
   markScheduledPublicationNeedsAssets,
   markScheduledPublicationReady,
   markScheduledPublicationScheduled,
   markScheduledPublicationSkipped,
   regenerateCreativeAssetBrief,
   rejectDraft,
+  rejectCreativeVariant,
   requestDraftChanges,
   scheduleContentDraft,
   sendDraftToClient,
@@ -291,6 +296,8 @@ function formatStatus(value: string) {
     cover: "Обложка",
     review_response_visual: "Визуал для ответа на отзыв",
     other: "Другое",
+    generated: "Сгенерировано",
+    openai: "OpenAI",
   };
 
   return labels[value] ?? value.replaceAll("_", " ");
@@ -392,7 +399,20 @@ type ScheduledPublicationPreview = {
     assetType: string;
     status: string;
     source: string;
+    generatedVariants: GeneratedCreativeVariantPreview[];
   }>;
+};
+
+type GeneratedCreativeVariantPreview = {
+  id: string;
+  variantTitle: string;
+  prompt: string;
+  revisedPrompt: string | null;
+  imageBase64: string;
+  mimeType: string;
+  status: string;
+  source: string;
+  notes: string | null;
 };
 
 type CreativeAssetPreview = {
@@ -418,6 +438,7 @@ type CreativeAssetPreview = {
   contentDraft: {
     draftTitle: string;
   };
+  generatedVariants: GeneratedCreativeVariantPreview[];
 };
 
 const draftStatusGroups = [
@@ -814,6 +835,13 @@ function SchedulingLayer({
                         {formatStatus(publication.creativeAssets[0].status)}
                       </StatusBadge>
                       <CreativeAssetSourceBadge source={publication.creativeAssets[0].source} />
+                      {publication.creativeAssets[0].generatedVariants.some((variant) => variant.status === "approved") ? (
+                        <StatusBadge tone="green">Визуал согласован</StatusBadge>
+                      ) : publication.creativeAssets[0].generatedVariants.length > 0 ? (
+                        <StatusBadge tone="teal">Визуал создан</StatusBadge>
+                      ) : (
+                        <StatusBadge tone="neutral">ТЗ есть, визуал не создан</StatusBadge>
+                      )}
                       <a href="#assets" className="inline-flex items-center text-xs font-bold text-teal-800 transition hover:text-teal-950">
                         Открыть ТЗ
                       </a>
@@ -946,6 +974,61 @@ function CreativeAssetStatusAction({
       </PendingSubmitButton>
     </form>
   );
+}
+
+function creativeVariantTone(status: string): "neutral" | "teal" | "amber" | "rose" | "green" {
+  const tones: Record<string, "neutral" | "teal" | "amber" | "rose" | "green"> = {
+    generated: "teal",
+    needs_review: "amber",
+    approved: "green",
+    rejected: "rose",
+  };
+
+  return tones[status] ?? "neutral";
+}
+
+function CreativeVariantAction({
+  action,
+  variantId,
+  children,
+  tone = "neutral",
+}: {
+  action: (formData: FormData) => Promise<void>;
+  variantId: string;
+  children: React.ReactNode;
+  tone?: "neutral" | "teal" | "amber" | "rose" | "green";
+}) {
+  const tones = {
+    neutral: "border-stone-200 bg-white text-stone-700 hover:bg-stone-50",
+    teal: "border-teal-200 bg-teal-50 text-teal-800 hover:bg-teal-100",
+    amber: "border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100",
+    rose: "border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100",
+    green: "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100",
+  };
+
+  return (
+    <form action={action}>
+      <input type="hidden" name="creativeVariantId" value={variantId} />
+      <PendingSubmitButton
+        pendingLabel="Обновляем..."
+        className={`rounded-md border px-2.5 py-1.5 text-xs font-bold transition disabled:cursor-wait disabled:opacity-60 ${tones[tone]}`}
+      >
+        {children}
+      </PendingSubmitButton>
+    </form>
+  );
+}
+
+function CreativeAssetVisualStatus({ variants }: { variants: GeneratedCreativeVariantPreview[] }) {
+  if (variants.some((variant) => variant.status === "approved")) {
+    return <StatusBadge tone="green">Визуал согласован</StatusBadge>;
+  }
+
+  if (variants.length > 0) {
+    return <StatusBadge tone="teal">Есть варианты визуала</StatusBadge>;
+  }
+
+  return <StatusBadge tone="neutral">Визуал не создан</StatusBadge>;
 }
 
 function CreativeAssetLayer({
@@ -1094,6 +1177,7 @@ function CreativeAssetLayer({
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   {asset.approvalRequired ? <StatusBadge tone="amber">Нужно согласование</StatusBadge> : <StatusBadge>Согласование необязательно</StatusBadge>}
                   <StatusBadge>{asset.scheduledPublication.scheduledDate}{asset.scheduledPublication.scheduledTime ? `, ${asset.scheduledPublication.scheduledTime}` : ""}</StatusBadge>
+                  <CreativeAssetVisualStatus variants={asset.generatedVariants} />
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {creativeAssetStatusOptions.map((status) =>
@@ -1129,6 +1213,88 @@ function CreativeAssetLayer({
                     </PendingSubmitButton>
                   </form>
                 </details>
+                <div className="mt-4 border-t border-stone-200 pt-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-stone-950">Сгенерированные визуалы</p>
+                      <p className="mt-1 text-xs leading-5 text-stone-500">
+                        Генерация использует OpenAI API и может расходовать кредиты.
+                      </p>
+                    </div>
+                    {asset.generatedVariants.length > 0 ? (
+                      <form action={generateCreativeVisualVariantForAsset}>
+                        <input type="hidden" name="creativeAssetId" value={asset.id} />
+                        <PendingSubmitButton pendingLabel="Генерируем визуал..." className={primaryButtonClass}>
+                          Сгенерировать ещё вариант
+                        </PendingSubmitButton>
+                      </form>
+                    ) : null}
+                  </div>
+
+                  {asset.generatedVariants.length > 0 ? (
+                    <div className="mt-3 grid gap-3">
+                      {asset.generatedVariants.map((variant) => (
+                        <article key={variant.id} className="overflow-hidden rounded-lg border border-stone-200 bg-stone-50/60">
+                          <img
+                            src={`data:${variant.mimeType};base64,${variant.imageBase64}`}
+                            alt={variant.variantTitle}
+                            className="aspect-square w-full bg-stone-100 object-cover"
+                          />
+                          <div className="p-3">
+                            <div className="flex flex-wrap gap-1.5">
+                              <StatusBadge tone={creativeVariantTone(variant.status)}>{formatStatus(variant.status)}</StatusBadge>
+                              <StatusBadge>{formatStatus(variant.source)}</StatusBadge>
+                            </div>
+                            <p className="mt-3 text-sm font-semibold text-stone-900">{variant.variantTitle}</p>
+                            {variant.notes ? <p className="mt-2 text-xs leading-5 text-stone-500">{variant.notes}</p> : null}
+                            <details className="mt-3 rounded-md border border-stone-200 bg-white">
+                              <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-stone-700">Показать prompt</summary>
+                              <div className="grid gap-2 border-t border-stone-200 p-3 text-xs leading-5 text-stone-600">
+                                <p>{variant.prompt}</p>
+                                {variant.revisedPrompt ? (
+                                  <p><span className="font-bold text-stone-800">Уточнённый prompt:</span> {variant.revisedPrompt}</p>
+                                ) : null}
+                              </div>
+                            </details>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {variant.status !== "needs_review" ? (
+                                <CreativeVariantAction action={markCreativeVariantNeedsReview} variantId={variant.id} tone="amber">
+                                  На проверку
+                                </CreativeVariantAction>
+                              ) : null}
+                              {variant.status !== "approved" ? (
+                                <CreativeVariantAction action={approveCreativeVariant} variantId={variant.id} tone="green">
+                                  Согласовать
+                                </CreativeVariantAction>
+                              ) : null}
+                              {variant.status !== "rejected" ? (
+                                <CreativeVariantAction action={rejectCreativeVariant} variantId={variant.id} tone="rose">
+                                  Отклонить
+                                </CreativeVariantAction>
+                              ) : null}
+                              <CreativeVariantAction action={deleteCreativeVariant} variantId={variant.id}>
+                                Удалить
+                              </CreativeVariantAction>
+                            </div>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mt-3 rounded-lg border border-dashed border-teal-300 bg-teal-50/70 p-4">
+                      <p className="text-sm font-semibold text-teal-950">Пока нет сгенерированных визуалов.</p>
+                      <p className="mt-1 text-xs leading-5 text-teal-800">
+                        Создайте первый вариант по текущему ТЗ. Генерация использует OpenAI API и может расходовать кредиты.
+                      </p>
+                      <form action={generateCreativeVisualVariantForAsset} className="mt-3">
+                        <input type="hidden" name="creativeAssetId" value={asset.id} />
+                        <PendingSubmitButton pendingLabel="Генерируем визуал..." className={`${primaryButtonClass} w-full justify-center py-3`}>
+                          Сгенерировать визуал через AI
+                        </PendingSubmitButton>
+                      </form>
+                    </div>
+                  )}
+                </div>
               </article>
             ))}
             {assets.length === 0 ? (
@@ -1361,6 +1527,13 @@ function ScheduledPublicationCalendar({
                   <StatusBadge tone="teal">{formatStatus(asset.assetType)}</StatusBadge>
                   <StatusBadge tone={creativeAssetTone(asset.status)}>{formatStatus(asset.status)}</StatusBadge>
                   <CreativeAssetSourceBadge source={asset.source} compact />
+                  {asset.generatedVariants.some((variant) => variant.status === "approved") ? (
+                    <StatusBadge tone="green">Визуал согласован</StatusBadge>
+                  ) : asset.generatedVariants.length > 0 ? (
+                    <StatusBadge tone="teal">Визуал создан</StatusBadge>
+                  ) : (
+                    <StatusBadge tone="neutral">ТЗ есть, визуал не создан</StatusBadge>
+                  )}
                 </>
               ) : publication.status === "needs_assets" ? (
                 <StatusBadge tone="amber">Нет ТЗ на креатив</StatusBadge>
@@ -1628,6 +1801,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   include: {
                     scheduledPublication: true,
                     contentDraft: true,
+                    generatedVariants: {
+                      orderBy: { createdAt: "desc" },
+                    },
                   },
                 },
                 scheduledPublications: {
@@ -1635,7 +1811,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   include: {
                     contentDraft: true,
                     plannedContentItem: true,
-                    creativeAssets: true,
+                    creativeAssets: {
+                      include: {
+                        generatedVariants: {
+                          orderBy: { createdAt: "desc" },
+                        },
+                      },
+                    },
                   },
                 },
               },
@@ -1679,6 +1861,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   include: {
                     scheduledPublication: true,
                     contentDraft: true,
+                    generatedVariants: {
+                      orderBy: { createdAt: "desc" },
+                    },
                   },
                 },
                 scheduledPublications: {
@@ -1686,7 +1871,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   include: {
                     contentDraft: true,
                     plannedContentItem: true,
-                    creativeAssets: true,
+                    creativeAssets: {
+                      include: {
+                        generatedVariants: {
+                          orderBy: { createdAt: "desc" },
+                        },
+                      },
+                    },
                   },
                 },
               },

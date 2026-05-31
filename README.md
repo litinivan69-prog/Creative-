@@ -196,6 +196,15 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Creative Asset cards show whether a brief was created through AI or manually.
 - Actual image generation was not added.
 
+## Sprint 5C Visual Generation Layer
+
+- The Visual Generation Layer was added.
+- Creative Assets can generate one image variant at a time through the OpenAI Images API.
+- Generated variants are stored as base64 in PostgreSQL for the MVP.
+- Variants can be reviewed, approved, rejected, or deleted.
+- No external object storage, publishing, Figma integration, or video generation was added.
+- Set `OPENAI_IMAGE_MODEL` to choose the image model. The current default is `gpt-image-1`, matching the installed OpenAI SDK.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.
@@ -209,6 +218,7 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Vercel requires `DATABASE_URL` to point to a real cloud PostgreSQL database, not `localhost`.
 - Vercel build runs `prisma migrate deploy` before `next build`.
 - `OPENAI_API_KEY` must be set in Vercel environment variables for real Blueprint generation.
+- `OPENAI_IMAGE_MODEL` can be set in Vercel environment variables for visual generation. The default is `gpt-image-1`.
 
 ## Data Model
 
@@ -230,5 +240,6 @@ The Prisma schema includes:
 - `ContentDraftReviewEvent`
 - `ScheduledPublication`
 - `CreativeAsset`
+- `GeneratedCreativeVariant`
 
 The blueprint intentionally stores platform names and module names as generated data. There is no fixed platform list and no fixed deliverable package baked into the application.

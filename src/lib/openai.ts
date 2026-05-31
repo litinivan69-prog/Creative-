@@ -9,6 +9,7 @@ import { CreativeAssetBriefSchema } from "@/lib/creative-asset-schema";
 import { MonthlyOperatingPlanSchema } from "@/lib/monthly-plan-schema";
 
 const model = process.env.OPENAI_MODEL ?? "gpt-4.1-mini";
+const imageModel = process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-1";
 
 export async function generateClientPresenceBlueprint(input: {
   clientName: string;
@@ -219,4 +220,95 @@ export async function generateCreativeAssetBrief(input: {
   }
 
   return response.output_parsed;
+}
+
+export async function generateCreativeVisualVariant(input: {
+  clientName: string;
+  clientIndustry?: string | null;
+  creativeAsset: {
+    assetType: string;
+    title: string;
+    brief: string;
+    formatRequirements?: string | null;
+    textOnAsset?: string | null;
+    references?: string | null;
+    notes?: string | null;
+  };
+  scheduledPublication: {
+    platformName: string;
+    format: string;
+    topic: string;
+    scheduledDate: string;
+    scheduledTime?: string | null;
+  };
+  contentDraft: {
+    draftTitle: string;
+    draftBody: string;
+    riskLevel: string;
+    approvalRequired: boolean;
+  };
+}) {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error("OPENAI_API_KEY is not configured.");
+  }
+
+  const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+
+  const prompt = [
+    "Create one polished, brand-safe square social media visual.",
+    `Client: ${input.clientName}.`,
+    `Industry: ${input.clientIndustry || "not provided"}.`,
+    `Asset type: ${input.creativeAsset.assetType}.`,
+    `Creative brief title: ${input.creativeAsset.title}.`,
+    `Creative direction: ${input.creativeAsset.brief}`,
+    input.creativeAsset.formatRequirements
+      ? `Format requirements: ${input.creativeAsset.formatRequirements}`
+      : null,
+    input.creativeAsset.references
+      ? `Reference direction: ${input.creativeAsset.references}`
+      : null,
+    input.creativeAsset.notes
+      ? `Brand and safety notes: ${input.creativeAsset.notes}`
+      : null,
+    `Publication platform: ${input.scheduledPublication.platformName}.`,
+    `Publication format: ${input.scheduledPublication.format}.`,
+    `Publication topic: ${input.scheduledPublication.topic}.`,
+    `Draft title: ${input.contentDraft.draftTitle}.`,
+    `Draft context: ${input.contentDraft.draftBody}`,
+    input.creativeAsset.textOnAsset
+      ? `Place only this exact text on the image: "${input.creativeAsset.textOnAsset}". Keep typography readable and minimal.`
+      : "Do not place any text, captions, labels, watermarks, or logos on the image.",
+    "Use a clear composition, restrained professional mood, realistic objects and scenes, and a contemporary premium visual style.",
+    "Avoid fake logos, unsupported claims, guarantees, certifications, before-and-after comparisons, unrealistic outcomes, misleading medical imagery, and unsafe medical, legal, or financial promises.",
+    input.contentDraft.riskLevel !== "low" || input.contentDraft.approvalRequired
+      ? "Keep the image conservative, factual, clean, non-misleading, and suitable for mandatory human review."
+      : null,
+    "Generate the image only. Do not add explanations.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const response = await openai.images.generate({
+    model: imageModel,
+    prompt,
+    n: 1,
+    size: "1024x1024",
+    quality: "low",
+    output_format: "png",
+  });
+
+  const image = response.data?.[0];
+
+  if (!image?.b64_json) {
+    throw new Error("The image model did not return image data.");
+  }
+
+  return {
+    prompt,
+    revisedPrompt: image.revised_prompt ?? null,
+    imageBase64: image.b64_json,
+    mimeType: "image/png",
+  };
 }

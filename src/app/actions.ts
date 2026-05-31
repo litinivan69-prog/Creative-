@@ -7,6 +7,7 @@ import {
   generateClientPresenceBlueprint,
   generateContentDraft,
   generateCreativeAssetBrief,
+  generateCreativeVisualVariant,
   generateMonthlyOperatingPlan,
 } from "@/lib/openai";
 import { prisma } from "@/lib/prisma";
@@ -61,6 +62,15 @@ const creativeAssetStatuses = [
 ] as const;
 
 type CreativeAssetStatus = (typeof creativeAssetStatuses)[number];
+
+const creativeVariantStatuses = [
+  "generated",
+  "needs_review",
+  "approved",
+  "rejected",
+] as const;
+
+type CreativeVariantStatus = (typeof creativeVariantStatuses)[number];
 
 type CreativeAssetGenerationContext = {
   client: {
@@ -1213,5 +1223,184 @@ export async function updateCreativeAssetBrief(formData: FormData) {
   revalidatePath("/");
   redirect(
     `/?blueprint=${asset.blueprintId}&plan=${asset.monthlyPlanId}&notice=${encodeURIComponent("ТЗ на креативный материал обновлено.")}#assets`,
+  );
+}
+
+export async function generateCreativeVisualVariantForAsset(formData: FormData) {
+  const creativeAssetId = formText(formData, "creativeAssetId");
+
+  if (!creativeAssetId) {
+    errorRedirect("Не выбран креативный материал для генерации визуала.");
+  }
+
+  const asset = await prisma.creativeAsset.findUnique({
+    where: { id: creativeAssetId },
+    include: {
+      client: true,
+      blueprint: true,
+      monthlyPlan: true,
+      plannedContentItem: true,
+      contentDraft: true,
+      scheduledPublication: true,
+    },
+  });
+
+  if (!asset) {
+    errorRedirect("Креативный материал не найден.");
+  }
+
+  try {
+    const variant = await generateCreativeVisualVariant({
+      clientName: asset.client.name,
+      clientIndustry: asset.client.industry,
+      creativeAsset: {
+        assetType: asset.assetType,
+        title: asset.title,
+        brief: asset.brief,
+        formatRequirements: asset.formatRequirements,
+        textOnAsset: asset.textOnAsset,
+        references: asset.references,
+        notes: asset.notes,
+      },
+      scheduledPublication: {
+        platformName: asset.scheduledPublication.platformName,
+        format: asset.scheduledPublication.format,
+        topic: asset.scheduledPublication.topic,
+        scheduledDate: asset.scheduledPublication.scheduledDate,
+        scheduledTime: asset.scheduledPublication.scheduledTime,
+      },
+      contentDraft: {
+        draftTitle: asset.contentDraft.draftTitle,
+        draftBody: asset.contentDraft.draftBody,
+        riskLevel: asset.contentDraft.riskLevel,
+        approvalRequired: asset.contentDraft.approvalRequired,
+      },
+    });
+
+    await prisma.generatedCreativeVariant.create({
+      data: {
+        clientId: asset.clientId,
+        blueprintId: asset.blueprintId,
+        monthlyPlanId: asset.monthlyPlanId,
+        plannedContentItemId: asset.plannedContentItemId,
+        contentDraftId: asset.contentDraftId,
+        scheduledPublicationId: asset.scheduledPublicationId,
+        creativeAssetId: asset.id,
+        variantTitle: `Вариант визуала: ${asset.title}`,
+        prompt: variant.prompt,
+        revisedPrompt: variant.revisedPrompt,
+        imageBase64: variant.imageBase64,
+        mimeType: variant.mimeType,
+        status: "generated",
+        source: "openai",
+        notes: null,
+      },
+    });
+  } catch {
+    monthlyPlanErrorRedirect(
+      asset.blueprintId,
+      asset.monthlyPlanId,
+      "Не удалось сгенерировать визуал через OpenAI. Проверьте настройки API и попробуйте ещё раз.",
+    );
+  }
+
+  revalidatePath("/");
+  redirect(
+    `/?blueprint=${asset.blueprintId}&plan=${asset.monthlyPlanId}&notice=${encodeURIComponent("AI сгенерировал визуал.")}#assets`,
+  );
+}
+
+async function updateCreativeVariantStatus(
+  formData: FormData,
+  status: CreativeVariantStatus,
+  notice: string,
+) {
+  const creativeVariantId = formText(formData, "creativeVariantId");
+
+  if (!creativeVariantId) {
+    errorRedirect("Не выбран вариант визуала.");
+  }
+
+  const variant = await prisma.generatedCreativeVariant.findUnique({
+    where: { id: creativeVariantId },
+    select: {
+      id: true,
+      blueprintId: true,
+      monthlyPlanId: true,
+      creativeAssetId: true,
+    },
+  });
+
+  if (!variant) {
+    errorRedirect("Вариант визуала не найден.");
+  }
+
+  if (!creativeVariantStatuses.includes(status)) {
+    errorRedirect("Выбран недопустимый статус варианта визуала.");
+  }
+
+  if (status === "approved") {
+    await prisma.$transaction([
+      prisma.generatedCreativeVariant.update({
+        where: { id: variant.id },
+        data: { status },
+      }),
+      prisma.creativeAsset.update({
+        where: { id: variant.creativeAssetId },
+        data: { status: "approved" },
+      }),
+    ]);
+  } else {
+    await prisma.generatedCreativeVariant.update({
+      where: { id: variant.id },
+      data: { status },
+    });
+  }
+
+  revalidatePath("/");
+  redirect(
+    `/?blueprint=${variant.blueprintId}&plan=${variant.monthlyPlanId}&notice=${encodeURIComponent(notice)}#assets`,
+  );
+}
+
+export async function markCreativeVariantNeedsReview(formData: FormData) {
+  await updateCreativeVariantStatus(formData, "needs_review", "Вариант визуала отправлен на проверку.");
+}
+
+export async function approveCreativeVariant(formData: FormData) {
+  await updateCreativeVariantStatus(formData, "approved", "Вариант визуала согласован.");
+}
+
+export async function rejectCreativeVariant(formData: FormData) {
+  await updateCreativeVariantStatus(formData, "rejected", "Вариант визуала отклонён.");
+}
+
+export async function deleteCreativeVariant(formData: FormData) {
+  const creativeVariantId = formText(formData, "creativeVariantId");
+
+  if (!creativeVariantId) {
+    errorRedirect("Не выбран вариант визуала.");
+  }
+
+  const variant = await prisma.generatedCreativeVariant.findUnique({
+    where: { id: creativeVariantId },
+    select: {
+      id: true,
+      blueprintId: true,
+      monthlyPlanId: true,
+    },
+  });
+
+  if (!variant) {
+    errorRedirect("Вариант визуала не найден.");
+  }
+
+  await prisma.generatedCreativeVariant.delete({
+    where: { id: variant.id },
+  });
+
+  revalidatePath("/");
+  redirect(
+    `/?blueprint=${variant.blueprintId}&plan=${variant.monthlyPlanId}&notice=${encodeURIComponent("Вариант визуала удалён.")}#assets`,
   );
 }

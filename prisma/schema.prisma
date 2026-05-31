@@ -20,6 +20,7 @@ model Client {
   contentDrafts ContentDraft[]
   scheduledPublications ScheduledPublication[]
   creativeAssets CreativeAsset[]
+  generatedCreativeVariants GeneratedCreativeVariant[]
 }
 
 model ClientBrief {
@@ -65,6 +66,7 @@ model ClientPresenceBlueprint {
   contentDrafts                  ContentDraft[]
   scheduledPublications          ScheduledPublication[]
   creativeAssets                 CreativeAsset[]
+  generatedCreativeVariants      GeneratedCreativeVariant[]
 
   @@index([clientId])
 }
@@ -92,6 +94,7 @@ model MonthlyOperatingPlan {
   contentDrafts       ContentDraft[]
   scheduledPublications ScheduledPublication[]
   creativeAssets      CreativeAsset[]
+  generatedCreativeVariants GeneratedCreativeVariant[]
 
   @@index([clientId])
   @@index([blueprintId])
@@ -149,6 +152,7 @@ model PlannedContentItem {
   contentDraft        ContentDraft?
   scheduledPublications ScheduledPublication[]
   creativeAssets      CreativeAsset[]
+  generatedCreativeVariants GeneratedCreativeVariant[]
 
   @@index([monthlyPlanId])
 }
@@ -179,6 +183,7 @@ model ContentDraft {
   reviewEvents         ContentDraftReviewEvent[]
   scheduledPublications ScheduledPublication[]
   creativeAssets       CreativeAsset[]
+  generatedCreativeVariants GeneratedCreativeVariant[]
 
   @@index([clientId])
   @@index([blueprintId])
@@ -221,6 +226,7 @@ model ScheduledPublication {
   plannedContentItem   PlannedContentItem      @relation(fields: [plannedContentItemId], references: [id], onDelete: Cascade)
   contentDraft         ContentDraft            @relation(fields: [contentDraftId], references: [id], onDelete: Cascade)
   creativeAssets       CreativeAsset[]
+  generatedCreativeVariants GeneratedCreativeVariant[]
 
   @@index([clientId])
   @@index([monthlyPlanId])
@@ -254,10 +260,44 @@ model CreativeAsset {
   plannedContentItem     PlannedContentItem      @relation(fields: [plannedContentItemId], references: [id], onDelete: Cascade)
   contentDraft           ContentDraft            @relation(fields: [contentDraftId], references: [id], onDelete: Cascade)
   scheduledPublication   ScheduledPublication    @relation(fields: [scheduledPublicationId], references: [id], onDelete: Cascade)
+  generatedVariants      GeneratedCreativeVariant[]
 
   @@index([clientId])
   @@index([monthlyPlanId])
   @@index([scheduledPublicationId])
+  @@index([status])
+}
+
+model GeneratedCreativeVariant {
+  id                     String                  @id @default(cuid())
+  clientId               String
+  blueprintId            String
+  monthlyPlanId          String
+  plannedContentItemId   String
+  contentDraftId         String
+  scheduledPublicationId String
+  creativeAssetId        String
+  variantTitle           String
+  prompt                 String
+  revisedPrompt          String?
+  imageBase64            String
+  mimeType               String                  @default("image/png")
+  status                 String
+  source                 String                  @default("openai")
+  notes                  String?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  client                 Client                  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  blueprint              ClientPresenceBlueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+  monthlyPlan            MonthlyOperatingPlan    @relation(fields: [monthlyPlanId], references: [id], onDelete: Cascade)
+  plannedContentItem     PlannedContentItem      @relation(fields: [plannedContentItemId], references: [id], onDelete: Cascade)
+  contentDraft           ContentDraft            @relation(fields: [contentDraftId], references: [id], onDelete: Cascade)
+  scheduledPublication   ScheduledPublication    @relation(fields: [scheduledPublicationId], references: [id], onDelete: Cascade)
+  creativeAsset          CreativeAsset           @relation(fields: [creativeAssetId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([monthlyPlanId])
+  @@index([creativeAssetId])
   @@index([status])
 }
 
