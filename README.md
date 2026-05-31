@@ -113,6 +113,13 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Blueprint, Monthly Plan, and Content Draft review areas are easier to scan during daily operations.
 - Calendar and Events are visible future product areas without adding unfinished integrations or publishing logic.
 
+## Sprint 2.3 Calendar-first Product UI
+
+- The Manager Console now leads with a calendar-first operations view.
+- Weekly and monthly previews are derived from existing Monthly Plan content items.
+- A Client Preview panel shows the future approval-focused Client Portal direction.
+- Calendar and Events areas clarify the next operational product layers without adding real auth or publishing.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.

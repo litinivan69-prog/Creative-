@@ -178,6 +178,94 @@ function PreviewCard({ title, copy, glyph }: { title: string; copy: string; glyp
   );
 }
 
+type CalendarPreviewItem = {
+  id: string;
+  plannedDate: string;
+  week: string | null;
+  platformName: string;
+  format: string;
+  topic: string;
+  status: string;
+  approvalRequired: boolean;
+  campaignTheme: string | null;
+  channelRole: string | null;
+  sequenceReason: string | null;
+  contentDraft: {
+    status: string;
+  } | null;
+};
+
+function groupCalendarItems(items: CalendarPreviewItem[]) {
+  const groups = new Map<string, CalendarPreviewItem[]>();
+
+  for (const item of items) {
+    const group = item.week?.trim() || item.plannedDate;
+    groups.set(group, [...(groups.get(group) ?? []), item]);
+  }
+
+  return Array.from(groups, ([label, groupedItems]) => ({
+    label,
+    items: groupedItems,
+  }));
+}
+
+function CalendarPreview({
+  groups,
+  month,
+}: {
+  groups: ReturnType<typeof groupCalendarItems>;
+  month: string;
+}) {
+  return (
+    <section id="calendar" className={`${panelClass} scroll-mt-24 p-5 sm:p-6`}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Calendar preview</p>
+          <h2 className="mt-1 text-xl font-semibold text-stone-950">Monthly operations calendar</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
+            A week-based view of planned work, approvals, and draft readiness derived from the current Monthly Plan.
+          </p>
+        </div>
+        <StatusBadge tone="teal">{month}</StatusBadge>
+      </div>
+
+      {groups.length > 0 ? (
+        <div className="mt-5 grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
+          {groups.map((group) => (
+            <article key={group.label} className="rounded-lg border border-stone-200 bg-stone-50/70 p-3">
+              <div className="flex items-center justify-between gap-3 border-b border-stone-200 pb-3">
+                <p className="text-sm font-semibold text-stone-950">{group.label}</p>
+                <StatusBadge>{group.items.length} items</StatusBadge>
+              </div>
+              <div className="mt-3 grid gap-2">
+                {group.items.map((item) => (
+                  <div key={item.id} className="rounded-md border border-stone-200 bg-white p-3">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <StatusBadge tone="teal">{item.platformName}</StatusBadge>
+                      <StatusBadge>{item.format}</StatusBadge>
+                    </div>
+                    <p className="mt-2 text-sm font-semibold leading-5 text-stone-900">{item.topic}</p>
+                    <p className="mt-1 text-xs text-stone-400">{item.plannedDate}</p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <StatusBadge tone={item.status === "planned" ? "green" : "amber"}>{item.status}</StatusBadge>
+                      {item.approvalRequired ? <StatusBadge tone="amber">Approval</StatusBadge> : null}
+                      {item.contentDraft ? <StatusBadge tone="green">Draft: {item.contentDraft.status}</StatusBadge> : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-5">
+          <EmptyState>Generate a Monthly Operating Plan to populate the operations calendar.</EmptyState>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function currentMonth() {
   return new Date().toISOString().slice(0, 7);
 }
@@ -265,6 +353,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
   const blueprintCount = clients.reduce((count, client) => count + client.blueprints.length, 0);
   const draftCount =
     selectedMonthlyPlan?.plannedContentItems.filter((item) => item.contentDraft).length ?? 0;
+  const calendarGroups = groupCalendarItems(selectedMonthlyPlan?.plannedContentItems ?? []);
+  const approvalQueueCount =
+    selectedMonthlyPlan?.plannedContentItems.filter((item) => item.approvalRequired).length ?? 0;
 
   return (
     <div className="min-h-screen bg-[#f4f5f2] text-stone-900">
@@ -363,6 +454,46 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 <MetricCard label="Saved briefs" value={savedBriefCount} detail="Raw strategic inputs" tone="teal" />
                 <MetricCard label="Blueprints" value={blueprintCount} detail="Executable presence systems" tone="amber" />
                 <MetricCard label="Drafts in view" value={draftCount} detail="Generated for manager review" />
+              </div>
+            </section>
+
+            <section className="mt-7 grid items-start gap-5 2xl:grid-cols-[minmax(0,1fr)_360px]">
+              <CalendarPreview groups={calendarGroups} month={selectedMonthlyPlan?.month ?? currentMonth()} />
+              <div className="grid gap-5">
+                <article className={`${panelClass} p-5`}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Client preview</p>
+                      <h2 className="mt-1 text-lg font-semibold text-stone-950">Approval-focused portal</h2>
+                    </div>
+                    <StatusBadge tone="amber">Preview only</StatusBadge>
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-stone-500">
+                    A simplified client-facing view of the same operating plan. Auth and approval actions come later.
+                  </p>
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <MetricCard label="Awaiting approval" value={approvalQueueCount} tone="amber" />
+                    <MetricCard label="Planned publications" value={selectedMonthlyPlan?.plannedContentItems.length ?? 0} tone="teal" />
+                    <MetricCard label="Published" value="-" detail="Coming later" />
+                    <MetricCard label="New reviews" value="-" detail="Events coming later" />
+                  </div>
+                </article>
+
+                <article className={`${panelClass} p-5`}>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Product mode</p>
+                  <h2 className="mt-1 text-lg font-semibold text-stone-950">One OS, two views</h2>
+                  <div className="mt-4 grid gap-3 text-sm leading-6">
+                    <div className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2">
+                      <p className="font-semibold text-stone-900">Manager Console</p>
+                      <p className="text-stone-500">Internal control for strategy, operations, risks, and drafts.</p>
+                    </div>
+                    <div className="rounded-md border border-teal-200 bg-teal-50 px-3 py-2">
+                      <p className="font-semibold text-teal-900">Client Portal</p>
+                      <p className="text-teal-700">A future simplified view for approvals and progress.</p>
+                    </div>
+                    <p className="text-stone-500">Both views use the same underlying operating system.</p>
+                  </div>
+                </article>
               </div>
             </section>
 
@@ -734,6 +865,50 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                     <div className="mt-7">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                         <div>
+                          <h3 className="text-sm font-semibold text-stone-950">Weekly campaign overview</h3>
+                          <p className="mt-1 text-sm leading-6 text-stone-500">
+                            The strategic sequence behind the detailed calendar: themes, channel roles, and the reason each item exists.
+                          </p>
+                        </div>
+                        <StatusBadge tone="teal">{calendarGroups.length} calendar groups</StatusBadge>
+                      </div>
+                      <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                        {calendarGroups.map((group) => (
+                          <article key={group.label} className="rounded-lg border border-stone-200 bg-stone-50/70 p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="font-semibold text-stone-950">{group.label}</p>
+                              <StatusBadge>{group.items.length} items</StatusBadge>
+                            </div>
+                            <div className="mt-3 grid gap-3">
+                              {group.items.map((item) => (
+                                <div key={item.id} className="rounded-md border border-stone-200 bg-white p-3">
+                                  <div className="flex flex-wrap gap-1.5">
+                                    <StatusBadge tone="teal">{item.platformName}</StatusBadge>
+                                    <StatusBadge>{item.format}</StatusBadge>
+                                    {item.campaignTheme ? <StatusBadge tone="amber">{item.campaignTheme}</StatusBadge> : null}
+                                  </div>
+                                  <p className="mt-2 text-sm font-semibold leading-5 text-stone-900">{item.topic}</p>
+                                  {item.channelRole ? (
+                                    <p className="mt-2 text-xs leading-5 text-stone-500">
+                                      <span className="font-bold text-stone-700">Channel role:</span> {item.channelRole}
+                                    </p>
+                                  ) : null}
+                                  {item.sequenceReason ? (
+                                    <p className="mt-1 text-xs leading-5 text-stone-500">
+                                      <span className="font-bold text-stone-700">Sequence:</span> {item.sequenceReason}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              ))}
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="mt-7">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                        <div>
                           <h3 className="text-sm font-semibold text-stone-950">Planned content items</h3>
                           <p className="mt-1 text-sm leading-6 text-stone-500">Cross-channel calendar items ready for one-by-one draft generation.</p>
                         </div>
@@ -818,7 +993,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                                   <StatusBadge tone={draft.riskLevel === "high" ? "rose" : draft.riskLevel === "medium" ? "amber" : "green"}>risk: {draft.riskLevel}</StatusBadge>
                                 </div>
                               </div>
-                              <p className="mt-4 whitespace-pre-wrap text-sm leading-7 text-stone-700">{draft.draftBody}</p>
+                              <div className="mt-4">
+                                <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-stone-400">Body preview</p>
+                                <p className="mt-2 line-clamp-6 whitespace-pre-wrap text-sm leading-7 text-stone-700">{draft.draftBody}</p>
+                                <details className="mt-3">
+                                  <summary className="cursor-pointer text-xs font-bold text-teal-700">View complete draft</summary>
+                                  <p className="mt-3 whitespace-pre-wrap rounded-md border border-stone-200 bg-stone-50 p-3 text-sm leading-7 text-stone-700">{draft.draftBody}</p>
+                                </details>
+                              </div>
                               <div className="mt-4 flex flex-wrap gap-2 border-t border-stone-100 pt-4">
                                 <StatusBadge tone={draft.approvalRequired ? "amber" : "green"}>Approval: {draft.approvalRequired ? "required" : "not required"}</StatusBadge>
                                 <StatusBadge tone={draft.autopublishEligible ? "green" : "neutral"}>Autopublish: {draft.autopublishEligible ? "eligible" : "no"}</StatusBadge>
@@ -864,11 +1046,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 ) : null}
 
                 <div className="grid gap-4 lg:grid-cols-2">
-                  <div id="calendar" className="scroll-mt-24">
-                    <PreviewCard title="Calendar view coming next" glyph="C" copy="Daily content operations, planned posts, reviews, approvals, and external events will appear here." />
+                  <div className="scroll-mt-24">
+                    <PreviewCard title="Calendar operations" glyph="C" copy="Daily content operations will show planned posts, drafts, approvals, visuals, videos, and publishing status." />
                   </div>
                   <div id="events" className="scroll-mt-24">
-                    <PreviewCard title="Events stream" glyph="E" copy="External events will appear here: new reviews, comments, approvals, publication results." />
+                    <PreviewCard title="Events stream" glyph="E" copy="External events will show new reviews, comments, client approvals, publication results, and AI-proposed actions." />
                   </div>
                 </div>
               </div>
