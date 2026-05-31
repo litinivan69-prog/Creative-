@@ -599,7 +599,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 modules: true,
                 platforms: true,
                 plannedContentItems: {
-                  include: { contentDraft: true },
+                  include: {
+                    contentDraft: {
+                      include: {
+                        reviewEvents: {
+                          orderBy: { createdAt: "asc" },
+                        },
+                      },
+                    },
+                  },
                 },
                 managerTasks: true,
               },
@@ -627,7 +635,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 modules: true,
                 platforms: true,
                 plannedContentItems: {
-                  include: { contentDraft: true },
+                  include: {
+                    contentDraft: {
+                      include: {
+                        reviewEvents: {
+                          orderBy: { createdAt: "asc" },
+                        },
+                      },
+                    },
+                  },
                 },
                 managerTasks: true,
               },

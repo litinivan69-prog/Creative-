@@ -134,6 +134,12 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Content Calendar is the central production workspace with week columns and an item inspector.
 - Client Portal Preview now communicates the future approval-focused client experience more clearly.
 
+## Sprint 3A Approval Workflow Data Layer
+
+- Content Draft approval workflow statuses, review event storage, and server actions are available.
+- Each workflow action updates the draft and stores an operational review event.
+- Approval workflow UI comes next.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.
@@ -165,5 +171,6 @@ The Prisma schema includes:
 - `PlannedContentItem`
 - `ManagerTask`
 - `ContentDraft`
+- `ContentDraftReviewEvent`
 
 The blueprint intentionally stores platform names and module names as generated data. There is no fixed platform list and no fixed deliverable package baked into the application.

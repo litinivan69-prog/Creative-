@@ -168,10 +168,23 @@ model ContentDraft {
   blueprint            ClientPresenceBlueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
   monthlyPlan          MonthlyOperatingPlan    @relation(fields: [monthlyPlanId], references: [id], onDelete: Cascade)
   plannedContentItem   PlannedContentItem      @relation(fields: [plannedContentItemId], references: [id], onDelete: Cascade)
+  reviewEvents         ContentDraftReviewEvent[]
 
   @@index([clientId])
   @@index([blueprintId])
   @@index([monthlyPlanId])
+}
+
+model ContentDraftReviewEvent {
+  id             String       @id @default(cuid())
+  contentDraftId String
+  actorType      String
+  action         String
+  comment        String?
+  createdAt      DateTime     @default(now())
+  contentDraft   ContentDraft @relation(fields: [contentDraftId], references: [id], onDelete: Cascade)
+
+  @@index([contentDraftId])
 }
 
 model ManagerTask {

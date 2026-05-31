@@ -32,6 +32,23 @@ function monthlyPlanErrorRedirect(blueprintId: string, planId: string, message: 
   redirect(`/?blueprint=${blueprintId}&plan=${planId}&error=${encodeURIComponent(message)}`);
 }
 
+type DraftWorkflowStatus =
+  | "draft"
+  | "needs_review"
+  | "sent_to_client"
+  | "client_changes_requested"
+  | "approved"
+  | "rejected"
+  | "ready_to_schedule";
+
+type DraftReviewAction =
+  | "submitted_for_review"
+  | "sent_to_client"
+  | "changes_requested"
+  | "approved"
+  | "rejected"
+  | "marked_ready_to_schedule";
+
 function currentMonth() {
   return new Date().toISOString().slice(0, 7);
 }
@@ -46,6 +63,59 @@ function jsonObject(value: unknown) {
 
 function jsonArray(value: unknown) {
   return Array.isArray(value) ? value : [];
+}
+
+function draftReviewActor(formData: FormData) {
+  return formText(formData, "actorType") === "client" ? "client" : "manager";
+}
+
+async function updateDraftWorkflow(
+  formData: FormData,
+  update: {
+    status: DraftWorkflowStatus;
+    action: DraftReviewAction;
+    notice: string;
+  },
+) {
+  const contentDraftId = formText(formData, "contentDraftId");
+  const comment = formText(formData, "comment");
+
+  if (!contentDraftId) {
+    errorRedirect("Content draft is required.");
+  }
+
+  const draft = await prisma.contentDraft.findUnique({
+    where: { id: contentDraftId },
+    select: {
+      id: true,
+      blueprintId: true,
+      monthlyPlanId: true,
+    },
+  });
+
+  if (!draft) {
+    errorRedirect("Content draft not found.");
+  }
+
+  await prisma.$transaction([
+    prisma.contentDraft.update({
+      where: { id: draft.id },
+      data: { status: update.status },
+    }),
+    prisma.contentDraftReviewEvent.create({
+      data: {
+        contentDraftId: draft.id,
+        actorType: draftReviewActor(formData),
+        action: update.action,
+        comment: comment || null,
+      },
+    }),
+  ]);
+
+  revalidatePath("/");
+  redirect(
+    `/?blueprint=${draft.blueprintId}&plan=${draft.monthlyPlanId}&notice=${encodeURIComponent(update.notice)}#drafts`,
+  );
 }
 
 export async function createClient(formData: FormData) {
@@ -485,6 +555,12 @@ export async function generateContentDraftForItem(formData: FormData) {
         approvalRequired: draft.approvalRequired,
         autopublishEligible: draft.autopublishEligible,
         riskLevel: draft.riskLevel,
+        reviewEvents: {
+          create: {
+            actorType: "system",
+            action: "created",
+          },
+        },
       },
     });
   } catch (error) {
@@ -499,4 +575,52 @@ export async function generateContentDraftForItem(formData: FormData) {
   redirect(
     `/?blueprint=${blueprint.id}&plan=${plan.id}&notice=${encodeURIComponent("Content draft generated for manager review.")}#drafts`,
   );
+}
+
+export async function submitDraftForReview(formData: FormData) {
+  await updateDraftWorkflow(formData, {
+    status: "needs_review",
+    action: "submitted_for_review",
+    notice: "Content draft submitted for review.",
+  });
+}
+
+export async function sendDraftToClient(formData: FormData) {
+  await updateDraftWorkflow(formData, {
+    status: "sent_to_client",
+    action: "sent_to_client",
+    notice: "Content draft marked as sent to client.",
+  });
+}
+
+export async function requestDraftChanges(formData: FormData) {
+  await updateDraftWorkflow(formData, {
+    status: "client_changes_requested",
+    action: "changes_requested",
+    notice: "Draft changes requested.",
+  });
+}
+
+export async function approveDraft(formData: FormData) {
+  await updateDraftWorkflow(formData, {
+    status: "approved",
+    action: "approved",
+    notice: "Content draft approved.",
+  });
+}
+
+export async function rejectDraft(formData: FormData) {
+  await updateDraftWorkflow(formData, {
+    status: "rejected",
+    action: "rejected",
+    notice: "Content draft rejected.",
+  });
+}
+
+export async function markDraftReadyToSchedule(formData: FormData) {
+  await updateDraftWorkflow(formData, {
+    status: "ready_to_schedule",
+    action: "marked_ready_to_schedule",
+    notice: "Content draft marked ready to schedule.",
+  });
 }

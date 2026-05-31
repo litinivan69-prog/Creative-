@@ -2,7 +2,15 @@ import { z } from "zod";
 
 const nonEmptyText = z.string().trim().min(1);
 
-export const ContentDraftStatusSchema = z.enum(["draft", "needs_review", "approved", "rejected"]);
+export const ContentDraftStatusSchema = z.enum([
+  "draft",
+  "needs_review",
+  "sent_to_client",
+  "client_changes_requested",
+  "approved",
+  "rejected",
+  "ready_to_schedule",
+]);
 export const ContentDraftRiskLevelSchema = z.enum(["low", "medium", "high"]);
 
 export const ContentDraftSchema = z.object({
