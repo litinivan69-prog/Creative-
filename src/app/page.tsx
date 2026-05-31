@@ -651,6 +651,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                               <th className="px-3 py-3">Module</th>
                               <th className="px-3 py-3">Platform</th>
                               <th className="px-3 py-3">Format</th>
+                              <th className="px-3 py-3">Theme</th>
+                              <th className="px-3 py-3">Channel role</th>
                               <th className="px-3 py-3">Topic</th>
                               <th className="px-3 py-3">Goal</th>
                               <th className="px-3 py-3">Approval</th>
@@ -662,11 +664,21 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                           <tbody className="divide-y divide-slate-200">
                             {selectedMonthlyPlan.plannedContentItems.map((item) => (
                               <tr key={item.id} className="align-top">
-                                <td className="px-3 py-3 text-slate-700">{item.plannedDate}</td>
+                                <td className="px-3 py-3 text-slate-700">
+                                  <p>{item.plannedDate}</p>
+                                  {item.week ? <p className="mt-1 text-xs text-slate-500">{item.week}</p> : null}
+                                </td>
                                 <td className="px-3 py-3 text-slate-700">{item.moduleType}</td>
                                 <td className="px-3 py-3 text-slate-700">{item.platformName}</td>
                                 <td className="px-3 py-3 text-slate-700">{item.format}</td>
-                                <td className="px-3 py-3 font-semibold text-slate-950">{item.topic}</td>
+                                <td className="px-3 py-3 text-slate-700">{item.campaignTheme || "-"}</td>
+                                <td className="px-3 py-3 text-slate-700">{item.channelRole || "-"}</td>
+                                <td className="px-3 py-3">
+                                  <p className="font-semibold text-slate-950">{item.topic}</p>
+                                  {item.sequenceReason ? (
+                                    <p className="mt-1 text-xs leading-5 text-slate-500">{item.sequenceReason}</p>
+                                  ) : null}
+                                </td>
                                 <td className="px-3 py-3 text-slate-600">{item.goal}</td>
                                 <td className="px-3 py-3 text-slate-700">
                                   {item.approvalRequired ? "Required" : "Not required"}

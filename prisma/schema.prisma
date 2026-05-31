@@ -130,6 +130,11 @@ model PlannedContentItem {
   topic               String
   goal                String
   plannedDate         String
+  week                String?
+  campaignTheme       String?
+  contentPillar       String?
+  channelRole         String?
+  sequenceReason      String?
   approvalRequired    Boolean
   autopublishEligible Boolean
   requiredInputs      Json                 @default("[]")

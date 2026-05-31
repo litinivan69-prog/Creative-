@@ -100,6 +100,12 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Require manager or client approval when the plan or safety rules require it.
 - Preserve safety rules for healthcare, legal, financial, regulated, and reputation-sensitive content.
 
+## Sprint 2.1 Channel Orchestration
+
+- Monthly Plans now include basic cross-channel orchestration.
+- Planned content items can include week, campaign theme, content pillar, channel role, and sequence reason.
+- This is the first step toward the future Marketing Brain.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.
