@@ -49,6 +49,17 @@ type DraftReviewAction =
   | "rejected"
   | "marked_ready_to_schedule";
 
+const creativeAssetStatuses = [
+  "needed",
+  "brief_ready",
+  "in_production",
+  "needs_review",
+  "approved",
+  "rejected",
+] as const;
+
+type CreativeAssetStatus = (typeof creativeAssetStatuses)[number];
+
 function currentMonth() {
   return new Date().toISOString().slice(0, 7);
 }
@@ -817,5 +828,159 @@ export async function unschedulePublication(formData: FormData) {
   revalidatePath("/");
   redirect(
     `/?blueprint=${publication.blueprintId}&plan=${publication.monthlyPlanId}&notice=${encodeURIComponent("Публикация снята с расписания.")}#scheduling`,
+  );
+}
+
+export async function createCreativeAssetBrief(formData: FormData) {
+  const scheduledPublicationId = formText(formData, "scheduledPublicationId");
+  const assetType = formText(formData, "assetType");
+  const title = formText(formData, "title");
+  const brief = formText(formData, "brief");
+  const formatRequirements = formText(formData, "formatRequirements");
+  const textOnAsset = formText(formData, "textOnAsset");
+  const references = formText(formData, "references");
+  const notes = formText(formData, "notes");
+  const approvalRequired = formData.get("approvalRequired") === "on";
+
+  if (!scheduledPublicationId) {
+    errorRedirect("Не выбрана публикация для создания ТЗ.");
+  }
+
+  if (!assetType || !title || !brief) {
+    errorRedirect("Укажите тип материала, название и описание ТЗ.");
+  }
+
+  const publication = await prisma.scheduledPublication.findUnique({
+    where: { id: scheduledPublicationId },
+    include: {
+      client: true,
+      blueprint: true,
+      monthlyPlan: true,
+      plannedContentItem: true,
+      contentDraft: true,
+    },
+  });
+
+  if (!publication) {
+    errorRedirect("Запланированная публикация не найдена.");
+  }
+
+  await prisma.$transaction([
+    prisma.creativeAsset.create({
+      data: {
+        clientId: publication.clientId,
+        blueprintId: publication.blueprintId,
+        monthlyPlanId: publication.monthlyPlanId,
+        plannedContentItemId: publication.plannedContentItemId,
+        contentDraftId: publication.contentDraftId,
+        scheduledPublicationId: publication.id,
+        assetType,
+        title,
+        brief,
+        formatRequirements: formatRequirements || null,
+        textOnAsset: textOnAsset || null,
+        references: references || null,
+        status: "needed",
+        approvalRequired,
+        notes: notes || null,
+      },
+    }),
+    ...(publication.status === "scheduled"
+      ? [
+          prisma.scheduledPublication.update({
+            where: { id: publication.id },
+            data: { status: "needs_assets" },
+          }),
+        ]
+      : []),
+  ]);
+
+  revalidatePath("/");
+  redirect(
+    `/?blueprint=${publication.blueprintId}&plan=${publication.monthlyPlanId}&notice=${encodeURIComponent("ТЗ на креативный материал создано.")}#assets`,
+  );
+}
+
+export async function updateCreativeAssetStatus(formData: FormData) {
+  const creativeAssetId = formText(formData, "creativeAssetId");
+  const status = formText(formData, "status");
+
+  if (!creativeAssetId) {
+    errorRedirect("Не выбран креативный материал.");
+  }
+
+  if (!creativeAssetStatuses.includes(status as CreativeAssetStatus)) {
+    errorRedirect("Выбран недопустимый статус креативного материала.");
+  }
+
+  const asset = await prisma.creativeAsset.findUnique({
+    where: { id: creativeAssetId },
+    select: {
+      id: true,
+      blueprintId: true,
+      monthlyPlanId: true,
+    },
+  });
+
+  if (!asset) {
+    errorRedirect("Креативный материал не найден.");
+  }
+
+  await prisma.creativeAsset.update({
+    where: { id: asset.id },
+    data: { status },
+  });
+
+  revalidatePath("/");
+  redirect(
+    `/?blueprint=${asset.blueprintId}&plan=${asset.monthlyPlanId}&notice=${encodeURIComponent("Статус креативного материала обновлён.")}#assets`,
+  );
+}
+
+export async function updateCreativeAssetBrief(formData: FormData) {
+  const creativeAssetId = formText(formData, "creativeAssetId");
+  const title = formText(formData, "title");
+  const brief = formText(formData, "brief");
+  const formatRequirements = formText(formData, "formatRequirements");
+  const textOnAsset = formText(formData, "textOnAsset");
+  const references = formText(formData, "references");
+  const notes = formText(formData, "notes");
+
+  if (!creativeAssetId) {
+    errorRedirect("Не выбран креативный материал.");
+  }
+
+  if (!title || !brief) {
+    errorRedirect("Укажите название и описание ТЗ.");
+  }
+
+  const asset = await prisma.creativeAsset.findUnique({
+    where: { id: creativeAssetId },
+    select: {
+      id: true,
+      blueprintId: true,
+      monthlyPlanId: true,
+    },
+  });
+
+  if (!asset) {
+    errorRedirect("Креативный материал не найден.");
+  }
+
+  await prisma.creativeAsset.update({
+    where: { id: asset.id },
+    data: {
+      title,
+      brief,
+      formatRequirements: formatRequirements || null,
+      textOnAsset: textOnAsset || null,
+      references: references || null,
+      notes: notes || null,
+    },
+  });
+
+  revalidatePath("/");
+  redirect(
+    `/?blueprint=${asset.blueprintId}&plan=${asset.monthlyPlanId}&notice=${encodeURIComponent("ТЗ на креативный материал обновлено.")}#assets`,
   );
 }

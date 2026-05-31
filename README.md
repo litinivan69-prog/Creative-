@@ -174,6 +174,13 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - The calendar prioritizes scheduled publications and falls back to Monthly Plan previews when no schedule exists.
 - No real external publishing or automation was added.
 
+## Sprint 5A Creative Asset Layer
+
+- The Creative Asset Layer was added.
+- Scheduled publications can now have structured visual or video briefs.
+- Creative assets have production statuses for preparation and approval.
+- No real image or video generation and no external design integrations were added.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.
@@ -207,5 +214,6 @@ The Prisma schema includes:
 - `ContentDraft`
 - `ContentDraftReviewEvent`
 - `ScheduledPublication`
+- `CreativeAsset`
 
 The blueprint intentionally stores platform names and module names as generated data. There is no fixed platform list and no fixed deliverable package baked into the application.

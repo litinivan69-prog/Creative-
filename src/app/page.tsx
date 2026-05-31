@@ -1,6 +1,7 @@
 import {
   addClientBrief,
   approveDraft,
+  createCreativeAssetBrief,
   createClient,
   generateBlueprint,
   generateContentDraftForItem,
@@ -17,6 +18,8 @@ import {
   submitDraftForReview,
   unschedulePublication,
   updateClientBrief,
+  updateCreativeAssetBrief,
+  updateCreativeAssetStatus,
   updateScheduledPublication,
 } from "@/app/actions";
 import { PendingSubmitButton } from "@/app/pending-submit-button";
@@ -276,6 +279,16 @@ function formatStatus(value: string) {
     skipped: "Пропущено",
     failed: "Ошибка",
     automation_later: "Автоматизация позже",
+    needed: "Нужно",
+    brief_ready: "ТЗ готово",
+    in_production: "В работе",
+    visual: "Визуал",
+    video: "Видео",
+    carousel: "Карусель",
+    story: "Сторис",
+    cover: "Обложка",
+    review_response_visual: "Визуал для ответа на отзыв",
+    other: "Другое",
   };
 
   return labels[value] ?? value.replaceAll("_", " ");
@@ -369,6 +382,35 @@ type ScheduledPublicationPreview = {
   status: string;
   publishMode: string;
   notes: string | null;
+  contentDraft: {
+    draftTitle: string;
+  };
+  creativeAssets: Array<{
+    id: string;
+    assetType: string;
+    status: string;
+  }>;
+};
+
+type CreativeAssetPreview = {
+  id: string;
+  scheduledPublicationId: string;
+  assetType: string;
+  title: string;
+  brief: string;
+  formatRequirements: string | null;
+  textOnAsset: string | null;
+  references: string | null;
+  status: string;
+  approvalRequired: boolean;
+  notes: string | null;
+  scheduledPublication: {
+    platformName: string;
+    format: string;
+    topic: string;
+    scheduledDate: string;
+    scheduledTime: string | null;
+  };
   contentDraft: {
     draftTitle: string;
   };
@@ -820,6 +862,219 @@ function SchedulingLayer({
   );
 }
 
+const creativeAssetTypes = [
+  "visual",
+  "video",
+  "carousel",
+  "story",
+  "cover",
+  "review_response_visual",
+  "other",
+];
+
+const creativeAssetStatusOptions = [
+  "needed",
+  "brief_ready",
+  "in_production",
+  "needs_review",
+  "approved",
+  "rejected",
+];
+
+function creativeAssetTone(status: string): "neutral" | "teal" | "amber" | "rose" | "green" {
+  const tones: Record<string, "neutral" | "teal" | "amber" | "rose" | "green"> = {
+    needed: "amber",
+    brief_ready: "teal",
+    in_production: "teal",
+    needs_review: "amber",
+    approved: "green",
+    rejected: "rose",
+  };
+
+  return tones[status] ?? "neutral";
+}
+
+function CreativeAssetStatusAction({
+  assetId,
+  status,
+}: {
+  assetId: string;
+  status: string;
+}) {
+  return (
+    <form action={updateCreativeAssetStatus}>
+      <input type="hidden" name="creativeAssetId" value={assetId} />
+      <input type="hidden" name="status" value={status} />
+      <PendingSubmitButton
+        pendingLabel="Обновляем..."
+        className="rounded-md border border-stone-200 bg-white px-2.5 py-1.5 text-xs font-bold text-stone-700 transition hover:border-teal-300 hover:bg-teal-50 hover:text-teal-900 disabled:cursor-wait disabled:opacity-60"
+      >
+        {formatStatus(status)}
+      </PendingSubmitButton>
+    </form>
+  );
+}
+
+function CreativeAssetLayer({
+  publications,
+  assets,
+}: {
+  publications: ScheduledPublicationPreview[];
+  assets: CreativeAssetPreview[];
+}) {
+  const publicationsNeedingBrief = publications.filter(
+    (publication) =>
+      (publication.status === "needs_assets" || suggestsVisualAsset(publication.format)) &&
+      publication.creativeAssets.length === 0,
+  );
+
+  return (
+    <section id="assets" className={`${panelClass} mt-7 scroll-mt-24 p-5 sm:p-6`}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Производство визуалов</p>
+          <h2 className="mt-1 text-xl font-semibold text-stone-950">Креативные материалы</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
+            Создавайте ТЗ на визуалы и видео для публикаций, отслеживайте подготовку и согласование материалов внутри команды.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <StatusBadge tone={publicationsNeedingBrief.length > 0 ? "amber" : "green"}>
+            {publicationsNeedingBrief.length} ждут ТЗ
+          </StatusBadge>
+          <StatusBadge tone="teal">{assets.length} материалов</StatusBadge>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-5 xl:grid-cols-2">
+        <div>
+          <h3 className="text-sm font-semibold text-stone-950">Нужно подготовить ТЗ</h3>
+          <div className="mt-3 grid gap-3">
+            {publicationsNeedingBrief.map((publication) => (
+              <article key={publication.id} className="rounded-lg border border-amber-200 bg-amber-50/40 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.08em] text-teal-700">{publication.platformName} &middot; {publication.format}</p>
+                    <h4 className="mt-2 font-semibold leading-6 text-stone-950">{publication.topic}</h4>
+                    <p className="mt-1 text-xs leading-5 text-stone-500">Черновик: {publication.contentDraft.draftTitle}</p>
+                  </div>
+                  <StatusBadge tone="amber">
+                    {publication.scheduledDate}{publication.scheduledTime ? `, ${publication.scheduledTime}` : ""}
+                  </StatusBadge>
+                </div>
+                <form action={createCreativeAssetBrief} className="mt-4 grid gap-2 sm:grid-cols-2">
+                  <input type="hidden" name="scheduledPublicationId" value={publication.id} />
+                  <label className="grid gap-1 text-xs font-bold text-stone-600">
+                    Тип материала
+                    <select name="assetType" className={inputClass} defaultValue="visual">
+                      {creativeAssetTypes.map((type) => (
+                        <option key={type} value={type}>{formatStatus(type)}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-xs font-bold text-stone-600">
+                    Название ТЗ
+                    <input type="text" name="title" required className={inputClass} placeholder="Например: обложка для публикации" />
+                  </label>
+                  <label className="grid gap-1 text-xs font-bold text-stone-600 sm:col-span-2">
+                    Описание ТЗ
+                    <textarea name="brief" required rows={4} className={inputClass} placeholder="Что нужно показать, настроение, ключевой акцент" />
+                  </label>
+                  <label className="grid gap-1 text-xs font-bold text-stone-600">
+                    Требования к формату
+                    <input type="text" name="formatRequirements" className={inputClass} placeholder="Размер, ориентация, длительность" />
+                  </label>
+                  <label className="grid gap-1 text-xs font-bold text-stone-600">
+                    Текст на материале
+                    <input type="text" name="textOnAsset" className={inputClass} placeholder="Необязательно" />
+                  </label>
+                  <label className="grid gap-1 text-xs font-bold text-stone-600">
+                    Референсы
+                    <input type="text" name="references" className={inputClass} placeholder="Ссылки или описание примеров" />
+                  </label>
+                  <label className="grid gap-1 text-xs font-bold text-stone-600">
+                    Заметка
+                    <input type="text" name="notes" className={inputClass} placeholder="Необязательно" />
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-bold text-stone-600 sm:col-span-2">
+                    <input type="checkbox" name="approvalRequired" className="h-4 w-4 rounded border-stone-300 accent-teal-700" />
+                    Требуется согласование
+                  </label>
+                  <div className="sm:col-span-2">
+                    <PendingSubmitButton pendingLabel="Создаём ТЗ..." className={primaryButtonClass}>
+                      Создать ТЗ на визуал
+                    </PendingSubmitButton>
+                  </div>
+                </form>
+              </article>
+            ))}
+            {publicationsNeedingBrief.length === 0 ? (
+              <EmptyState>Публикаций без ТЗ на визуал сейчас нет. Новые задачи появятся здесь после планирования материалов.</EmptyState>
+            ) : null}
+          </div>
+        </div>
+
+        <div>
+          <h3 className="text-sm font-semibold text-stone-950">Материалы в производстве</h3>
+          <div className="mt-3 grid gap-3">
+            {assets.map((asset) => (
+              <article key={asset.id} className="rounded-lg border border-stone-200 bg-white p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <StatusBadge tone="teal">{formatStatus(asset.assetType)}</StatusBadge>
+                      <StatusBadge>{asset.scheduledPublication.platformName} &middot; {asset.scheduledPublication.format}</StatusBadge>
+                    </div>
+                    <h4 className="mt-3 font-semibold leading-6 text-stone-950">{asset.title}</h4>
+                    <p className="mt-1 text-xs leading-5 text-stone-500">{asset.scheduledPublication.topic}</p>
+                  </div>
+                  <StatusBadge tone={creativeAssetTone(asset.status)}>{formatStatus(asset.status)}</StatusBadge>
+                </div>
+                <p className="mt-3 text-sm leading-6 text-stone-700">{asset.brief}</p>
+                <div className="mt-3 grid gap-2 text-xs leading-5 text-stone-600">
+                  {asset.formatRequirements ? <p><span className="font-bold text-stone-800">Формат:</span> {asset.formatRequirements}</p> : null}
+                  {asset.textOnAsset ? <p><span className="font-bold text-stone-800">Текст:</span> {asset.textOnAsset}</p> : null}
+                  {asset.references ? <p><span className="font-bold text-stone-800">Референсы:</span> {asset.references}</p> : null}
+                  {asset.notes ? <p><span className="font-bold text-stone-800">Заметка:</span> {asset.notes}</p> : null}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {asset.approvalRequired ? <StatusBadge tone="amber">Нужно согласование</StatusBadge> : <StatusBadge>Согласование необязательно</StatusBadge>}
+                  <StatusBadge>{asset.scheduledPublication.scheduledDate}{asset.scheduledPublication.scheduledTime ? `, ${asset.scheduledPublication.scheduledTime}` : ""}</StatusBadge>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {creativeAssetStatusOptions.map((status) =>
+                    status === asset.status ? null : (
+                      <CreativeAssetStatusAction key={status} assetId={asset.id} status={status} />
+                    ),
+                  )}
+                </div>
+                <details className="mt-3 rounded-md border border-stone-200 bg-stone-50/70">
+                  <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-stone-700">Изменить ТЗ</summary>
+                  <form action={updateCreativeAssetBrief} className="grid gap-2 border-t border-stone-200 p-3">
+                    <input type="hidden" name="creativeAssetId" value={asset.id} />
+                    <input type="text" name="title" required defaultValue={asset.title} className={inputClass} />
+                    <textarea name="brief" required rows={4} defaultValue={asset.brief} className={inputClass} />
+                    <input type="text" name="formatRequirements" defaultValue={asset.formatRequirements ?? ""} className={inputClass} placeholder="Требования к формату" />
+                    <input type="text" name="textOnAsset" defaultValue={asset.textOnAsset ?? ""} className={inputClass} placeholder="Текст на материале" />
+                    <input type="text" name="references" defaultValue={asset.references ?? ""} className={inputClass} placeholder="Референсы" />
+                    <input type="text" name="notes" defaultValue={asset.notes ?? ""} className={inputClass} placeholder="Заметка" />
+                    <PendingSubmitButton pendingLabel="Сохраняем..." className={secondaryButtonClass}>
+                      Сохранить изменения
+                    </PendingSubmitButton>
+                  </form>
+                </details>
+              </article>
+            ))}
+            {assets.length === 0 ? (
+              <EmptyState>ТЗ на креативные материалы пока не созданы. Выберите публикацию слева и зафиксируйте требования к визуалу или видео.</EmptyState>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function suggestsVisualAsset(format: string) {
   return ["visual", "video", "reel", "story", "image", "photo", "carousel", "short"].some((token) =>
     format.toLowerCase().includes(token),
@@ -831,11 +1086,13 @@ function OperationsOverview({
   attentionCount,
   draftCount,
   integrationTaskCount,
+  creativeAssetAttentionCount,
 }: {
   progress: number;
   attentionCount: number;
   draftCount: number;
   integrationTaskCount: number;
+  creativeAssetAttentionCount: number;
 }) {
   return (
     <article className={`${panelClass} p-5 sm:p-6`}>
@@ -879,10 +1136,11 @@ function OperationsOverview({
           </div>
         </div>
       </div>
-      <div className="mt-5 grid gap-2 sm:grid-cols-3">
+      <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Готовые черновики" value={draftCount} detail="Можно проверять" tone="teal" />
         <MetricCard label="Требует внимания" value={attentionCount} detail="Нагрузка на согласование" tone="amber" />
         <MetricCard label="Задачи по интеграциям" value={integrationTaskCount} detail="До запуска" tone={integrationTaskCount > 0 ? "rose" : "stone"} />
+        <MetricCard label="Нужны визуалы" value={creativeAssetAttentionCount} detail="ТЗ и материалы в работе" tone={creativeAssetAttentionCount > 0 ? "amber" : "stone"} />
       </div>
     </article>
   );
@@ -1003,11 +1261,14 @@ function ScheduledPublicationCalendar({
         <p className="text-xs leading-5 text-stone-500">Плановые материалы скрыты, пока есть рабочее расписание.</p>
       </div>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {publications.map((publication) => (
-          <article
-            key={publication.id}
-            className="rounded-lg border border-teal-200 bg-white p-4 shadow-[0_4px_12px_rgba(13,148,136,0.08)]"
-          >
+        {publications.map((publication) => {
+          const asset = publication.creativeAssets[0];
+
+          return (
+            <article
+              key={publication.id}
+              className="rounded-lg border border-teal-200 bg-white p-4 shadow-[0_4px_12px_rgba(13,148,136,0.08)]"
+            >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap gap-1.5">
                 <StatusBadge tone="teal">{publication.platformName}</StatusBadge>
@@ -1029,6 +1290,14 @@ function ScheduledPublicationCalendar({
             <div className="mt-3 flex flex-wrap gap-1.5">
               <StatusBadge>{formatStatus(publication.publishMode)}</StatusBadge>
               {publication.timezone ? <StatusBadge>{publication.timezone}</StatusBadge> : null}
+              {asset ? (
+                <>
+                  <StatusBadge tone="teal">{formatStatus(asset.assetType)}</StatusBadge>
+                  <StatusBadge tone={creativeAssetTone(asset.status)}>{formatStatus(asset.status)}</StatusBadge>
+                </>
+              ) : publication.status === "needs_assets" ? (
+                <StatusBadge tone="amber">Нужно ТЗ на визуал</StatusBadge>
+              ) : null}
             </div>
             <a
               href="#scheduling"
@@ -1036,8 +1305,9 @@ function ScheduledPublicationCalendar({
             >
               Управлять публикацией
             </a>
-          </article>
-        ))}
+            </article>
+          );
+        })}
       </div>
     </div>
   );
@@ -1286,11 +1556,19 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   },
                 },
                 managerTasks: true,
+                creativeAssets: {
+                  orderBy: { createdAt: "desc" },
+                  include: {
+                    scheduledPublication: true,
+                    contentDraft: true,
+                  },
+                },
                 scheduledPublications: {
                   orderBy: [{ scheduledDate: "asc" }, { scheduledTime: "asc" }],
                   include: {
                     contentDraft: true,
                     plannedContentItem: true,
+                    creativeAssets: true,
                   },
                 },
               },
@@ -1329,11 +1607,19 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   },
                 },
                 managerTasks: true,
+                creativeAssets: {
+                  orderBy: { createdAt: "desc" },
+                  include: {
+                    scheduledPublication: true,
+                    contentDraft: true,
+                  },
+                },
                 scheduledPublications: {
                   orderBy: [{ scheduledDate: "asc" }, { scheduledTime: "asc" }],
                   include: {
                     contentDraft: true,
                     plannedContentItem: true,
+                    creativeAssets: true,
                   },
                 },
               },
@@ -1376,6 +1662,12 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
   const productionProgress =
     plannedContentCount > 0 ? Math.round((draftCount / plannedContentCount) * 100) : 0;
   const selectedInspectorItem = selectedMonthlyPlan?.plannedContentItems[0];
+  const creativeAssets = selectedMonthlyPlan?.creativeAssets ?? [];
+  const creativeAssetAttentionCount =
+    creativeAssets.filter((asset) => ["needed", "brief_ready", "in_production", "needs_review"].includes(asset.status)).length +
+    (selectedMonthlyPlan?.scheduledPublications.filter(
+      (publication) => publication.status === "needs_assets" && publication.creativeAssets.length === 0,
+    ).length ?? 0);
 
   return (
     <div className="min-h-screen bg-[#f4f5f2] text-stone-900">
@@ -1509,6 +1801,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 attentionCount={approvalQueueCount}
                 draftCount={draftCount}
                 integrationTaskCount={integrationTaskCount}
+                creativeAssetAttentionCount={creativeAssetAttentionCount}
               />
               <article className={`${panelClass} p-5`}>
                 <div className="flex items-center justify-between gap-3">
@@ -1615,6 +1908,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
             <SchedulingLayer
               drafts={contentDrafts}
               publications={selectedMonthlyPlan?.scheduledPublications ?? []}
+            />
+
+            <CreativeAssetLayer
+              publications={selectedMonthlyPlan?.scheduledPublications ?? []}
+              assets={creativeAssets}
             />
 
             <section className="mt-7">

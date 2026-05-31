@@ -19,6 +19,7 @@ model Client {
   monthlyPlans MonthlyOperatingPlan[]
   contentDrafts ContentDraft[]
   scheduledPublications ScheduledPublication[]
+  creativeAssets CreativeAsset[]
 }
 
 model ClientBrief {
@@ -63,6 +64,7 @@ model ClientPresenceBlueprint {
   monthlyPlans                   MonthlyOperatingPlan[]
   contentDrafts                  ContentDraft[]
   scheduledPublications          ScheduledPublication[]
+  creativeAssets                 CreativeAsset[]
 
   @@index([clientId])
 }
@@ -89,6 +91,7 @@ model MonthlyOperatingPlan {
   managerTasks       ManagerTask[]
   contentDrafts       ContentDraft[]
   scheduledPublications ScheduledPublication[]
+  creativeAssets      CreativeAsset[]
 
   @@index([clientId])
   @@index([blueprintId])
@@ -145,6 +148,7 @@ model PlannedContentItem {
   monthlyPlan         MonthlyOperatingPlan @relation(fields: [monthlyPlanId], references: [id], onDelete: Cascade)
   contentDraft        ContentDraft?
   scheduledPublications ScheduledPublication[]
+  creativeAssets      CreativeAsset[]
 
   @@index([monthlyPlanId])
 }
@@ -174,6 +178,7 @@ model ContentDraft {
   plannedContentItem   PlannedContentItem      @relation(fields: [plannedContentItemId], references: [id], onDelete: Cascade)
   reviewEvents         ContentDraftReviewEvent[]
   scheduledPublications ScheduledPublication[]
+  creativeAssets       CreativeAsset[]
 
   @@index([clientId])
   @@index([blueprintId])
@@ -215,10 +220,43 @@ model ScheduledPublication {
   monthlyPlan          MonthlyOperatingPlan    @relation(fields: [monthlyPlanId], references: [id], onDelete: Cascade)
   plannedContentItem   PlannedContentItem      @relation(fields: [plannedContentItemId], references: [id], onDelete: Cascade)
   contentDraft         ContentDraft            @relation(fields: [contentDraftId], references: [id], onDelete: Cascade)
+  creativeAssets       CreativeAsset[]
 
   @@index([clientId])
   @@index([monthlyPlanId])
   @@index([contentDraftId])
+  @@index([status])
+}
+
+model CreativeAsset {
+  id                     String                  @id @default(cuid())
+  clientId               String
+  blueprintId            String
+  monthlyPlanId          String
+  plannedContentItemId   String
+  contentDraftId         String
+  scheduledPublicationId String
+  assetType              String
+  title                  String
+  brief                  String
+  formatRequirements     String?
+  textOnAsset            String?
+  references             String?
+  status                 String
+  approvalRequired       Boolean
+  notes                  String?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  client                 Client                  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  blueprint              ClientPresenceBlueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+  monthlyPlan            MonthlyOperatingPlan    @relation(fields: [monthlyPlanId], references: [id], onDelete: Cascade)
+  plannedContentItem     PlannedContentItem      @relation(fields: [plannedContentItemId], references: [id], onDelete: Cascade)
+  contentDraft           ContentDraft            @relation(fields: [contentDraftId], references: [id], onDelete: Cascade)
+  scheduledPublication   ScheduledPublication    @relation(fields: [scheduledPublicationId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([monthlyPlanId])
+  @@index([scheduledPublicationId])
   @@index([status])
 }
 
