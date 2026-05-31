@@ -80,7 +80,14 @@ Client Presence Blueprint -> OpenAI structured planning -> Monthly Operating Pla
 
 Sprint 1 does not generate full post, article, email, or caption text. It only creates the operational plan and planned content items as structured data.
 
-Before Sprint 2, Sprint 1 still needs real end-to-end testing against PostgreSQL and the OpenAI API using a production-like client brief and Blueprint.
+## Sprint 1 Acceptance
+
+- Live Blueprint generation works.
+- Live Monthly Plan generation works.
+- Data persists in PostgreSQL via Prisma.
+- Vercel deployment works.
+- Neon database works.
+- OpenAI Structured Outputs work after validation hardening.
 
 ## Automation Sprint 0
 
@@ -88,7 +95,7 @@ Before Sprint 2, Sprint 1 still needs real end-to-end testing against PostgreSQL
 - CI starts PostgreSQL 16 as a service, applies Prisma migrations, generates the Prisma client, typechecks, and builds the app.
 - Local Docker is no longer required for CI because GitHub Actions provides the PostgreSQL service.
 - The CI build uses a placeholder `OPENAI_API_KEY`; real OpenAI end-to-end tests require adding `OPENAI_API_KEY` as a GitHub secret.
-- Vercel and Neon setup is the next automation step.
+- Vercel and Neon provide the live deployment and cloud database.
 
 ## Vercel Deployment
 

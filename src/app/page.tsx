@@ -5,6 +5,7 @@ import {
   generateMonthlyPlan,
   updateClientBrief,
 } from "@/app/actions";
+import { PendingSubmitButton } from "@/app/pending-submit-button";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +40,10 @@ function EmptyState({ children }: { children: React.ReactNode }) {
       {children}
     </div>
   );
+}
+
+function currentMonth() {
+  return new Date().toISOString().slice(0, 7);
 }
 
 export default async function Dashboard({ searchParams }: { searchParams: SearchParams }) {
@@ -109,8 +114,12 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
         })
       : null);
 
+  const currentMonthlyPlan =
+    latestBlueprint?.monthlyPlans.find((plan) => plan.month === currentMonth()) ?? null;
+
   const selectedMonthlyPlan =
     latestBlueprint?.monthlyPlans.find((plan) => plan.id === params.plan) ??
+    currentMonthlyPlan ??
     latestBlueprint?.monthlyPlans[0] ??
     null;
 
@@ -169,9 +178,12 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                     placeholder="Healthcare"
                   />
                 </label>
-                <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">
+                <PendingSubmitButton
+                  pendingLabel="Creating..."
+                  className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-wait disabled:bg-slate-600"
+                >
                   Create client
-                </button>
+                </PendingSubmitButton>
               </form>
             </section>
 
@@ -203,9 +215,12 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                       placeholder="Paste goals, target audience, constraints, current channels, brand risks, team capacity..."
                     />
                   </label>
-                  <button className="rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800">
+                  <PendingSubmitButton
+                    pendingLabel="Saving..."
+                    className="rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-wait disabled:bg-teal-500"
+                  >
                     Save brief
-                  </button>
+                  </PendingSubmitButton>
                 </form>
               ) : (
                 <div className="mt-5">
@@ -245,16 +260,22 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                               Saving changes clears the generated blueprint so the next blueprint matches the edited brief.
                             </p>
                           ) : null}
-                          <button className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-100">
+                          <PendingSubmitButton
+                            pendingLabel="Saving..."
+                            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-100 disabled:cursor-wait disabled:text-slate-500"
+                          >
                             Save edited brief
-                          </button>
+                          </PendingSubmitButton>
                         </form>
                       </details>
                       <form action={generateBlueprint} className="mt-4">
                         <input type="hidden" name="briefId" value={brief.id} />
-                        <button className="w-full rounded-md bg-amber-600 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-700">
+                        <PendingSubmitButton
+                          pendingLabel={brief.blueprint ? "Opening Blueprint..." : "Generating Blueprint..."}
+                          className="w-full rounded-md bg-amber-600 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:cursor-wait disabled:bg-amber-400"
+                        >
                           {brief.blueprint ? "View blueprint" : "Generate blueprint"}
-                        </button>
+                        </PendingSubmitButton>
                       </form>
                     </div>
                   )),
@@ -306,19 +327,36 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                     <div>
                       <h4 className="font-semibold text-slate-950">Monthly Operating Plan</h4>
                       <p className="mt-1 text-sm text-slate-600">
-                        Generate a structured monthly plan from this Blueprint without creating final content.
+                        This is the planning layer for the month: modules, platforms, cadence, approvals, and tasks.
+                        It does not generate final content.
                       </p>
                     </div>
-                    <form action={generateMonthlyPlan}>
-                      <input type="hidden" name="blueprintId" value={latestBlueprint.id} />
-                      <button
-                        disabled={latestBlueprint.nextRecommendedAction === "request_more_brief_data"}
-                        className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
+                    {currentMonthlyPlan ? (
+                      <a
+                        href={`/?blueprint=${latestBlueprint.id}&plan=${currentMonthlyPlan.id}#monthly-plan`}
+                        className="rounded-md border border-teal-700 bg-white px-4 py-2 text-center text-sm font-semibold text-teal-800 hover:bg-teal-50"
                       >
-                        Generate Monthly Plan
-                      </button>
-                    </form>
+                        View Current Plan
+                      </a>
+                    ) : (
+                      <form action={generateMonthlyPlan}>
+                        <input type="hidden" name="blueprintId" value={latestBlueprint.id} />
+                        <PendingSubmitButton
+                          pendingLabel="Generating Monthly Plan..."
+                          disabled={latestBlueprint.nextRecommendedAction === "request_more_brief_data"}
+                          className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
+                        >
+                          Generate Monthly Plan
+                        </PendingSubmitButton>
+                      </form>
+                    )}
                   </div>
+                  {currentMonthlyPlan ? (
+                    <p className="mt-3 rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-sm font-medium text-teal-900">
+                      A Monthly Operating Plan already exists for {currentMonthlyPlan.month}. The existing plan is
+                      displayed below.
+                    </p>
+                  ) : null}
                   {latestBlueprint.nextRecommendedAction === "request_more_brief_data" ? (
                     <p className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-900">
                       Monthly plan generation is blocked until the missing brief data is resolved.
@@ -503,7 +541,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 </details>
 
                 {selectedMonthlyPlan ? (
-                  <section className="rounded-md border border-slate-200 p-4">
+                  <section id="monthly-plan" className="scroll-mt-6 rounded-md border border-slate-200 p-4">
                     <div className="flex flex-col gap-2 border-b border-slate-200 pb-4 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-teal-700">
@@ -512,6 +550,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                         <h4 className="mt-1 text-xl font-semibold text-slate-950">
                           {selectedMonthlyPlan.month}
                         </h4>
+                        <p className="mt-3 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                          Summary
+                        </p>
                         <p className="mt-2 text-sm leading-6 text-slate-600">{selectedMonthlyPlan.summary}</p>
                       </div>
                       <div className="grid gap-2 text-sm sm:min-w-56">
@@ -606,8 +647,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                               <th className="px-3 py-3">Platform</th>
                               <th className="px-3 py-3">Format</th>
                               <th className="px-3 py-3">Topic</th>
+                              <th className="px-3 py-3">Goal</th>
                               <th className="px-3 py-3">Approval</th>
                               <th className="px-3 py-3">Autopublish</th>
+                              <th className="px-3 py-3">Status</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-200">
@@ -617,16 +660,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                                 <td className="px-3 py-3 text-slate-700">{item.moduleType}</td>
                                 <td className="px-3 py-3 text-slate-700">{item.platformName}</td>
                                 <td className="px-3 py-3 text-slate-700">{item.format}</td>
-                                <td className="px-3 py-3">
-                                  <p className="font-semibold text-slate-950">{item.topic}</p>
-                                  <p className="mt-1 text-xs leading-5 text-slate-500">{item.goal}</p>
-                                </td>
+                                <td className="px-3 py-3 font-semibold text-slate-950">{item.topic}</td>
+                                <td className="px-3 py-3 text-slate-600">{item.goal}</td>
                                 <td className="px-3 py-3 text-slate-700">
                                   {item.approvalRequired ? "Required" : "Not required"}
                                 </td>
                                 <td className="px-3 py-3 text-slate-700">
                                   {item.autopublishEligible ? "Eligible" : "No"}
                                 </td>
+                                <td className="px-3 py-3 text-slate-700">{item.status}</td>
                               </tr>
                             ))}
                           </tbody>
