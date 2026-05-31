@@ -167,6 +167,13 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Scheduling is internal and manual for now.
 - No real external publishing or automation was added.
 
+## Sprint 4B Calendar Operations
+
+- Calendar Operations were added.
+- Scheduled publications can be updated, marked as needing assets, ready, skipped, or removed from the schedule.
+- The calendar prioritizes scheduled publications and falls back to Monthly Plan previews when no schedule exists.
+- No real external publishing or automation was added.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.

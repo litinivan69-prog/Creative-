@@ -697,7 +697,11 @@ export async function scheduleContentDraft(formData: FormData) {
   );
 }
 
-export async function markScheduledPublicationReady(formData: FormData) {
+async function updateScheduledPublicationStatus(
+  formData: FormData,
+  status: "scheduled" | "needs_assets" | "ready" | "skipped",
+  notice: string,
+) {
   const scheduledPublicationId = formText(formData, "scheduledPublicationId");
 
   if (!scheduledPublicationId) {
@@ -719,11 +723,99 @@ export async function markScheduledPublicationReady(formData: FormData) {
 
   await prisma.scheduledPublication.update({
     where: { id: publication.id },
-    data: { status: "ready" },
+    data: { status },
   });
 
   revalidatePath("/");
   redirect(
-    `/?blueprint=${publication.blueprintId}&plan=${publication.monthlyPlanId}&notice=${encodeURIComponent("Публикация готова к ручному размещению.")}#scheduling`,
+    `/?blueprint=${publication.blueprintId}&plan=${publication.monthlyPlanId}&notice=${encodeURIComponent(notice)}#scheduling`,
+  );
+}
+
+export async function updateScheduledPublication(formData: FormData) {
+  const scheduledPublicationId = formText(formData, "scheduledPublicationId");
+  const scheduledDate = formText(formData, "scheduledDate");
+  const scheduledTime = formText(formData, "scheduledTime");
+  const notes = formText(formData, "notes");
+
+  if (!scheduledPublicationId) {
+    errorRedirect("Не выбрана запланированная публикация.");
+  }
+
+  if (!scheduledDate) {
+    errorRedirect("Укажите дату публикации.");
+  }
+
+  const publication = await prisma.scheduledPublication.findUnique({
+    where: { id: scheduledPublicationId },
+    select: {
+      id: true,
+      blueprintId: true,
+      monthlyPlanId: true,
+    },
+  });
+
+  if (!publication) {
+    errorRedirect("Запланированная публикация не найдена.");
+  }
+
+  await prisma.scheduledPublication.update({
+    where: { id: publication.id },
+    data: {
+      scheduledDate,
+      scheduledTime: scheduledTime || null,
+      notes: notes || null,
+    },
+  });
+
+  revalidatePath("/");
+  redirect(
+    `/?blueprint=${publication.blueprintId}&plan=${publication.monthlyPlanId}&notice=${encodeURIComponent("Параметры публикации обновлены.")}#scheduling`,
+  );
+}
+
+export async function markScheduledPublicationNeedsAssets(formData: FormData) {
+  await updateScheduledPublicationStatus(formData, "needs_assets", "Для публикации отмечена необходимость подготовить материалы.");
+}
+
+export async function markScheduledPublicationScheduled(formData: FormData) {
+  await updateScheduledPublicationStatus(formData, "scheduled", "Публикация отмечена как запланированная.");
+}
+
+export async function markScheduledPublicationReady(formData: FormData) {
+  await updateScheduledPublicationStatus(formData, "ready", "Публикация готова к ручному размещению.");
+}
+
+export async function markScheduledPublicationSkipped(formData: FormData) {
+  await updateScheduledPublicationStatus(formData, "skipped", "Публикация отмечена как пропущенная.");
+}
+
+export async function unschedulePublication(formData: FormData) {
+  const scheduledPublicationId = formText(formData, "scheduledPublicationId");
+
+  if (!scheduledPublicationId) {
+    errorRedirect("Не выбрана запланированная публикация.");
+  }
+
+  const publication = await prisma.scheduledPublication.findUnique({
+    where: { id: scheduledPublicationId },
+    select: {
+      id: true,
+      blueprintId: true,
+      monthlyPlanId: true,
+    },
+  });
+
+  if (!publication) {
+    errorRedirect("Запланированная публикация не найдена.");
+  }
+
+  await prisma.scheduledPublication.delete({
+    where: { id: publication.id },
+  });
+
+  revalidatePath("/");
+  redirect(
+    `/?blueprint=${publication.blueprintId}&plan=${publication.monthlyPlanId}&notice=${encodeURIComponent("Публикация снята с расписания.")}#scheduling`,
   );
 }

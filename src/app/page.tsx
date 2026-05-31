@@ -6,13 +6,18 @@ import {
   generateContentDraftForItem,
   generateMonthlyPlan,
   markDraftReadyToSchedule,
+  markScheduledPublicationNeedsAssets,
   markScheduledPublicationReady,
+  markScheduledPublicationScheduled,
+  markScheduledPublicationSkipped,
   rejectDraft,
   requestDraftChanges,
   scheduleContentDraft,
   sendDraftToClient,
   submitDraftForReview,
+  unschedulePublication,
   updateClientBrief,
+  updateScheduledPublication,
 } from "@/app/actions";
 import { PendingSubmitButton } from "@/app/pending-submit-button";
 import { prisma } from "@/lib/prisma";
@@ -632,6 +637,38 @@ function scheduledPublicationTone(status: string): "neutral" | "teal" | "amber" 
   return tones[status] ?? "neutral";
 }
 
+function ScheduledPublicationAction({
+  action,
+  publicationId,
+  children,
+  tone = "neutral",
+}: {
+  action: (formData: FormData) => Promise<void>;
+  publicationId: string;
+  children: React.ReactNode;
+  tone?: "neutral" | "teal" | "amber" | "rose" | "green";
+}) {
+  const tones = {
+    neutral: "border-stone-200 bg-white text-stone-700 hover:bg-stone-50",
+    teal: "border-teal-200 bg-teal-50 text-teal-800 hover:bg-teal-100",
+    amber: "border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100",
+    rose: "border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100",
+    green: "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100",
+  };
+
+  return (
+    <form action={action}>
+      <input type="hidden" name="scheduledPublicationId" value={publicationId} />
+      <PendingSubmitButton
+        pendingLabel="Обновляем..."
+        className={`rounded-md border px-2.5 py-1.5 text-xs font-bold transition disabled:cursor-wait disabled:opacity-60 ${tones[tone]}`}
+      >
+        {children}
+      </PendingSubmitButton>
+    </form>
+  );
+}
+
 function SchedulingLayer({
   drafts,
   publications,
@@ -723,14 +760,54 @@ function SchedulingLayer({
                 </p>
                 {publication.timezone ? <p className="mt-1 text-xs text-stone-400">{publication.timezone}</p> : null}
                 {publication.notes ? <p className="mt-3 rounded-md bg-stone-50 px-3 py-2 text-sm leading-6 text-stone-600">{publication.notes}</p> : null}
-                {publication.status === "scheduled" ? (
-                  <form action={markScheduledPublicationReady} className="mt-3">
+
+                <details className="mt-3 rounded-md border border-stone-200 bg-stone-50/70">
+                  <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-stone-700">Изменить дату, время или заметку</summary>
+                  <form action={updateScheduledPublication} className="grid gap-2 border-t border-stone-200 p-3 sm:grid-cols-2">
                     <input type="hidden" name="scheduledPublicationId" value={publication.id} />
-                    <PendingSubmitButton pendingLabel="Обновляем..." className={secondaryButtonClass}>
-                      Отметить готовой
+                    <label className="grid gap-1 text-xs font-bold text-stone-600">
+                      Дата публикации
+                      <input type="date" name="scheduledDate" required defaultValue={publication.scheduledDate} className={inputClass} />
+                    </label>
+                    <label className="grid gap-1 text-xs font-bold text-stone-600">
+                      Время
+                      <input type="time" name="scheduledTime" defaultValue={publication.scheduledTime ?? ""} className={inputClass} />
+                    </label>
+                    <label className="grid gap-1 text-xs font-bold text-stone-600 sm:col-span-2">
+                      Заметка
+                      <input type="text" name="notes" defaultValue={publication.notes ?? ""} className={inputClass} />
+                    </label>
+                    <PendingSubmitButton pendingLabel="Сохраняем..." className={`${secondaryButtonClass} sm:col-span-2`}>
+                      Сохранить изменения
                     </PendingSubmitButton>
                   </form>
-                ) : null}
+                </details>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {publication.status !== "needs_assets" ? (
+                    <ScheduledPublicationAction action={markScheduledPublicationNeedsAssets} publicationId={publication.id} tone="amber">
+                      Нужен визуал
+                    </ScheduledPublicationAction>
+                  ) : null}
+                  {publication.status !== "scheduled" ? (
+                    <ScheduledPublicationAction action={markScheduledPublicationScheduled} publicationId={publication.id} tone="teal">
+                      Запланировано
+                    </ScheduledPublicationAction>
+                  ) : null}
+                  {publication.status !== "ready" ? (
+                    <ScheduledPublicationAction action={markScheduledPublicationReady} publicationId={publication.id} tone="green">
+                      Готово
+                    </ScheduledPublicationAction>
+                  ) : null}
+                  {publication.status !== "skipped" ? (
+                    <ScheduledPublicationAction action={markScheduledPublicationSkipped} publicationId={publication.id}>
+                      Пропустить
+                    </ScheduledPublicationAction>
+                  ) : null}
+                  <ScheduledPublicationAction action={unschedulePublication} publicationId={publication.id} tone="rose">
+                    Снять с расписания
+                  </ScheduledPublicationAction>
+                </div>
               </article>
             ))}
             {publications.length === 0 ? (
@@ -911,6 +988,61 @@ function ContentItemAction({ item }: { item: CalendarPreviewItem }) {
   );
 }
 
+function ScheduledPublicationCalendar({
+  publications,
+}: {
+  publications: ScheduledPublicationPreview[];
+}) {
+  return (
+    <div className="bg-stone-50/50 p-4 sm:p-5">
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Операционный календарь</p>
+          <h3 className="mt-1 text-lg font-semibold text-stone-950">Публикации с подтверждённой датой</h3>
+        </div>
+        <p className="text-xs leading-5 text-stone-500">Плановые материалы скрыты, пока есть рабочее расписание.</p>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {publications.map((publication) => (
+          <article
+            key={publication.id}
+            className="rounded-lg border border-teal-200 bg-white p-4 shadow-[0_4px_12px_rgba(13,148,136,0.08)]"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap gap-1.5">
+                <StatusBadge tone="teal">{publication.platformName}</StatusBadge>
+                <StatusBadge>{publication.format}</StatusBadge>
+              </div>
+              <StatusBadge tone={scheduledPublicationTone(publication.status)}>{formatStatus(publication.status)}</StatusBadge>
+            </div>
+            <p className="mt-4 text-xs font-bold uppercase tracking-[0.08em] text-teal-700">
+              {publication.scheduledDate}
+              {publication.scheduledTime ? `, ${publication.scheduledTime}` : ""}
+            </p>
+            <h4 className="mt-2 text-sm font-semibold leading-6 text-stone-950">{publication.topic}</h4>
+            <p className="mt-2 text-xs leading-5 text-stone-500">Черновик: {publication.contentDraft.draftTitle}</p>
+            {publication.notes ? (
+              <p className="mt-3 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs leading-5 text-stone-600">
+                {publication.notes}
+              </p>
+            ) : null}
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              <StatusBadge>{formatStatus(publication.publishMode)}</StatusBadge>
+              {publication.timezone ? <StatusBadge>{publication.timezone}</StatusBadge> : null}
+            </div>
+            <a
+              href="#scheduling"
+              className="mt-4 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950"
+            >
+              Управлять публикацией
+            </a>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ContentCalendar({
   groups,
   publications,
@@ -930,8 +1062,10 @@ function ContentCalendar({
     publications.map((publication) => [publication.plannedContentItemId, publication]),
   );
   const inspectorPublication = inspectorItem ? scheduledByItemId.get(inspectorItem.id) : null;
-  const approvalCount = items.filter((item) => item.approvalRequired).length;
-  const draftCount = items.filter((item) => item.contentDraft).length;
+  const scheduledCount = publications.filter((publication) => publication.status === "scheduled").length;
+  const needsAssetsCount = publications.filter((publication) => publication.status === "needs_assets").length;
+  const readyCount = publications.filter((publication) => publication.status === "ready").length;
+  const skippedCount = publications.filter((publication) => publication.status === "skipped").length;
 
   return (
     <section id="calendar" className={`${panelClass} scroll-mt-24 overflow-hidden`}>
@@ -951,16 +1085,17 @@ function ContentCalendar({
             <StatusBadge tone="teal">{month}</StatusBadge>
           </div>
         </div>
-        <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-          <MetricCard label="Материалы" value={items.length} detail="В текущем календаре" />
-          <MetricCard label="Запланировано" value={publications.length} detail="Публикации с датой" tone="teal" />
-          <MetricCard label="Ждут согласования" value={approvalCount} detail="Нужно проверить" tone="amber" />
-          <MetricCard label="Готовые черновики" value={draftCount} detail="Подготовленные материалы" />
-          <MetricCard label="Прогноз вовлечения" value="-" detail="Аналитика появится позже" />
+        <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <MetricCard label="Запланировано" value={scheduledCount} detail="Публикации с датой" tone="teal" />
+          <MetricCard label="Нужны материалы" value={needsAssetsCount} detail="Нужно подготовить визуал" tone="amber" />
+          <MetricCard label="Готово" value={readyCount} detail="Можно размещать вручную" />
+          <MetricCard label="Пропущено" value={skippedCount} detail="Снято с текущей работы" />
         </div>
       </div>
 
-      {groups.length > 0 ? (
+      {publications.length > 0 ? (
+        <ScheduledPublicationCalendar publications={publications} />
+      ) : groups.length > 0 ? (
         <div className="grid xl:grid-cols-[minmax(0,1fr)_320px]">
           <div className="overflow-x-auto bg-stone-50/50 p-4">
             <div className="grid min-w-[920px] grid-cols-4 gap-3">
