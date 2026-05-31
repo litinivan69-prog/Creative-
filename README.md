@@ -127,6 +127,13 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Intake forms remain available as secondary onboarding controls.
 - No auth, publishing, or external integrations were added.
 
+## Sprint 2.5 Dream Mockup Rebuild
+
+- The UI was rebuilt toward premium SaaS product mockups while preserving the existing core flow.
+- A denser Command Center and Operations Overview now lead the Manager Console.
+- Content Calendar is the central production workspace with week columns and an item inspector.
+- Client Portal Preview now communicates the future approval-focused client experience more clearly.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.

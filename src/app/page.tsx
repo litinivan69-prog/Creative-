@@ -208,6 +208,9 @@ type CalendarPreviewItem = {
   contentDraft: {
     id: string;
     status: string;
+    draftTitle: string;
+    draftBody: string;
+    riskLevel: string;
   } | null;
 };
 
@@ -235,7 +238,169 @@ function suggestsVisualAsset(format: string) {
   );
 }
 
-function CalendarPreview({
+function OperationsOverview({
+  progress,
+  attentionCount,
+  draftCount,
+  integrationTaskCount,
+}: {
+  progress: number;
+  attentionCount: number;
+  draftCount: number;
+  integrationTaskCount: number;
+}) {
+  return (
+    <article className={`${panelClass} p-5 sm:p-6`}>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Operations overview</p>
+          <h2 className="mt-1 text-xl font-semibold text-stone-950">Monthly production health</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-500">
+            A practical progress signal based on prepared drafts, review pressure, and integration readiness.
+          </p>
+        </div>
+        <StatusBadge tone={integrationTaskCount > 0 ? "amber" : "green"}>
+          {integrationTaskCount > 0 ? "Access work pending" : "On track"}
+        </StatusBadge>
+      </div>
+      <div className="mt-6 grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-center">
+        <div>
+          <p className="text-5xl font-semibold text-stone-950">{progress}%</p>
+          <p className="mt-2 text-sm font-semibold text-stone-700">Production readiness</p>
+          <p className="mt-1 text-xs leading-5 text-stone-400">Drafts prepared against planned calendar items.</p>
+        </div>
+        <div>
+          <div className="flex h-44 items-end gap-3 rounded-lg border border-stone-200 bg-stone-50 px-5 pb-4 pt-6">
+            {[
+              { label: "Plan", value: 100, tone: "bg-teal-500" },
+              { label: "Draft", value: Math.max(progress, 10), tone: "bg-sky-500" },
+              { label: "Review", value: attentionCount > 0 ? 58 : 20, tone: "bg-amber-400" },
+              { label: "Ready", value: integrationTaskCount > 0 ? 22 : Math.max(progress - 12, 10), tone: "bg-emerald-500" },
+            ].map((bar) => (
+              <div key={bar.label} className="flex flex-1 flex-col items-center justify-end gap-2">
+                <div className={`w-full max-w-14 rounded-t-md ${bar.tone}`} style={{ height: `${bar.value}%` }} />
+                <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-stone-400">{bar.label}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-3 text-xs text-stone-500">
+            <span><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-emerald-500" />On track</span>
+            <span><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-sky-500" />In progress</span>
+            <span><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-amber-400" />At risk</span>
+            <span><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-rose-500" />Blocked</span>
+          </div>
+        </div>
+      </div>
+      <div className="mt-5 grid gap-2 sm:grid-cols-3">
+        <MetricCard label="Prepared drafts" value={draftCount} detail="Ready for review" tone="teal" />
+        <MetricCard label="Needs attention" value={attentionCount} detail="Approval pressure" tone="amber" />
+        <MetricCard label="Integration tasks" value={integrationTaskCount} detail="Before launch" tone={integrationTaskCount > 0 ? "rose" : "stone"} />
+      </div>
+    </article>
+  );
+}
+
+function ClientPortalPreview({
+  clientName,
+  approvalCount,
+  weeklyCount,
+  selectedItem,
+}: {
+  clientName: string;
+  approvalCount: number;
+  weeklyCount: number;
+  selectedItem?: CalendarPreviewItem;
+}) {
+  const timeline = ["Planning", "Content creation", "Approvals", "Publishing", "Reporting"];
+
+  return (
+    <section className={`${panelClass} overflow-hidden`}>
+      <div className="border-b border-stone-200 bg-[#f8fbfa] px-5 py-5 sm:px-6">
+        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Future client portal preview</p>
+        <h2 className="mt-2 text-2xl font-semibold text-stone-950">Welcome, {clientName}</h2>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
+          A calm approval-focused client view powered by the same Adaptive Presence operating system.
+        </p>
+      </div>
+      <div className="grid gap-5 p-5 sm:p-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div>
+          <h3 className="text-sm font-semibold text-stone-950">What needs your attention</h3>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <MetricCard label="Awaiting approval" value={approvalCount} tone="amber" />
+            <MetricCard label="Scheduled this week" value={weeklyCount} tone="teal" />
+            <MetricCard label="Published this month" value="-" detail="Coming later" />
+            <MetricCard label="Open review responses" value="-" detail="Events coming later" />
+          </div>
+          <div className="mt-6">
+            <p className="text-sm font-semibold text-stone-950">Monthly timeline</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-5">
+              {timeline.map((stage, index) => (
+                <div key={stage} className={`rounded-md border px-3 py-3 ${index < 3 ? "border-teal-200 bg-teal-50" : "border-stone-200 bg-stone-50"}`}>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-stone-400">0{index + 1}</p>
+                  <p className="mt-2 text-xs font-semibold text-stone-700">{stage}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <article className="rounded-lg border border-stone-200 bg-white p-4 shadow-[0_1px_2px_rgba(28,36,38,0.04)]">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-bold text-stone-700">Approval card</p>
+            <StatusBadge tone="amber">Preview only</StatusBadge>
+          </div>
+          {selectedItem ? (
+            <>
+              <div className="mt-4 flex flex-wrap gap-1.5">
+                <StatusBadge tone="teal">{selectedItem.platformName}</StatusBadge>
+                <StatusBadge>{selectedItem.format}</StatusBadge>
+              </div>
+              <p className="mt-3 text-sm font-semibold leading-6 text-stone-900">{selectedItem.topic}</p>
+              <div className="mt-3 flex h-24 items-center justify-center rounded-md border border-dashed border-stone-300 bg-stone-50 text-[10px] font-bold uppercase tracking-[0.1em] text-stone-400">
+                Visual preview
+              </div>
+              <p className="mt-3 line-clamp-4 text-xs leading-5 text-stone-500">
+                {selectedItem.contentDraft?.draftBody || "The approved draft text will appear here for a simple client review experience."}
+              </p>
+            </>
+          ) : (
+            <p className="mt-4 text-sm leading-6 text-stone-500">The next approval-ready publication will appear here.</p>
+          )}
+          <div className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3">
+            <p className="text-xs font-bold text-stone-700">Comments</p>
+            <p className="mt-1 text-xs leading-5 text-stone-400">Client and manager discussion will appear here.</p>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button type="button" disabled className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs font-bold text-stone-400">Request changes</button>
+            <button type="button" disabled className="rounded-md bg-teal-700 px-3 py-2 text-xs font-bold text-white opacity-60">Approve</button>
+          </div>
+        </article>
+      </div>
+    </section>
+  );
+}
+
+function ContentItemAction({ item }: { item: CalendarPreviewItem }) {
+  return item.contentDraft ? (
+    <a
+      href={`#draft-${item.contentDraft.id}`}
+      className="inline-flex rounded-md border border-teal-200 bg-teal-50 px-2.5 py-1.5 text-xs font-bold text-teal-800 transition hover:bg-teal-100"
+    >
+      Review draft
+    </a>
+  ) : (
+    <form action={generateContentDraftForItem}>
+      <input type="hidden" name="plannedContentItemId" value={item.id} />
+      <PendingSubmitButton
+        pendingLabel="Generating..."
+        className="rounded-md bg-stone-950 px-2.5 py-1.5 text-xs font-bold text-white transition hover:bg-stone-800 disabled:cursor-wait disabled:bg-stone-400"
+      >
+        Generate draft
+      </PendingSubmitButton>
+    </form>
+  );
+}
+
+function ContentCalendar({
   groups,
   month,
   blueprintId,
@@ -246,88 +411,149 @@ function CalendarPreview({
   blueprintId?: string;
   generationBlocked: boolean;
 }) {
+  const items = groups.flatMap((group) => group.items);
+  const inspectorItem = items[0];
+  const approvalCount = items.filter((item) => item.approvalRequired).length;
+  const draftCount = items.filter((item) => item.contentDraft).length;
+
   return (
-    <section id="calendar" className={`${panelClass} scroll-mt-24 p-5 sm:p-6`}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Calendar preview</p>
-          <h2 className="mt-1 text-xl font-semibold text-stone-950">Monthly operations calendar</h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
-            A week-based view of planned work, approvals, and draft readiness derived from the current Monthly Plan.
-          </p>
+    <section id="calendar" className={`${panelClass} scroll-mt-24 overflow-hidden`}>
+      <div className="border-b border-stone-200 px-5 py-5 sm:px-6">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Production workspace</p>
+            <h2 className="mt-1 text-2xl font-semibold text-stone-950">Content Calendar</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
+              The operational center for planned content, drafts, review status, and future publishing paths.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={secondaryButtonClass}>All clients</button>
+            <button type="button" className={secondaryButtonClass}>All platforms</button>
+            <button type="button" className={secondaryButtonClass}>Week</button>
+            <StatusBadge tone="teal">{month}</StatusBadge>
+          </div>
         </div>
-        <StatusBadge tone="teal">{month}</StatusBadge>
+        <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          <MetricCard label="Content pieces" value={items.length} detail="In current calendar" />
+          <MetricCard label="Scheduled" value={items.length} detail="Planning layer" tone="teal" />
+          <MetricCard label="Awaiting approval" value={approvalCount} detail="Needs review" tone="amber" />
+          <MetricCard label="Draft ready" value={draftCount} detail="Prepared objects" />
+          <MetricCard label="Engagement estimate" value="-" detail="Analytics coming later" />
+        </div>
       </div>
 
       {groups.length > 0 ? (
-        <div className="mt-5 grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
-          {groups.map((group) => (
-            <article key={group.label} className="rounded-lg border border-stone-200 bg-stone-50/70 p-3">
-              <div className="flex items-center justify-between gap-3 border-b border-stone-200 pb-3">
-                <p className="text-sm font-semibold text-stone-950">{group.label}</p>
-                <StatusBadge>{group.items.length} items</StatusBadge>
-              </div>
-              <div className="mt-3 grid gap-2">
-                {group.items.map((item) => (
-                  <div key={item.id} className="rounded-md border border-stone-200 bg-white p-3 shadow-[0_1px_1px_rgba(28,36,38,0.03)]">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <StatusBadge tone="teal">{item.platformName}</StatusBadge>
-                      <StatusBadge>{item.format}</StatusBadge>
-                      {suggestsVisualAsset(item.format) ? <StatusBadge tone="amber">Visual asset</StatusBadge> : null}
+        <div className="grid xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="overflow-x-auto bg-stone-50/50 p-4">
+            <div className="grid min-w-[920px] grid-cols-4 gap-3">
+              {groups.map((group) => (
+                <article key={group.label} className="rounded-lg border border-stone-200 bg-stone-100/70 p-3">
+                  <div className="flex items-center justify-between gap-3 border-b border-stone-200 pb-3">
+                    <div>
+                      <p className="text-sm font-semibold text-stone-950">{group.label}</p>
+                      <p className="mt-1 text-xs text-stone-400">{group.items.length} content pieces</p>
                     </div>
-                    <p className="mt-2 text-sm font-semibold leading-5 text-stone-900">{item.topic}</p>
-                    <p className="mt-1 text-xs text-stone-400">{item.plannedDate}</p>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      <StatusBadge tone={item.status === "planned" ? "teal" : "amber"}>{formatStatus(item.status)}</StatusBadge>
-                      {item.approvalRequired ? <StatusBadge tone="amber">Needs review</StatusBadge> : null}
-                      {item.contentDraft ? <StatusBadge tone="green">Draft ready</StatusBadge> : null}
-                    </div>
-                    <div className="mt-3 border-t border-stone-100 pt-3">
-                      {item.contentDraft ? (
-                        <a href={`#draft-${item.contentDraft.id}`} className="text-xs font-bold text-teal-700 transition hover:text-teal-900">
-                          Review draft
-                        </a>
-                      ) : (
-                        <form action={generateContentDraftForItem}>
-                          <input type="hidden" name="plannedContentItemId" value={item.id} />
-                          <PendingSubmitButton
-                            pendingLabel="Generating..."
-                            className="rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-bold text-stone-700 transition hover:border-teal-500 hover:text-teal-800 disabled:cursor-wait disabled:text-stone-400"
-                          >
-                            Generate draft
-                          </PendingSubmitButton>
-                        </form>
-                      )}
-                    </div>
+                    <StatusBadge>{group.items.length}</StatusBadge>
                   </div>
-                ))}
+                  <div className="mt-3 grid gap-2">
+                    {group.items.map((item) => (
+                      <div key={item.id} className="rounded-md border border-stone-200 bg-white p-3 shadow-[0_1px_2px_rgba(28,36,38,0.04)]">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <StatusBadge tone="teal">{item.platformName}</StatusBadge>
+                          <StatusBadge>{item.format}</StatusBadge>
+                        </div>
+                        <p className="mt-3 text-xs font-semibold text-stone-400">{item.plannedDate}</p>
+                        <p className="mt-1 text-sm font-semibold leading-5 text-stone-900">{item.topic}</p>
+                        {suggestsVisualAsset(item.format) ? (
+                          <div className="mt-3 flex h-16 items-center justify-center rounded-md border border-dashed border-stone-300 bg-stone-50 text-[10px] font-bold uppercase tracking-[0.1em] text-stone-400">
+                            Visual / video
+                          </div>
+                        ) : null}
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          <StatusBadge tone={item.status === "planned" ? "teal" : "amber"}>{formatStatus(item.status)}</StatusBadge>
+                          {item.approvalRequired ? <StatusBadge tone="amber">Needs review</StatusBadge> : null}
+                          {item.contentDraft ? <StatusBadge tone="green">Draft ready</StatusBadge> : null}
+                        </div>
+                        <div className="mt-3 border-t border-stone-100 pt-3">
+                          <ContentItemAction item={item} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+
+          <aside className="border-t border-stone-200 bg-white p-5 xl:border-l xl:border-t-0">
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Content inspector</p>
+            {inspectorItem ? (
+              <div className="mt-4">
+                <div className="flex flex-wrap gap-1.5">
+                  <StatusBadge tone="teal">{inspectorItem.platformName}</StatusBadge>
+                  <StatusBadge>{inspectorItem.format}</StatusBadge>
+                </div>
+                <h3 className="mt-3 text-lg font-semibold leading-7 text-stone-950">{inspectorItem.topic}</h3>
+                <p className="mt-1 text-xs font-semibold text-stone-400">{inspectorItem.plannedDate}</p>
+                <div className="mt-4 flex flex-wrap gap-1.5">
+                  <StatusBadge tone="teal">{formatStatus(inspectorItem.status)}</StatusBadge>
+                  {inspectorItem.approvalRequired ? <StatusBadge tone="amber">Needs review</StatusBadge> : <StatusBadge tone="green">Review optional</StatusBadge>}
+                </div>
+                <div className="mt-4 flex h-32 items-center justify-center rounded-lg border border-dashed border-stone-300 bg-stone-50 text-center text-[10px] font-bold uppercase tracking-[0.12em] text-stone-400">
+                  Visual preview
+                </div>
+                <div className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3">
+                  <p className="text-xs font-bold text-stone-700">Draft preview</p>
+                  <p className="mt-2 line-clamp-5 text-xs leading-5 text-stone-500">
+                    {inspectorItem.contentDraft?.draftBody || "Generate a draft to prepare manager-review copy for this calendar item."}
+                  </p>
+                </div>
+                <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-xs font-bold text-amber-900">Approval block</p>
+                  <p className="mt-1 text-xs leading-5 text-amber-800">
+                    {inspectorItem.approvalRequired ? "Human review is required before any future scheduling step." : "This item can follow the Blueprint review policy."}
+                  </p>
+                </div>
+                <div className="mt-3 rounded-md border border-teal-200 bg-teal-50 p-3">
+                  <p className="text-xs font-bold text-teal-900">AI recommendation</p>
+                  <p className="mt-1 text-xs leading-5 text-teal-800">Keep the channel-native angle and confirm any factual details during review.</p>
+                </div>
+                <div className="mt-3 rounded-md border border-stone-200 p-3">
+                  <p className="text-xs font-bold text-stone-700">Publish path</p>
+                  <p className="mt-1 text-xs leading-5 text-stone-500">Draft &rarr; Review &rarr; Approval &rarr; Scheduling</p>
+                </div>
+                <div className="mt-4 grid gap-2">
+                  <ContentItemAction item={inspectorItem} />
+                  <button type="button" disabled className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs font-bold text-stone-400">Send to client</button>
+                  <button type="button" disabled className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs font-bold text-stone-400">Approve &amp; schedule</button>
+                </div>
               </div>
-            </article>
-          ))}
+            ) : (
+              <p className="mt-4 text-sm leading-6 text-stone-500">Calendar item details will appear here after the first Monthly Plan is generated.</p>
+            )}
+          </aside>
         </div>
       ) : (
-        <div className="mt-5 rounded-lg border border-dashed border-teal-300 bg-teal-50/70 p-5">
-          <p className="text-sm font-semibold text-teal-950">Your operating calendar is ready for its first plan.</p>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-teal-800">
-            Generate a Monthly Operating Plan to turn the Blueprint into week-based content operations, review queues,
-            and draft tasks.
-          </p>
-          {blueprintId ? (
-            <form action={generateMonthlyPlan} className="mt-4">
-              <input type="hidden" name="blueprintId" value={blueprintId} />
-              <PendingSubmitButton
-                pendingLabel="Generating Monthly Plan..."
-                disabled={generationBlocked}
-                className={primaryButtonClass}
-              >
-                Generate Monthly Plan
-              </PendingSubmitButton>
-            </form>
-          ) : (
-            <a href="#clients" className="mt-4 inline-flex text-sm font-bold text-teal-800 transition hover:text-teal-950">
-              Start with client intake
-            </a>
-          )}
+        <div className="p-5 sm:p-6">
+          <div className="rounded-lg border border-dashed border-teal-300 bg-teal-50/70 p-6">
+            <p className="text-sm font-semibold text-teal-950">Your production calendar is ready for its first plan.</p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-teal-800">
+              Generate a Monthly Operating Plan to activate week columns, review queues, inspector details, and draft actions.
+            </p>
+            {blueprintId ? (
+              <form action={generateMonthlyPlan} className="mt-4">
+                <input type="hidden" name="blueprintId" value={blueprintId} />
+                <PendingSubmitButton pendingLabel="Generating Monthly Plan..." disabled={generationBlocked} className={primaryButtonClass}>
+                  Generate Monthly Plan
+                </PendingSubmitButton>
+              </form>
+            ) : (
+              <a href="#clients" className="mt-4 inline-flex text-sm font-bold text-teal-800 transition hover:text-teal-950">
+                Start with Setup / Intake
+              </a>
+            )}
+          </div>
         </div>
       )}
     </section>
@@ -431,8 +657,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
       ),
     ).length ?? 0;
   const firstCalendarGroup = calendarGroups[0];
-  const recentlyPreparedItems =
-    selectedMonthlyPlan?.plannedContentItems.filter((item) => item.contentDraft).slice(0, 3) ?? [];
+  const plannedContentCount = selectedMonthlyPlan?.plannedContentItems.length ?? 0;
+  const productionProgress =
+    plannedContentCount > 0 ? Math.round((draftCount / plannedContentCount) * 100) : 0;
+  const selectedInspectorItem = selectedMonthlyPlan?.plannedContentItems[0];
 
   return (
     <div className="min-h-screen bg-[#f4f5f2] text-stone-900">
@@ -477,9 +705,18 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
           </div>
         </nav>
 
-        <div id="settings" className="border-t border-white/10 px-5 py-4">
-          <p className="text-xs font-semibold text-stone-300">Manager Console</p>
-          <p className="mt-1 text-xs leading-5 text-stone-500">Internal operating workspace</p>
+        <div id="settings" className="grid gap-3 border-t border-white/10 px-4 py-4">
+          <div className="rounded-md border border-white/10 bg-white/5 p-3">
+            <p className="text-xs font-semibold text-white">AI Copilot</p>
+            <p className="mt-1 text-xs leading-5 text-stone-400">Ask anything about clients or operations.</p>
+          </div>
+          <div className="flex items-center gap-3 px-1">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-500 text-xs font-bold text-white">M</div>
+            <div>
+              <p className="text-xs font-semibold text-stone-200">Manager profile</p>
+              <p className="mt-0.5 text-[11px] text-stone-500">Creative operations</p>
+            </div>
+          </div>
         </div>
       </aside>
 
@@ -492,16 +729,27 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
               </div>
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-base font-semibold text-stone-950">Adaptive Presence OS</h1>
-                  <StatusBadge tone="teal">Manager Console</StatusBadge>
+                  <h1 className="text-base font-semibold text-stone-950">Manager Console</h1>
+                  <StatusBadge tone="teal">Adaptive Presence OS</StatusBadge>
                 </div>
                 <p className="mt-0.5 text-xs font-medium text-stone-400">by Creative</p>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-4">
-              <ConnectionBadge label={process.env.OPENAI_API_KEY ? "OpenAI connected" : "OpenAI setup needed"} active={Boolean(process.env.OPENAI_API_KEY)} />
-              <ConnectionBadge label="Neon connected" />
-              <ConnectionBadge label={process.env.VERCEL ? "Vercel live" : "Local workspace"} />
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="hidden flex-wrap items-center gap-3 xl:flex">
+                <ConnectionBadge label={process.env.OPENAI_API_KEY ? "OpenAI connected" : "OpenAI setup needed"} active={Boolean(process.env.OPENAI_API_KEY)} />
+                <ConnectionBadge label="Neon connected" />
+                <ConnectionBadge label={process.env.VERCEL ? "Live" : "Local"} />
+              </div>
+              <input
+                aria-label="Search workspace"
+                className="w-64 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-700 outline-none placeholder:text-stone-400 focus:border-teal-500"
+                placeholder="Search clients, drafts, events..."
+              />
+              <button type="button" aria-label="Notifications" className="relative flex h-9 w-9 items-center justify-center rounded-md border border-stone-200 bg-white text-xs font-bold text-stone-600">
+                N
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] text-white">{approvalQueueCount}</span>
+              </button>
             </div>
           </div>
         </header>
@@ -533,11 +781,48 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
               </div>
 
               <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <MetricCard label="Needs review" value={approvalQueueCount} detail="Planned items awaiting approval" tone="amber" />
-                <MetricCard label="Draft ready" value={draftCount} detail="Prepared for manager review" tone="teal" />
-                <MetricCard label="Without draft" value={withoutDraftCount} detail="Planned items still to prepare" />
-                <MetricCard label="Integration tasks" value={integrationTaskCount} detail="Access work before launch" tone={integrationTaskCount > 0 ? "rose" : "stone"} />
+                <MetricCard label="Today needs attention" value={approvalQueueCount + integrationTaskCount} detail="Reviews and access work" tone="amber" />
+                <MetricCard label="Clients in work" value={clients.length} detail="Active operating records" tone="teal" />
+                <MetricCard label="Drafts awaiting approval" value={draftCount} detail="Prepared review objects" />
+                <MetricCard label="New events" value={integrationTaskCount} detail="Placeholder operational signal" tone={integrationTaskCount > 0 ? "rose" : "stone"} />
               </div>
+            </section>
+
+            <section className="mt-7 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+              <OperationsOverview
+                progress={productionProgress}
+                attentionCount={approvalQueueCount}
+                draftCount={draftCount}
+                integrationTaskCount={integrationTaskCount}
+              />
+              <article className={`${panelClass} p-5`}>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Selected client</p>
+                  <StatusBadge tone={latestBlueprint ? "green" : "amber"}>{latestBlueprint ? "Active" : "Setup needed"}</StatusBadge>
+                </div>
+                <h2 className="mt-4 text-xl font-semibold text-stone-950">{latestBlueprint?.client.name ?? "No client selected"}</h2>
+                <p className="mt-1 text-xs font-semibold text-stone-400">{latestBlueprint?.client.industry ?? "Choose or create a client to begin."}</p>
+                <div className="mt-5 grid gap-2">
+                  <div className="rounded-md border border-stone-200 bg-stone-50 p-3">
+                    <p className="text-xs font-bold text-stone-700">Blueprint</p>
+                    <p className="mt-1 text-xs leading-5 text-stone-500">{latestBlueprint ? `${latestBlueprint.confidenceScore}% confidence` : "Not generated"}</p>
+                  </div>
+                  <div className="rounded-md border border-stone-200 bg-stone-50 p-3">
+                    <p className="text-xs font-bold text-stone-700">Monthly plan</p>
+                    <p className="mt-1 text-xs leading-5 text-stone-500">{selectedMonthlyPlan ? `${plannedContentCount} calendar items` : "Not generated"}</p>
+                  </div>
+                  <div className="rounded-md border border-stone-200 bg-stone-50 p-3">
+                    <p className="text-xs font-bold text-stone-700">Next recommended action</p>
+                    <p className="mt-1 text-xs leading-5 text-stone-500">{latestBlueprint?.nextRecommendedAction ?? "Create client brief"}</p>
+                  </div>
+                </div>
+                <div className="mt-4 rounded-md border border-teal-200 bg-teal-50 p-3">
+                  <p className="text-xs font-bold text-teal-900">AI insight</p>
+                  <p className="mt-1 text-xs leading-5 text-teal-800">
+                    {latestBlueprint ? "Keep the current operating sequence focused on review quality and channel-native execution." : "The AI operating layer activates after Blueprint generation."}
+                  </p>
+                </div>
+              </article>
             </section>
 
             <section id="approvals" className="mt-7 grid scroll-mt-24 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
@@ -610,69 +895,34 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
               </article>
             </section>
 
-            <section className="mt-7 grid items-start gap-5 2xl:grid-cols-[minmax(0,1fr)_360px]">
-              <CalendarPreview
+            <section className="mt-7">
+              <ContentCalendar
                 groups={calendarGroups}
                 month={selectedMonthlyPlan?.month ?? currentMonth()}
                 blueprintId={latestBlueprint?.id}
                 generationBlocked={latestBlueprint?.nextRecommendedAction === "request_more_brief_data"}
               />
-              <div className="grid gap-5">
-                <article className={`${panelClass} p-5`}>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Client preview</p>
-                      <h2 className="mt-1 text-lg font-semibold text-stone-950">Approval-focused portal</h2>
-                    </div>
-                    <StatusBadge tone="amber">Preview only</StatusBadge>
-                  </div>
-                  <p className="mt-3 text-sm leading-6 text-stone-500">
-                    A calm, simplified view of the same operating plan. Auth and approval actions come later.
-                  </p>
-                  <div className="mt-4 grid gap-2">
-                    <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5">
-                      <p className="text-xs font-bold text-amber-900">Awaiting your approval</p>
-                      <p className="mt-1 text-sm text-amber-800">{approvalQueueCount} planned items need review.</p>
-                    </div>
-                    <div className="rounded-md border border-teal-200 bg-teal-50 px-3 py-2.5">
-                      <p className="text-xs font-bold text-teal-900">Planned this week</p>
-                      <p className="mt-1 text-sm text-teal-800">
-                        {firstCalendarGroup ? `${firstCalendarGroup.items.length} items in ${firstCalendarGroup.label}.` : "Your first weekly plan will appear here."}
-                      </p>
-                    </div>
-                    <div className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2.5">
-                      <p className="text-xs font-bold text-stone-700">Recently prepared</p>
-                      <p className="mt-1 text-sm text-stone-500">
-                        {recentlyPreparedItems.length > 0 ? `${recentlyPreparedItems.length} drafts are ready to review.` : "Prepared drafts will appear here."}
-                      </p>
-                    </div>
-                    <div className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2.5">
-                      <p className="text-xs font-bold text-stone-700">New reviews / events</p>
-                      <p className="mt-1 text-sm text-stone-500">Coming soon with the future events stream.</p>
-                    </div>
-                  </div>
-                </article>
-
-                <article className={`${panelClass} p-5`}>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Product mode</p>
-                  <h2 className="mt-1 text-lg font-semibold text-stone-950">One OS, two views</h2>
-                  <div className="mt-4 grid gap-3 text-sm leading-6">
-                    <div className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2">
-                      <p className="font-semibold text-stone-900">Manager Console</p>
-                      <p className="text-stone-500">Internal control for strategy, operations, risks, and drafts.</p>
-                    </div>
-                    <div className="rounded-md border border-teal-200 bg-teal-50 px-3 py-2">
-                      <p className="font-semibold text-teal-900">Client Portal</p>
-                      <p className="text-teal-700">A future simplified view for approvals and progress.</p>
-                    </div>
-                    <p className="text-stone-500">Both views use the same underlying operating system.</p>
-                  </div>
-                </article>
-              </div>
             </section>
 
-            <div className="mt-7 grid items-start gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
-              <aside id="clients" className="grid scroll-mt-24 gap-5 xl:sticky xl:top-24">
+            <div className="mt-7">
+              <ClientPortalPreview
+                clientName={latestBlueprint?.client.name ?? "your business"}
+                approvalCount={approvalQueueCount}
+                weeklyCount={firstCalendarGroup?.items.length ?? 0}
+                selectedItem={selectedInspectorItem}
+              />
+            </div>
+
+            <section id="clients" className="mt-10 scroll-mt-24">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Setup / Intake</p>
+                <h2 className="mt-1 text-2xl font-semibold text-stone-950">Client operating configuration</h2>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
+                  Secondary onboarding controls and detailed operating records. Daily work stays in the command center and Content Calendar above.
+                </p>
+              </div>
+              <div className="mt-5 grid items-start gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
+              <aside className="grid gap-5 xl:sticky xl:top-24">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-stone-400">Setup and intake</p>
                   <p className="mt-1 text-sm leading-6 text-stone-500">Secondary controls for onboarding and brief updates.</p>
@@ -1165,10 +1415,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                           return (
                             <article id={`draft-${draft.id}`} key={draft.id} className="scroll-mt-24 rounded-lg border border-stone-200 bg-white p-5">
                               <div className="flex flex-col gap-3 border-b border-stone-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
-                                <div>
+                                <div className="flex items-start gap-3">
+                                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-md border border-dashed border-stone-300 bg-stone-50 text-[9px] font-bold uppercase tracking-[0.1em] text-stone-400">
+                                    Visual
+                                  </div>
+                                  <div>
                                   <p className="text-xs font-bold uppercase tracking-[0.1em] text-teal-700">{draft.platformName} &middot; {draft.format}</p>
                                   <h4 className="mt-2 text-lg font-semibold text-stone-950">{draft.draftTitle}</h4>
                                   <p className="mt-1 text-xs text-stone-400">{draft.topic}</p>
+                                  </div>
                                 </div>
                                 <div className="flex flex-wrap gap-2">
                                   <StatusBadge tone={draft.status === "approved" ? "green" : "amber"}>{formatStatus(draft.status)}</StatusBadge>
@@ -1241,7 +1496,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   </div>
                 </div>
               </div>
-            </div>
+              </div>
+            </section>
           </div>
         </main>
       </div>
