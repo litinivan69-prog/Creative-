@@ -5,6 +5,7 @@ import {
   validateBlueprintForPersistence,
 } from "@/lib/blueprint-schema";
 import { ContentDraftSchema } from "@/lib/content-draft-schema";
+import { CreativeAssetBriefSchema } from "@/lib/creative-asset-schema";
 import { MonthlyOperatingPlanSchema } from "@/lib/monthly-plan-schema";
 
 const model = process.env.OPENAI_MODEL ?? "gpt-4.1-mini";
@@ -153,6 +154,68 @@ export async function generateContentDraft(input: {
 
   if (!response.output_parsed) {
     throw new Error("The model did not return a parseable content draft.");
+  }
+
+  return response.output_parsed;
+}
+
+export async function generateCreativeAssetBrief(input: {
+  clientName: string;
+  clientIndustry?: string | null;
+  blueprintSummary: string;
+  blueprintContext: unknown;
+  monthlyPlanSummary: string;
+  scheduledPublication: unknown;
+  plannedContentItem: unknown;
+  contentDraft: unknown;
+  platformName: string;
+  format: string;
+  topic: string;
+}) {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error("OPENAI_API_KEY is not configured.");
+  }
+
+  const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+
+  const response = await openai.responses.parse({
+    model,
+    input: [
+      {
+        role: "system",
+        content:
+          'Create exactly one practical creative asset brief for one scheduled publication. Think like a senior art director and SMM strategist working for the Russian market. Return every user-facing text field in natural Russian. Adapt the brief to the exact platform, format, topic, content draft, client context, Blueprint review policy, and risk requirements. Consider channel-native behavior for VK, Telegram, Яндекс Карты, websites, and other Russian-market surfaces when those platforms are present. The brief must explain the visual idea, composition, mood, and what a designer or future AI image/video tool should create. Include practical formatRequirements with dimensions, aspect ratio, duration, or platform requirements when inferable. Keep textOnAsset short and exact; use an empty string when no text should appear on the visual. references must describe a visual reference direction, not external URLs. Avoid text-heavy visuals unless the format requires them. Do not invent facts, certifications, prices, people, licenses, cases, guarantees, or unsupported before/after claims. Avoid unsafe medical, legal, financial, or reputation-sensitive promises. approvalRequired should usually be true for client-facing visual assets and must be true when the context is regulated, sensitive, or uncertain. This sprint creates only a structured brief: do not generate an image, video, design file, or publication. Return only schema-valid structured JSON.',
+      },
+      {
+        role: "user",
+        content: [
+          `Client name: ${input.clientName}`,
+          `Client industry: ${input.clientIndustry || "Not provided"}`,
+          `Blueprint summary: ${input.blueprintSummary}`,
+          `Monthly plan summary: ${input.monthlyPlanSummary}`,
+          `Platform: ${input.platformName}`,
+          `Format: ${input.format}`,
+          `Topic: ${input.topic}`,
+          "Relevant Blueprint JSON:",
+          JSON.stringify(input.blueprintContext, null, 2),
+          "Scheduled publication JSON:",
+          JSON.stringify(input.scheduledPublication, null, 2),
+          "Planned content item JSON:",
+          JSON.stringify(input.plannedContentItem, null, 2),
+          "Content draft JSON:",
+          JSON.stringify(input.contentDraft, null, 2),
+        ].join("\n"),
+      },
+    ],
+    text: {
+      format: zodTextFormat(CreativeAssetBriefSchema, "creative_asset_brief"),
+    },
+  });
+
+  if (!response.output_parsed) {
+    throw new Error("The model did not return a parseable creative asset brief.");
   }
 
   return response.output_parsed;

@@ -181,6 +181,13 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Creative assets have production statuses for preparation and approval.
 - No real image or video generation and no external design integrations were added.
 
+## Sprint 5B AI Creative Brief Generation
+
+- AI Creative Brief Generation was added.
+- The system can generate structured visual or video briefs for scheduled publications.
+- Generated briefs remain editable and follow the same Creative Asset production workflow.
+- Actual image or video generation was not added.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.

@@ -5,6 +5,7 @@ import {
   createClient,
   generateBlueprint,
   generateContentDraftForItem,
+  generateCreativeAssetBriefForPublication,
   generateMonthlyPlan,
   markDraftReadyToSchedule,
   markScheduledPublicationNeedsAssets,
@@ -802,6 +803,24 @@ function SchedulingLayer({
                 </p>
                 {publication.timezone ? <p className="mt-1 text-xs text-stone-400">{publication.timezone}</p> : null}
                 {publication.notes ? <p className="mt-3 rounded-md bg-stone-50 px-3 py-2 text-sm leading-6 text-stone-600">{publication.notes}</p> : null}
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {publication.creativeAssets.length > 0 ? (
+                    <>
+                      <StatusBadge tone="teal">{formatStatus(publication.creativeAssets[0].assetType)}</StatusBadge>
+                      <StatusBadge tone={creativeAssetTone(publication.creativeAssets[0].status)}>
+                        {formatStatus(publication.creativeAssets[0].status)}
+                      </StatusBadge>
+                      <a href="#assets" className="inline-flex items-center text-xs font-bold text-teal-800 transition hover:text-teal-950">
+                        Открыть ТЗ
+                      </a>
+                    </>
+                  ) : (
+                    <StatusBadge tone="neutral">ТЗ на визуал не создано</StatusBadge>
+                  )}
+                  {publication.status === "needs_assets" && publication.creativeAssets.length === 0 ? (
+                    <StatusBadge tone="amber">Нужно сгенерировать или создать ТЗ</StatusBadge>
+                  ) : null}
+                </div>
 
                 <details className="mt-3 rounded-md border border-stone-200 bg-stone-50/70">
                   <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-stone-700">Изменить дату, время или заметку</summary>
@@ -962,6 +981,19 @@ function CreativeAssetLayer({
                     {publication.scheduledDate}{publication.scheduledTime ? `, ${publication.scheduledTime}` : ""}
                   </StatusBadge>
                 </div>
+                <div className="mt-4 rounded-md border border-teal-200 bg-teal-50/70 p-3">
+                  <p className="text-xs font-bold text-teal-950">AI-помощник для ТЗ</p>
+                  <p className="mt-1 text-xs leading-5 text-teal-800">
+                    Система подготовит ТЗ на основе черновика, площадки, формата и темы публикации.
+                  </p>
+                  <form action={generateCreativeAssetBriefForPublication} className="mt-3">
+                    <input type="hidden" name="scheduledPublicationId" value={publication.id} />
+                    <PendingSubmitButton pendingLabel="Генерируем ТЗ..." className={primaryButtonClass}>
+                      Сгенерировать ТЗ через AI
+                    </PendingSubmitButton>
+                  </form>
+                </div>
+                <p className="mt-4 text-xs font-bold text-stone-500">Или заполните ТЗ вручную</p>
                 <form action={createCreativeAssetBrief} className="mt-4 grid gap-2 sm:grid-cols-2">
                   <input type="hidden" name="scheduledPublicationId" value={publication.id} />
                   <label className="grid gap-1 text-xs font-bold text-stone-600">
@@ -1296,7 +1328,7 @@ function ScheduledPublicationCalendar({
                   <StatusBadge tone={creativeAssetTone(asset.status)}>{formatStatus(asset.status)}</StatusBadge>
                 </>
               ) : publication.status === "needs_assets" ? (
-                <StatusBadge tone="amber">Нужно ТЗ на визуал</StatusBadge>
+                <StatusBadge tone="amber">Нет ТЗ на визуал</StatusBadge>
               ) : null}
             </div>
             <a

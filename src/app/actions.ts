@@ -6,6 +6,7 @@ import { Prisma } from "@prisma/client";
 import {
   generateClientPresenceBlueprint,
   generateContentDraft,
+  generateCreativeAssetBrief,
   generateMonthlyOperatingPlan,
 } from "@/lib/openai";
 import { prisma } from "@/lib/prisma";
@@ -14,6 +15,7 @@ import {
   isSensitiveContent,
   validateContentDraftForPersistence,
 } from "@/lib/content-draft-schema";
+import { CreativeAssetBriefSchema } from "@/lib/creative-asset-schema";
 import { validateMonthlyPlanForBlueprint } from "@/lib/monthly-plan-schema";
 
 function formText(formData: FormData, key: string) {
@@ -898,6 +900,122 @@ export async function createCreativeAssetBrief(formData: FormData) {
   revalidatePath("/");
   redirect(
     `/?blueprint=${publication.blueprintId}&plan=${publication.monthlyPlanId}&notice=${encodeURIComponent("ТЗ на креативный материал создано.")}#assets`,
+  );
+}
+
+export async function generateCreativeAssetBriefForPublication(formData: FormData) {
+  const scheduledPublicationId = formText(formData, "scheduledPublicationId");
+
+  if (!scheduledPublicationId) {
+    errorRedirect("Не выбрана публикация для генерации ТЗ.");
+  }
+
+  const publication = await prisma.scheduledPublication.findUnique({
+    where: { id: scheduledPublicationId },
+    include: {
+      client: true,
+      blueprint: {
+        include: {
+          riskRules: true,
+        },
+      },
+      monthlyPlan: true,
+      plannedContentItem: true,
+      contentDraft: true,
+      creativeAssets: true,
+    },
+  });
+
+  if (!publication) {
+    errorRedirect("Запланированная публикация не найдена.");
+  }
+
+  if (publication.creativeAssets.length > 0) {
+    redirect(
+      `/?blueprint=${publication.blueprintId}&plan=${publication.monthlyPlanId}&notice=${encodeURIComponent("Для этой публикации уже есть ТЗ на креатив.")}#assets`,
+    );
+  }
+
+  try {
+    const generated = await generateCreativeAssetBrief({
+      clientName: publication.client.name,
+      clientIndustry: publication.client.industry,
+      blueprintSummary: publication.blueprint.clientSummary,
+      blueprintContext: {
+        clientSummary: publication.blueprint.clientSummary,
+        approvalMode: publication.blueprint.approvalMode,
+        managerAttentionLevel: publication.blueprint.managerAttentionLevel,
+        humanReviewPolicy: publication.blueprint.humanReviewPolicy,
+        riskRules: publication.blueprint.riskRules,
+      },
+      monthlyPlanSummary: publication.monthlyPlan.summary,
+      scheduledPublication: {
+        platformName: publication.platformName,
+        format: publication.format,
+        topic: publication.topic,
+        scheduledDate: publication.scheduledDate,
+        scheduledTime: publication.scheduledTime,
+        notes: publication.notes,
+      },
+      plannedContentItem: publication.plannedContentItem,
+      contentDraft: {
+        draftTitle: publication.contentDraft.draftTitle,
+        draftBody: publication.contentDraft.draftBody,
+        draftNotes: publication.contentDraft.draftNotes,
+        riskLevel: publication.contentDraft.riskLevel,
+        approvalRequired: publication.contentDraft.approvalRequired,
+      },
+      platformName: publication.platformName,
+      format: publication.format,
+      topic: publication.topic,
+    });
+
+    const brief = CreativeAssetBriefSchema.parse(generated);
+
+    await prisma.$transaction([
+      prisma.creativeAsset.create({
+        data: {
+          clientId: publication.clientId,
+          blueprintId: publication.blueprintId,
+          monthlyPlanId: publication.monthlyPlanId,
+          plannedContentItemId: publication.plannedContentItemId,
+          contentDraftId: publication.contentDraftId,
+          scheduledPublicationId: publication.id,
+          assetType: brief.assetType,
+          title: brief.title,
+          brief: brief.brief,
+          formatRequirements: brief.formatRequirements,
+          textOnAsset: brief.textOnAsset || null,
+          references: brief.references,
+          status: "brief_ready",
+          approvalRequired: brief.approvalRequired,
+          notes: brief.notes,
+        },
+      }),
+      ...(publication.status === "scheduled"
+        ? [
+            prisma.scheduledPublication.update({
+              where: { id: publication.id },
+              data: { status: "needs_assets" },
+            }),
+          ]
+        : []),
+    ]);
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Не удалось сгенерировать ТЗ. Проверьте публикацию и попробуйте ещё раз.";
+    monthlyPlanErrorRedirect(
+      publication.blueprintId,
+      publication.monthlyPlanId,
+      `Не удалось сгенерировать ТЗ на креатив: ${message}`,
+    );
+  }
+
+  revalidatePath("/");
+  redirect(
+    `/?blueprint=${publication.blueprintId}&plan=${publication.monthlyPlanId}&notice=${encodeURIComponent("AI сгенерировал ТЗ на креативный материал.")}#assets`,
   );
 }
 
