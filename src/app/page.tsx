@@ -281,6 +281,31 @@ function formatDraftStatus(status: string) {
   return labels[status] ?? formatStatus(status);
 }
 
+function formatReviewActor(actorType: string) {
+  const labels: Record<string, string> = {
+    client: "Клиент",
+    manager: "Менеджер",
+    system: "Система",
+  };
+
+  return labels[actorType] ?? actorType;
+}
+
+function formatReviewAction(action: string) {
+  const labels: Record<string, string> = {
+    created: "Черновик создан",
+    submitted_for_review: "Отправлен на проверку",
+    sent_to_client: "Отправлен клиенту",
+    changes_requested: "Запрошены правки",
+    approved: "Согласован",
+    rejected: "Отклонён",
+    marked_ready_to_schedule: "Готов к планированию",
+    comment_added: "Добавлен комментарий",
+  };
+
+  return labels[action] ?? formatStatus(action);
+}
+
 function draftStatusTone(status: string): "neutral" | "teal" | "amber" | "rose" | "green" {
   const tones: Record<string, "neutral" | "teal" | "amber" | "rose" | "green"> = {
     draft: "neutral",
@@ -318,8 +343,8 @@ type DraftQueueItem = {
 };
 
 const draftStatusGroups = [
-  { status: "needs_review", label: "Требуют проверки менеджера" },
-  { status: "sent_to_client", label: "Ожидают ответа клиента" },
+  { status: "needs_review", label: "Требует проверки менеджера" },
+  { status: "sent_to_client", label: "Ждём клиента" },
   { status: "client_changes_requested", label: "Запрошены правки" },
   { status: "approved", label: "Согласовано" },
   { status: "ready_to_schedule", label: "Готово к планированию" },
@@ -474,10 +499,10 @@ function ReviewEventTimeline({ events }: { events: DraftReviewEventPreview[] }) 
           events.map((event) => (
             <div key={event.id} className="rounded-md border border-stone-200 bg-white px-3 py-2 text-xs leading-5 text-stone-500">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="font-bold text-stone-700">{formatStatus(event.action)}</span>
+                <span className="font-bold text-stone-700">{formatReviewAction(event.action)}</span>
                 <span>{event.createdAt.toISOString().replace("T", " ").slice(0, 16)}</span>
               </div>
-              <p className="mt-1">Участник: {event.actorType === "client" ? "клиент" : event.actorType === "manager" ? "менеджер" : "система"}</p>
+              <p className="mt-1">Участник: {formatReviewActor(event.actorType)}</p>
               {event.comment ? <p className="mt-1 text-stone-700">{event.comment}</p> : null}
             </div>
           ))
@@ -534,7 +559,7 @@ function ReviewQueue({ groups }: { groups: ReturnType<typeof groupDraftsByStatus
                       <p className="mt-3 line-clamp-3 whitespace-pre-wrap text-sm leading-6 text-stone-600">{draft.draftBody}</p>
                       {latestEvent ? (
                         <p className="mt-3 rounded-md border border-stone-200 bg-white px-3 py-2 text-xs leading-5 text-stone-500">
-                          Последнее событие: <span className="font-bold text-stone-700">{formatStatus(latestEvent.action)}</span>, {latestEvent.actorType === "client" ? "клиент" : latestEvent.actorType === "manager" ? "менеджер" : "система"}
+                          Последнее событие: <span className="font-bold text-stone-700">{formatReviewAction(latestEvent.action)}</span>. Участник: {formatReviewActor(latestEvent.actorType)}
                           {latestEvent.comment ? ` - ${latestEvent.comment}` : ""}
                         </p>
                       ) : null}
@@ -1134,8 +1159,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
               </div>
 
               <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <MetricCard label="Требуют проверки менеджера" value={needsManagerReviewCount} detail="Черновики во внутренней очереди" tone="amber" />
-                <MetricCard label="Ожидают клиента" value={waitingForClientCount} detail="Согласование с клиентом" tone="teal" />
+                <MetricCard label="Требует проверки" value={needsManagerReviewCount} detail="Черновики во внутренней очереди" tone="amber" />
+                <MetricCard label="У клиента" value={waitingForClientCount} detail="Согласование с клиентом" tone="teal" />
                 <MetricCard label="Согласовано" value={approvedDraftCount} detail="Можно перейти к планированию" />
                 <MetricCard label="Готово к планированию" value={readyToScheduleCount} detail="Публикации пока не подключены" tone="teal" />
               </div>
@@ -1194,11 +1219,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 </div>
                 <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-                    <p className="text-xs font-bold text-amber-900">Требуют проверки менеджера</p>
+                    <p className="text-xs font-bold text-amber-900">Требует проверки</p>
                     <p className="mt-2 text-2xl font-semibold text-stone-950">{needsManagerReviewCount}</p>
                   </div>
                   <div className="rounded-lg border border-teal-200 bg-teal-50 p-4">
-                    <p className="text-xs font-bold text-teal-900">Ожидают клиента</p>
+                    <p className="text-xs font-bold text-teal-900">У клиента</p>
                     <p className="mt-2 text-2xl font-semibold text-stone-950">{waitingForClientCount}</p>
                   </div>
                   <div className="rounded-lg border border-stone-200 bg-stone-50 p-4">

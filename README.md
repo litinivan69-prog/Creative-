@@ -153,6 +153,13 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - The product remains Adaptive Presence OS by Creative.
 - The Russian market is the primary go-to-market context.
 
+## Sprint 3C Review Workflow UX Stabilization
+
+- Review Workflow UX was stabilized.
+- Russian labels were added for approval statuses and actions.
+- The workflow remains available in the Manager Console only.
+- No real client auth, notifications, or publishing were added.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.
