@@ -6,8 +6,10 @@ import {
   generateContentDraftForItem,
   generateMonthlyPlan,
   markDraftReadyToSchedule,
+  markScheduledPublicationReady,
   rejectDraft,
   requestDraftChanges,
+  scheduleContentDraft,
   sendDraftToClient,
   submitDraftForReview,
   updateClientBrief,
@@ -262,6 +264,13 @@ function formatStatus(value: string) {
     semi_auto: "частично автоматически",
     unsupported: "не поддерживается",
     needs_verification: "нужно проверить",
+    scheduled: "Запланировано",
+    needs_assets: "Нужны материалы",
+    ready: "Готово",
+    published: "Опубликовано",
+    skipped: "Пропущено",
+    failed: "Ошибка",
+    automation_later: "Автоматизация позже",
   };
 
   return labels[value] ?? value.replaceAll("_", " ");
@@ -342,6 +351,24 @@ type DraftQueueItem = {
   reviewEvents: DraftReviewEventPreview[];
 };
 
+type ScheduledPublicationPreview = {
+  id: string;
+  contentDraftId: string;
+  plannedContentItemId: string;
+  platformName: string;
+  format: string;
+  topic: string;
+  scheduledDate: string;
+  scheduledTime: string | null;
+  timezone: string | null;
+  status: string;
+  publishMode: string;
+  notes: string | null;
+  contentDraft: {
+    draftTitle: string;
+  };
+};
+
 const draftStatusGroups = [
   { status: "needs_review", label: "Требует проверки менеджера" },
   { status: "sent_to_client", label: "Ждём клиента" },
@@ -408,7 +435,14 @@ function DraftWorkflowForm({
 
 function DraftWorkflowControls({ draft }: { draft: DraftQueueItem }) {
   if (draft.status === "ready_to_schedule") {
-    return <StatusBadge tone="green">Готово к планированию</StatusBadge>;
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge tone="green">Готово к планированию</StatusBadge>
+        <a href="#scheduling" className="text-xs font-bold text-teal-700 transition hover:text-teal-900">
+          Перейти к планированию
+        </a>
+      </div>
+    );
   }
 
   if (draft.status === "rejected") {
@@ -585,6 +619,130 @@ function ReviewQueue({ groups }: { groups: ReturnType<typeof groupDraftsByStatus
   );
 }
 
+function scheduledPublicationTone(status: string): "neutral" | "teal" | "amber" | "rose" | "green" {
+  const tones: Record<string, "neutral" | "teal" | "amber" | "rose" | "green"> = {
+    scheduled: "teal",
+    needs_assets: "amber",
+    ready: "green",
+    published: "green",
+    skipped: "neutral",
+    failed: "rose",
+  };
+
+  return tones[status] ?? "neutral";
+}
+
+function SchedulingLayer({
+  drafts,
+  publications,
+}: {
+  drafts: DraftQueueItem[];
+  publications: ScheduledPublicationPreview[];
+}) {
+  const scheduledDraftIds = new Set(publications.map((publication) => publication.contentDraftId));
+  const availableDrafts = drafts.filter(
+    (draft) =>
+      (draft.status === "approved" || draft.status === "ready_to_schedule") &&
+      !scheduledDraftIds.has(draft.id),
+  );
+
+  return (
+    <section id="scheduling" className={`${panelClass} mt-7 scroll-mt-24 p-5 sm:p-6`}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Внутреннее планирование</p>
+          <h2 className="mt-1 text-xl font-semibold text-stone-950">Планирование публикаций</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
+            Согласованные черновики можно поставить в ручной план публикаций. Внешние площадки и автоматическая отправка пока не подключены.
+          </p>
+        </div>
+        <StatusBadge tone={publications.length > 0 ? "teal" : "neutral"}>{publications.length} запланировано</StatusBadge>
+      </div>
+
+      <div className="mt-5 grid gap-5 xl:grid-cols-2">
+        <div>
+          <h3 className="text-sm font-semibold text-stone-950">Готовы к планированию</h3>
+          <div className="mt-3 grid gap-3">
+            {availableDrafts.map((draft) => (
+              <article key={draft.id} className="rounded-lg border border-stone-200 bg-stone-50/60 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.08em] text-teal-700">{draft.platformName} &middot; {draft.format}</p>
+                    <h4 className="mt-2 font-semibold leading-6 text-stone-950">{draft.draftTitle}</h4>
+                    <p className="mt-1 text-xs leading-5 text-stone-400">{draft.topic}</p>
+                  </div>
+                  <StatusBadge tone={draftStatusTone(draft.status)}>{formatDraftStatus(draft.status)}</StatusBadge>
+                </div>
+                <form action={scheduleContentDraft} className="mt-4 grid gap-2 sm:grid-cols-2">
+                  <input type="hidden" name="contentDraftId" value={draft.id} />
+                  <label className="grid gap-1 text-xs font-bold text-stone-600">
+                    Дата публикации
+                    <input type="date" name="scheduledDate" required className={inputClass} />
+                  </label>
+                  <label className="grid gap-1 text-xs font-bold text-stone-600">
+                    Время
+                    <input type="time" name="scheduledTime" className={inputClass} />
+                  </label>
+                  <label className="grid gap-1 text-xs font-bold text-stone-600 sm:col-span-2">
+                    Заметка
+                    <input type="text" name="notes" placeholder="Необязательно" className={inputClass} />
+                  </label>
+                  <div className="sm:col-span-2">
+                    <PendingSubmitButton pendingLabel="Планируем..." className={primaryButtonClass}>
+                      Запланировать
+                    </PendingSubmitButton>
+                  </div>
+                </form>
+              </article>
+            ))}
+            {availableDrafts.length === 0 ? (
+              <EmptyState>Согласуйте черновики и отметьте их готовыми к планированию. После этого здесь появится форма публикации.</EmptyState>
+            ) : null}
+          </div>
+        </div>
+
+        <div>
+          <h3 className="text-sm font-semibold text-stone-950">Запланированные публикации</h3>
+          <div className="mt-3 grid gap-3">
+            {publications.map((publication) => (
+              <article key={publication.id} className="rounded-lg border border-stone-200 bg-white p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.08em] text-teal-700">{publication.platformName} &middot; {publication.format}</p>
+                    <h4 className="mt-2 font-semibold leading-6 text-stone-950">{publication.contentDraft.draftTitle}</h4>
+                    <p className="mt-1 text-xs leading-5 text-stone-400">{publication.topic}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <StatusBadge tone={scheduledPublicationTone(publication.status)}>{formatStatus(publication.status)}</StatusBadge>
+                    <StatusBadge>{formatStatus(publication.publishMode)}</StatusBadge>
+                  </div>
+                </div>
+                <p className="mt-3 text-sm font-semibold text-stone-800">
+                  {publication.scheduledDate}
+                  {publication.scheduledTime ? `, ${publication.scheduledTime}` : ""}
+                </p>
+                {publication.timezone ? <p className="mt-1 text-xs text-stone-400">{publication.timezone}</p> : null}
+                {publication.notes ? <p className="mt-3 rounded-md bg-stone-50 px-3 py-2 text-sm leading-6 text-stone-600">{publication.notes}</p> : null}
+                {publication.status === "scheduled" ? (
+                  <form action={markScheduledPublicationReady} className="mt-3">
+                    <input type="hidden" name="scheduledPublicationId" value={publication.id} />
+                    <PendingSubmitButton pendingLabel="Обновляем..." className={secondaryButtonClass}>
+                      Отметить готовой
+                    </PendingSubmitButton>
+                  </form>
+                ) : null}
+              </article>
+            ))}
+            {publications.length === 0 ? (
+              <EmptyState>Запланированных публикаций пока нет. Выберите согласованный черновик слева и укажите дату.</EmptyState>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function suggestsVisualAsset(format: string) {
   return ["visual", "video", "reel", "story", "image", "photo", "carousel", "short"].some((token) =>
     format.toLowerCase().includes(token),
@@ -755,17 +913,23 @@ function ContentItemAction({ item }: { item: CalendarPreviewItem }) {
 
 function ContentCalendar({
   groups,
+  publications,
   month,
   blueprintId,
   generationBlocked,
 }: {
   groups: ReturnType<typeof groupCalendarItems>;
+  publications: ScheduledPublicationPreview[];
   month: string;
   blueprintId?: string;
   generationBlocked: boolean;
 }) {
   const items = groups.flatMap((group) => group.items);
   const inspectorItem = items[0];
+  const scheduledByItemId = new Map(
+    publications.map((publication) => [publication.plannedContentItemId, publication]),
+  );
+  const inspectorPublication = inspectorItem ? scheduledByItemId.get(inspectorItem.id) : null;
   const approvalCount = items.filter((item) => item.approvalRequired).length;
   const draftCount = items.filter((item) => item.contentDraft).length;
 
@@ -789,7 +953,7 @@ function ContentCalendar({
         </div>
         <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
           <MetricCard label="Материалы" value={items.length} detail="В текущем календаре" />
-          <MetricCard label="Запланировано" value={items.length} detail="Плановый слой" tone="teal" />
+          <MetricCard label="Запланировано" value={publications.length} detail="Публикации с датой" tone="teal" />
           <MetricCard label="Ждут согласования" value={approvalCount} detail="Нужно проверить" tone="amber" />
           <MetricCard label="Готовые черновики" value={draftCount} detail="Подготовленные материалы" />
           <MetricCard label="Прогноз вовлечения" value="-" detail="Аналитика появится позже" />
@@ -810,13 +974,22 @@ function ContentCalendar({
                     <StatusBadge>{group.items.length}</StatusBadge>
                   </div>
                   <div className="mt-3 grid gap-2">
-                    {group.items.map((item) => (
+                    {group.items.map((item) => {
+                      const scheduledPublication = scheduledByItemId.get(item.id);
+
+                      return (
                       <div key={item.id} className="rounded-md border border-stone-200 bg-white p-3 shadow-[0_1px_2px_rgba(28,36,38,0.04)]">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <StatusBadge tone="teal">{item.platformName}</StatusBadge>
                           <StatusBadge>{item.format}</StatusBadge>
                         </div>
                         <p className="mt-3 text-xs font-semibold text-stone-400">{item.plannedDate}</p>
+                        {scheduledPublication ? (
+                          <p className="mt-1 text-xs font-bold text-teal-700">
+                            Публикация: {scheduledPublication.scheduledDate}
+                            {scheduledPublication.scheduledTime ? `, ${scheduledPublication.scheduledTime}` : ""}
+                          </p>
+                        ) : null}
                         <p className="mt-1 text-sm font-semibold leading-5 text-stone-900">{item.topic}</p>
                         {suggestsVisualAsset(item.format) ? (
                           <div className="mt-3 flex h-16 items-center justify-center rounded-md border border-dashed border-stone-300 bg-stone-50 text-[10px] font-bold uppercase tracking-[0.1em] text-stone-400">
@@ -824,7 +997,11 @@ function ContentCalendar({
                           </div>
                         ) : null}
                         <div className="mt-3 flex flex-wrap gap-1.5">
-                          <StatusBadge tone={item.status === "planned" ? "teal" : "amber"}>{formatStatus(item.status)}</StatusBadge>
+                          {scheduledPublication ? (
+                            <StatusBadge tone={scheduledPublicationTone(scheduledPublication.status)}>{formatStatus(scheduledPublication.status)}</StatusBadge>
+                          ) : (
+                            <StatusBadge tone={item.status === "planned" ? "teal" : "amber"}>{formatStatus(item.status)}</StatusBadge>
+                          )}
                           {item.approvalRequired ? <StatusBadge tone="amber">Нужно проверить</StatusBadge> : null}
                           {item.contentDraft ? <StatusBadge tone="green">Черновик готов</StatusBadge> : null}
                         </div>
@@ -832,7 +1009,8 @@ function ContentCalendar({
                           <ContentItemAction item={item} />
                         </div>
                       </div>
-                    ))}
+                    );
+                    })}
                   </div>
                 </article>
               ))}
@@ -849,8 +1027,18 @@ function ContentCalendar({
                 </div>
                 <h3 className="mt-3 text-lg font-semibold leading-7 text-stone-950">{inspectorItem.topic}</h3>
                 <p className="mt-1 text-xs font-semibold text-stone-400">{inspectorItem.plannedDate}</p>
+                {inspectorPublication ? (
+                  <p className="mt-1 text-xs font-bold text-teal-700">
+                    Публикация: {inspectorPublication.scheduledDate}
+                    {inspectorPublication.scheduledTime ? `, ${inspectorPublication.scheduledTime}` : ""}
+                  </p>
+                ) : null}
                 <div className="mt-4 flex flex-wrap gap-1.5">
-                  <StatusBadge tone="teal">{formatStatus(inspectorItem.status)}</StatusBadge>
+                  {inspectorPublication ? (
+                    <StatusBadge tone={scheduledPublicationTone(inspectorPublication.status)}>{formatStatus(inspectorPublication.status)}</StatusBadge>
+                  ) : (
+                    <StatusBadge tone="teal">{formatStatus(inspectorItem.status)}</StatusBadge>
+                  )}
                   {inspectorItem.approvalRequired ? <StatusBadge tone="amber">Нужно проверить</StatusBadge> : <StatusBadge tone="green">Проверка необязательна</StatusBadge>}
                 </div>
                 <div className="mt-4 flex h-32 items-center justify-center rounded-lg border border-dashed border-stone-300 bg-stone-50 text-center text-[10px] font-bold uppercase tracking-[0.12em] text-stone-400">
@@ -963,6 +1151,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   },
                 },
                 managerTasks: true,
+                scheduledPublications: {
+                  orderBy: [{ scheduledDate: "asc" }, { scheduledTime: "asc" }],
+                  include: {
+                    contentDraft: true,
+                    plannedContentItem: true,
+                  },
+                },
               },
             },
           },
@@ -999,6 +1194,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   },
                 },
                 managerTasks: true,
+                scheduledPublications: {
+                  orderBy: [{ scheduledDate: "asc" }, { scheduledTime: "asc" }],
+                  include: {
+                    contentDraft: true,
+                    plannedContentItem: true,
+                  },
+                },
               },
             },
           },
@@ -1275,9 +1477,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
 
             <ReviewQueue groups={reviewQueueGroups} />
 
+            <SchedulingLayer
+              drafts={contentDrafts}
+              publications={selectedMonthlyPlan?.scheduledPublications ?? []}
+            />
+
             <section className="mt-7">
               <ContentCalendar
                 groups={calendarGroups}
+                publications={selectedMonthlyPlan?.scheduledPublications ?? []}
                 month={selectedMonthlyPlan?.month ?? currentMonth()}
                 blueprintId={latestBlueprint?.id}
                 generationBlocked={latestBlueprint?.nextRecommendedAction === "request_more_brief_data"}

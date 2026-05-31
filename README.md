@@ -160,6 +160,13 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - The workflow remains available in the Manager Console only.
 - No real client auth, notifications, or publishing were added.
 
+## Sprint 4A Scheduling Layer
+
+- The Scheduling Layer was added.
+- Approved and ready drafts can become scheduled publications.
+- Scheduling is internal and manual for now.
+- No real external publishing or automation was added.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.
@@ -192,5 +199,6 @@ The Prisma schema includes:
 - `ManagerTask`
 - `ContentDraft`
 - `ContentDraftReviewEvent`
+- `ScheduledPublication`
 
 The blueprint intentionally stores platform names and module names as generated data. There is no fixed platform list and no fixed deliverable package baked into the application.

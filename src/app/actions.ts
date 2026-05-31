@@ -624,3 +624,106 @@ export async function markDraftReadyToSchedule(formData: FormData) {
     notice: "Черновик готов к планированию.",
   });
 }
+
+export async function scheduleContentDraft(formData: FormData) {
+  const contentDraftId = formText(formData, "contentDraftId");
+  const scheduledDate = formText(formData, "scheduledDate");
+  const scheduledTime = formText(formData, "scheduledTime");
+  const timezone = formText(formData, "timezone");
+  const notes = formText(formData, "notes");
+
+  if (!contentDraftId) {
+    errorRedirect("Не выбран черновик для планирования.");
+  }
+
+  if (!scheduledDate) {
+    errorRedirect("Укажите дату публикации.");
+  }
+
+  const draft = await prisma.contentDraft.findUnique({
+    where: { id: contentDraftId },
+    include: {
+      client: true,
+      blueprint: true,
+      monthlyPlan: true,
+      plannedContentItem: true,
+    },
+  });
+
+  if (!draft) {
+    errorRedirect("Черновик не найден.");
+  }
+
+  if (draft.status !== "approved" && draft.status !== "ready_to_schedule") {
+    monthlyPlanErrorRedirect(
+      draft.blueprintId,
+      draft.monthlyPlanId,
+      "Сначала согласуйте черновик перед планированием публикации.",
+    );
+  }
+
+  const existingPublication = await prisma.scheduledPublication.findFirst({
+    where: { contentDraftId: draft.id },
+  });
+
+  if (existingPublication) {
+    redirect(
+      `/?blueprint=${draft.blueprintId}&plan=${draft.monthlyPlanId}&notice=${encodeURIComponent("Для этого черновика публикация уже запланирована.")}#scheduling`,
+    );
+  }
+
+  await prisma.scheduledPublication.create({
+    data: {
+      clientId: draft.clientId,
+      blueprintId: draft.blueprintId,
+      monthlyPlanId: draft.monthlyPlanId,
+      plannedContentItemId: draft.plannedContentItemId,
+      contentDraftId: draft.id,
+      platformName: draft.platformName,
+      format: draft.format,
+      topic: draft.topic,
+      scheduledDate,
+      scheduledTime: scheduledTime || null,
+      timezone: timezone || null,
+      status: "scheduled",
+      publishMode: "manual",
+      notes: notes || null,
+    },
+  });
+
+  revalidatePath("/");
+  redirect(
+    `/?blueprint=${draft.blueprintId}&plan=${draft.monthlyPlanId}&notice=${encodeURIComponent("Публикация запланирована.")}#scheduling`,
+  );
+}
+
+export async function markScheduledPublicationReady(formData: FormData) {
+  const scheduledPublicationId = formText(formData, "scheduledPublicationId");
+
+  if (!scheduledPublicationId) {
+    errorRedirect("Не выбрана запланированная публикация.");
+  }
+
+  const publication = await prisma.scheduledPublication.findUnique({
+    where: { id: scheduledPublicationId },
+    select: {
+      id: true,
+      blueprintId: true,
+      monthlyPlanId: true,
+    },
+  });
+
+  if (!publication) {
+    errorRedirect("Запланированная публикация не найдена.");
+  }
+
+  await prisma.scheduledPublication.update({
+    where: { id: publication.id },
+    data: { status: "ready" },
+  });
+
+  revalidatePath("/");
+  redirect(
+    `/?blueprint=${publication.blueprintId}&plan=${publication.monthlyPlanId}&notice=${encodeURIComponent("Публикация готова к ручному размещению.")}#scheduling`,
+  );
+}
