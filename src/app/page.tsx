@@ -1,9 +1,15 @@
 import {
   addClientBrief,
+  approveDraft,
   createClient,
   generateBlueprint,
   generateContentDraftForItem,
   generateMonthlyPlan,
+  markDraftReadyToSchedule,
+  rejectDraft,
+  requestDraftChanges,
+  sendDraftToClient,
+  submitDraftForReview,
   updateClientBrief,
 } from "@/app/actions";
 import { PendingSubmitButton } from "@/app/pending-submit-button";
@@ -230,6 +236,299 @@ function groupCalendarItems(items: CalendarPreviewItem[]) {
 
 function formatStatus(value: string) {
   return value.replaceAll("_", " ");
+}
+
+function formatDraftStatus(status: string) {
+  const labels: Record<string, string> = {
+    draft: "Draft",
+    needs_review: "Needs manager review",
+    sent_to_client: "Waiting for client",
+    client_changes_requested: "Changes requested",
+    approved: "Approved",
+    rejected: "Rejected",
+    ready_to_schedule: "Ready to schedule",
+  };
+
+  return labels[status] ?? formatStatus(status);
+}
+
+function draftStatusTone(status: string): "neutral" | "teal" | "amber" | "rose" | "green" {
+  const tones: Record<string, "neutral" | "teal" | "amber" | "rose" | "green"> = {
+    draft: "neutral",
+    needs_review: "amber",
+    sent_to_client: "teal",
+    client_changes_requested: "rose",
+    approved: "green",
+    rejected: "rose",
+    ready_to_schedule: "green",
+  };
+
+  return tones[status] ?? "neutral";
+}
+
+type DraftReviewEventPreview = {
+  id: string;
+  actorType: string;
+  action: string;
+  comment: string | null;
+  createdAt: Date;
+};
+
+type DraftQueueItem = {
+  id: string;
+  platformName: string;
+  format: string;
+  topic: string;
+  draftTitle: string;
+  draftBody: string;
+  status: string;
+  riskLevel: string;
+  approvalRequired: boolean;
+  autopublishEligible: boolean;
+  reviewEvents: DraftReviewEventPreview[];
+};
+
+const draftStatusGroups = [
+  { status: "needs_review", label: "Needs manager review" },
+  { status: "sent_to_client", label: "Waiting for client" },
+  { status: "client_changes_requested", label: "Changes requested" },
+  { status: "approved", label: "Approved" },
+  { status: "ready_to_schedule", label: "Ready to schedule" },
+  { status: "rejected", label: "Rejected" },
+  { status: "draft", label: "Drafts" },
+];
+
+function groupDraftsByStatus(items: Array<{ contentDraft: DraftQueueItem | null }>) {
+  const drafts = items.flatMap((item) => (item.contentDraft ? [item.contentDraft] : []));
+
+  return draftStatusGroups.map((group) => ({
+    ...group,
+    drafts: drafts.filter((draft) => draft.status === group.status),
+  }));
+}
+
+function DraftWorkflowForm({
+  action,
+  contentDraftId,
+  actorType = "manager",
+  label,
+  pendingLabel,
+  commentPlaceholder,
+  tone = "secondary",
+}: {
+  action: (formData: FormData) => void | Promise<void>;
+  contentDraftId: string;
+  actorType?: "manager" | "client";
+  label: string;
+  pendingLabel: string;
+  commentPlaceholder?: string;
+  tone?: "primary" | "secondary" | "danger";
+}) {
+  const tones = {
+    primary: "bg-stone-950 text-white hover:bg-stone-800 disabled:bg-stone-400",
+    secondary: "border border-stone-300 bg-white text-stone-700 hover:border-stone-400 hover:bg-stone-50 disabled:text-stone-400",
+    danger: "border border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100 disabled:text-rose-400",
+  };
+
+  return (
+    <form action={action} className="flex flex-wrap items-center gap-2">
+      <input type="hidden" name="contentDraftId" value={contentDraftId} />
+      <input type="hidden" name="actorType" value={actorType} />
+      {commentPlaceholder ? (
+        <input
+          type="text"
+          name="comment"
+          placeholder={commentPlaceholder}
+          className="min-w-44 flex-1 rounded-md border border-stone-300 bg-white px-2.5 py-2 text-xs text-stone-700 outline-none transition placeholder:text-stone-400 focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+        />
+      ) : null}
+      <PendingSubmitButton
+        pendingLabel={pendingLabel}
+        className={`whitespace-nowrap rounded-md px-3 py-2 text-xs font-bold transition disabled:cursor-wait ${tones[tone]}`}
+      >
+        {label}
+      </PendingSubmitButton>
+    </form>
+  );
+}
+
+function DraftWorkflowControls({ draft }: { draft: DraftQueueItem }) {
+  if (draft.status === "ready_to_schedule") {
+    return <StatusBadge tone="green">Ready to schedule</StatusBadge>;
+  }
+
+  if (draft.status === "rejected") {
+    return <StatusBadge tone="rose">Rejected</StatusBadge>;
+  }
+
+  return (
+    <div className="grid gap-2">
+      <div className="flex flex-wrap gap-2">
+        {draft.status === "draft" || draft.status === "client_changes_requested" ? (
+          <DraftWorkflowForm
+            action={submitDraftForReview}
+            contentDraftId={draft.id}
+            label="Submit for review"
+            pendingLabel="Submitting..."
+            tone="primary"
+          />
+        ) : null}
+        {draft.status === "draft" || draft.status === "needs_review" || draft.status === "client_changes_requested" ? (
+          <DraftWorkflowForm
+            action={sendDraftToClient}
+            contentDraftId={draft.id}
+            label="Send to client"
+            pendingLabel="Sending..."
+          />
+        ) : null}
+        {draft.status === "draft" || draft.status === "needs_review" ? (
+          <DraftWorkflowForm
+            action={approveDraft}
+            contentDraftId={draft.id}
+            label="Approve internally"
+            pendingLabel="Approving..."
+          />
+        ) : null}
+        {draft.status === "sent_to_client" ? (
+          <DraftWorkflowForm
+            action={approveDraft}
+            contentDraftId={draft.id}
+            actorType="client"
+            label="Mark client approved"
+            pendingLabel="Approving..."
+            tone="primary"
+          />
+        ) : null}
+        {draft.status === "approved" ? (
+          <DraftWorkflowForm
+            action={markDraftReadyToSchedule}
+            contentDraftId={draft.id}
+            label="Mark ready to schedule"
+            pendingLabel="Updating..."
+            tone="primary"
+          />
+        ) : null}
+      </div>
+      {draft.status === "needs_review" || draft.status === "sent_to_client" ? (
+        <DraftWorkflowForm
+          action={requestDraftChanges}
+          contentDraftId={draft.id}
+          actorType={draft.status === "sent_to_client" ? "client" : "manager"}
+          label={draft.status === "sent_to_client" ? "Mark client requested changes" : "Request changes"}
+          pendingLabel="Updating..."
+          commentPlaceholder="Optional change note"
+        />
+      ) : null}
+      {draft.status !== "approved" ? (
+        <DraftWorkflowForm
+          action={rejectDraft}
+          contentDraftId={draft.id}
+          actorType={draft.status === "sent_to_client" ? "client" : "manager"}
+          label="Reject"
+          pendingLabel="Rejecting..."
+          commentPlaceholder="Optional rejection note"
+          tone="danger"
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ReviewEventTimeline({ events }: { events: DraftReviewEventPreview[] }) {
+  return (
+    <details className="rounded-md border border-stone-200 bg-stone-50/70">
+      <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-stone-700">
+        Review timeline ({events.length})
+      </summary>
+      <div className="grid gap-2 border-t border-stone-200 px-3 py-3">
+        {events.length > 0 ? (
+          events.map((event) => (
+            <div key={event.id} className="rounded-md border border-stone-200 bg-white px-3 py-2 text-xs leading-5 text-stone-500">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-bold text-stone-700">{formatStatus(event.action)}</span>
+                <span>{event.createdAt.toISOString().replace("T", " ").slice(0, 16)}</span>
+              </div>
+              <p className="mt-1">Actor: {event.actorType}</p>
+              {event.comment ? <p className="mt-1 text-stone-700">{event.comment}</p> : null}
+            </div>
+          ))
+        ) : (
+          <p className="text-xs text-stone-400">No review events recorded yet.</p>
+        )}
+      </div>
+    </details>
+  );
+}
+
+function ReviewQueue({ groups }: { groups: ReturnType<typeof groupDraftsByStatus> }) {
+  const draftCount = groups.reduce((total, group) => total + group.drafts.length, 0);
+
+  return (
+    <section id="review-queue" className={`${panelClass} mt-7 scroll-mt-24 p-5 sm:p-6`}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Approval workflow</p>
+          <h2 className="mt-1 text-xl font-semibold text-stone-950">Review Queue</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
+            Move generated drafts through manager review, simulated client approval, and schedule readiness.
+          </p>
+        </div>
+        <StatusBadge tone={draftCount > 0 ? "teal" : "neutral"}>{draftCount} drafts</StatusBadge>
+      </div>
+
+      {draftCount > 0 ? (
+        <div className="mt-5 grid gap-4">
+          {groups.filter((group) => group.drafts.length > 0).map((group) => (
+            <div key={group.status}>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-stone-950">{group.label}</h3>
+                <StatusBadge tone={draftStatusTone(group.status)}>{group.drafts.length}</StatusBadge>
+              </div>
+              <div className="mt-2 grid gap-3 xl:grid-cols-2">
+                {group.drafts.map((draft) => {
+                  const latestEvent = draft.reviewEvents.at(-1);
+
+                  return (
+                    <article key={draft.id} className="rounded-lg border border-stone-200 bg-stone-50/50 p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-[0.08em] text-teal-700">{draft.platformName} &middot; {draft.format}</p>
+                          <h4 className="mt-2 font-semibold leading-6 text-stone-950">{draft.draftTitle}</h4>
+                          <p className="mt-1 text-xs leading-5 text-stone-400">{draft.topic}</p>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          <StatusBadge tone={draftStatusTone(draft.status)}>{formatDraftStatus(draft.status)}</StatusBadge>
+                          <StatusBadge tone={draft.riskLevel === "high" ? "rose" : draft.riskLevel === "medium" ? "amber" : "green"}>Risk {draft.riskLevel}</StatusBadge>
+                          {draft.approvalRequired ? <StatusBadge tone="amber">Approval required</StatusBadge> : null}
+                        </div>
+                      </div>
+                      <p className="mt-3 line-clamp-3 whitespace-pre-wrap text-sm leading-6 text-stone-600">{draft.draftBody}</p>
+                      {latestEvent ? (
+                        <p className="mt-3 rounded-md border border-stone-200 bg-white px-3 py-2 text-xs leading-5 text-stone-500">
+                          Latest: <span className="font-bold text-stone-700">{formatStatus(latestEvent.action)}</span> by {latestEvent.actorType}
+                          {latestEvent.comment ? ` - ${latestEvent.comment}` : ""}
+                        </p>
+                      ) : null}
+                      <div className="mt-3">
+                        <ReviewEventTimeline events={draft.reviewEvents} />
+                      </div>
+                      <div className="mt-3 border-t border-stone-200 pt-3">
+                        <DraftWorkflowControls draft={draft} />
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-5">
+          <EmptyState>Generate drafts from planned content items to start the approval workflow.</EmptyState>
+        </div>
+      )}
+    </section>
+  );
 }
 
 function suggestsVisualAsset(format: string) {
@@ -662,10 +961,19 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
   const draftCount =
     selectedMonthlyPlan?.plannedContentItems.filter((item) => item.contentDraft).length ?? 0;
   const calendarGroups = groupCalendarItems(selectedMonthlyPlan?.plannedContentItems ?? []);
-  const approvalQueueCount =
-    selectedMonthlyPlan?.plannedContentItems.filter((item) => item.approvalRequired).length ?? 0;
-  const withoutDraftCount =
-    selectedMonthlyPlan?.plannedContentItems.filter((item) => !item.contentDraft).length ?? 0;
+  const reviewQueueGroups = groupDraftsByStatus(selectedMonthlyPlan?.plannedContentItems ?? []);
+  const contentDrafts = reviewQueueGroups.flatMap((group) => group.drafts);
+  const needsManagerReviewCount =
+    contentDrafts.filter((draft) => draft.status === "draft" || draft.status === "needs_review").length;
+  const waitingForClientCount =
+    contentDrafts.filter((draft) => draft.status === "sent_to_client").length;
+  const changesRequestedCount =
+    contentDrafts.filter((draft) => draft.status === "client_changes_requested").length;
+  const approvedDraftCount =
+    contentDrafts.filter((draft) => draft.status === "approved").length;
+  const readyToScheduleCount =
+    contentDrafts.filter((draft) => draft.status === "ready_to_schedule").length;
+  const approvalQueueCount = needsManagerReviewCount + waitingForClientCount + changesRequestedCount;
   const integrationTaskCount =
     selectedMonthlyPlan?.managerTasks.filter((task) =>
       ["integration", "connect", "credential", "access", "permission", "auth", "интеграц", "подключ", "доступ"].some(
@@ -797,10 +1105,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
               </div>
 
               <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <MetricCard label="Today needs attention" value={approvalQueueCount + integrationTaskCount} detail="Reviews and access work" tone="amber" />
-                <MetricCard label="Clients in work" value={clients.length} detail="Active operating records" tone="teal" />
-                <MetricCard label="Drafts awaiting approval" value={draftCount} detail="Prepared review objects" />
-                <MetricCard label="New events" value={integrationTaskCount} detail="Placeholder operational signal" tone={integrationTaskCount > 0 ? "rose" : "stone"} />
+                <MetricCard label="Needs manager review" value={needsManagerReviewCount} detail="Drafts in the internal queue" tone="amber" />
+                <MetricCard label="Waiting for client" value={waitingForClientCount} detail="Simulated client review" tone="teal" />
+                <MetricCard label="Approved" value={approvedDraftCount} detail="Ready for final scheduling step" />
+                <MetricCard label="Ready to schedule" value={readyToScheduleCount} detail="Publishing is not connected yet" tone="teal" />
               </div>
             </section>
 
@@ -857,20 +1165,20 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 </div>
                 <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-                    <p className="text-xs font-bold text-amber-900">Items requiring approval</p>
-                    <p className="mt-2 text-2xl font-semibold text-stone-950">{approvalQueueCount}</p>
+                    <p className="text-xs font-bold text-amber-900">Needs manager review</p>
+                    <p className="mt-2 text-2xl font-semibold text-stone-950">{needsManagerReviewCount}</p>
                   </div>
                   <div className="rounded-lg border border-teal-200 bg-teal-50 p-4">
-                    <p className="text-xs font-bold text-teal-900">Generated drafts</p>
-                    <p className="mt-2 text-2xl font-semibold text-stone-950">{draftCount}</p>
+                    <p className="text-xs font-bold text-teal-900">Waiting for client</p>
+                    <p className="mt-2 text-2xl font-semibold text-stone-950">{waitingForClientCount}</p>
                   </div>
                   <div className="rounded-lg border border-stone-200 bg-stone-50 p-4">
-                    <p className="text-xs font-bold text-stone-700">Items without drafts</p>
-                    <p className="mt-2 text-2xl font-semibold text-stone-950">{withoutDraftCount}</p>
+                    <p className="text-xs font-bold text-stone-700">Approved</p>
+                    <p className="mt-2 text-2xl font-semibold text-stone-950">{approvedDraftCount}</p>
                   </div>
-                  <div className="rounded-lg border border-rose-200 bg-rose-50 p-4">
-                    <p className="text-xs font-bold text-rose-900">Integration tasks</p>
-                    <p className="mt-2 text-2xl font-semibold text-stone-950">{integrationTaskCount}</p>
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                    <p className="text-xs font-bold text-emerald-900">Ready to schedule</p>
+                    <p className="mt-2 text-2xl font-semibold text-stone-950">{readyToScheduleCount}</p>
                   </div>
                 </div>
                 <div className="mt-4 rounded-lg border border-stone-200 bg-stone-50 px-4 py-3">
@@ -910,6 +1218,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 )}
               </article>
             </section>
+
+            <ReviewQueue groups={reviewQueueGroups} />
 
             <section className="mt-7">
               <ContentCalendar
@@ -1442,7 +1752,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                                   </div>
                                 </div>
                                 <div className="flex flex-wrap gap-2">
-                                  <StatusBadge tone={draft.status === "approved" ? "green" : "amber"}>{formatStatus(draft.status)}</StatusBadge>
+                                  <StatusBadge tone={draftStatusTone(draft.status)}>{formatDraftStatus(draft.status)}</StatusBadge>
                                   <StatusBadge tone={draft.riskLevel === "high" ? "rose" : draft.riskLevel === "medium" ? "amber" : "green"}>risk: {draft.riskLevel}</StatusBadge>
                                 </div>
                               </div>
@@ -1466,13 +1776,18 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                                   </ul>
                                 ) : <p className="mt-2 text-sm text-stone-400">No draft notes.</p>}
                               </div>
+                              <div className="mt-4">
+                                <ReviewEventTimeline events={draft.reviewEvents} />
+                              </div>
+                              <a href="#review-queue" className="mt-4 inline-flex text-xs font-bold text-teal-700 transition hover:text-teal-900">
+                                Open workflow actions in Review Queue
+                              </a>
                             </article>
                           );
                         })}
                         {selectedMonthlyPlan.plannedContentItems.every((item) => !item.contentDraft) ? (
                           <EmptyState>
-                            Drafts are generated from planned content items. Choose a calendar item or table row and use
-                            Generate Draft to prepare the first review-ready object.
+                            Generate drafts from planned content items to start the approval workflow.
                           </EmptyState>
                         ) : null}
                       </div>

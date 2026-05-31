@@ -140,6 +140,12 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Each workflow action updates the draft and stores an operational review event.
 - Approval workflow UI comes next.
 
+## Sprint 3B Review Queue UI
+
+- Review Queue UI groups drafts by workflow status.
+- Managers can move drafts through review states and inspect the review event timeline.
+- No real client auth, notifications, or publishing were added.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.
