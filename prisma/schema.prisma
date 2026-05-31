@@ -243,6 +243,7 @@ model CreativeAsset {
   textOnAsset            String?
   references             String?
   status                 String
+  source                 String                  @default("manual")
   approvalRequired       Boolean
   notes                  String?
   createdAt              DateTime                @default(now())

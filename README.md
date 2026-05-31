@@ -188,6 +188,14 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Generated briefs remain editable and follow the same Creative Asset production workflow.
 - Actual image or video generation was not added.
 
+## Sprint 5B.1 Creative Brief UX Clarity
+
+- Creative Brief UX clarity was improved.
+- AI brief generation is now more visible when a publication needs a creative asset.
+- Creative briefs can be regenerated through AI without creating duplicates.
+- Creative Asset cards show whether a brief was created through AI or manually.
+- Actual image generation was not added.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.

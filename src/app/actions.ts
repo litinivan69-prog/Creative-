@@ -62,6 +62,43 @@ const creativeAssetStatuses = [
 
 type CreativeAssetStatus = (typeof creativeAssetStatuses)[number];
 
+type CreativeAssetGenerationContext = {
+  client: {
+    name: string;
+    industry: string | null;
+  };
+  blueprint: {
+    clientSummary: string;
+    approvalMode: string;
+    managerAttentionLevel: string;
+    humanReviewPolicy: Prisma.JsonValue;
+    riskRules: Array<{
+      ruleName: string;
+      riskDescription: string;
+      preventionAction: string;
+      severity: string;
+      approvalRequired: boolean;
+    }>;
+  };
+  monthlyPlan: {
+    summary: string;
+  };
+  plannedContentItem: unknown;
+  contentDraft: {
+    draftTitle: string;
+    draftBody: string;
+    draftNotes: Prisma.JsonValue;
+    riskLevel: string;
+    approvalRequired: boolean;
+  };
+  platformName: string;
+  format: string;
+  topic: string;
+  scheduledDate: string;
+  scheduledTime: string | null;
+  notes: string | null;
+};
+
 function currentMonth() {
   return new Date().toISOString().slice(0, 7);
 }
@@ -80,6 +117,43 @@ function jsonArray(value: unknown) {
 
 function draftReviewActor(formData: FormData) {
   return formText(formData, "actorType") === "client" ? "client" : "manager";
+}
+
+async function generateCreativeAssetBriefFromContext(context: CreativeAssetGenerationContext) {
+  const generated = await generateCreativeAssetBrief({
+    clientName: context.client.name,
+    clientIndustry: context.client.industry,
+    blueprintSummary: context.blueprint.clientSummary,
+    blueprintContext: {
+      clientSummary: context.blueprint.clientSummary,
+      approvalMode: context.blueprint.approvalMode,
+      managerAttentionLevel: context.blueprint.managerAttentionLevel,
+      humanReviewPolicy: context.blueprint.humanReviewPolicy,
+      riskRules: context.blueprint.riskRules,
+    },
+    monthlyPlanSummary: context.monthlyPlan.summary,
+    scheduledPublication: {
+      platformName: context.platformName,
+      format: context.format,
+      topic: context.topic,
+      scheduledDate: context.scheduledDate,
+      scheduledTime: context.scheduledTime,
+      notes: context.notes,
+    },
+    plannedContentItem: context.plannedContentItem,
+    contentDraft: {
+      draftTitle: context.contentDraft.draftTitle,
+      draftBody: context.contentDraft.draftBody,
+      draftNotes: context.contentDraft.draftNotes,
+      riskLevel: context.contentDraft.riskLevel,
+      approvalRequired: context.contentDraft.approvalRequired,
+    },
+    platformName: context.platformName,
+    format: context.format,
+    topic: context.topic,
+  });
+
+  return CreativeAssetBriefSchema.parse(generated);
 }
 
 async function updateDraftWorkflow(
@@ -883,6 +957,7 @@ export async function createCreativeAssetBrief(formData: FormData) {
         textOnAsset: textOnAsset || null,
         references: references || null,
         status: "needed",
+        source: "manual",
         approvalRequired,
         notes: notes || null,
       },
@@ -937,40 +1012,7 @@ export async function generateCreativeAssetBriefForPublication(formData: FormDat
   }
 
   try {
-    const generated = await generateCreativeAssetBrief({
-      clientName: publication.client.name,
-      clientIndustry: publication.client.industry,
-      blueprintSummary: publication.blueprint.clientSummary,
-      blueprintContext: {
-        clientSummary: publication.blueprint.clientSummary,
-        approvalMode: publication.blueprint.approvalMode,
-        managerAttentionLevel: publication.blueprint.managerAttentionLevel,
-        humanReviewPolicy: publication.blueprint.humanReviewPolicy,
-        riskRules: publication.blueprint.riskRules,
-      },
-      monthlyPlanSummary: publication.monthlyPlan.summary,
-      scheduledPublication: {
-        platformName: publication.platformName,
-        format: publication.format,
-        topic: publication.topic,
-        scheduledDate: publication.scheduledDate,
-        scheduledTime: publication.scheduledTime,
-        notes: publication.notes,
-      },
-      plannedContentItem: publication.plannedContentItem,
-      contentDraft: {
-        draftTitle: publication.contentDraft.draftTitle,
-        draftBody: publication.contentDraft.draftBody,
-        draftNotes: publication.contentDraft.draftNotes,
-        riskLevel: publication.contentDraft.riskLevel,
-        approvalRequired: publication.contentDraft.approvalRequired,
-      },
-      platformName: publication.platformName,
-      format: publication.format,
-      topic: publication.topic,
-    });
-
-    const brief = CreativeAssetBriefSchema.parse(generated);
+    const brief = await generateCreativeAssetBriefFromContext(publication);
 
     await prisma.$transaction([
       prisma.creativeAsset.create({
@@ -988,6 +1030,7 @@ export async function generateCreativeAssetBriefForPublication(formData: FormDat
           textOnAsset: brief.textOnAsset || null,
           references: brief.references,
           status: "brief_ready",
+          source: "ai",
           approvalRequired: brief.approvalRequired,
           notes: brief.notes,
         },
@@ -1016,6 +1059,76 @@ export async function generateCreativeAssetBriefForPublication(formData: FormDat
   revalidatePath("/");
   redirect(
     `/?blueprint=${publication.blueprintId}&plan=${publication.monthlyPlanId}&notice=${encodeURIComponent("AI сгенерировал ТЗ на креативный материал.")}#assets`,
+  );
+}
+
+export async function regenerateCreativeAssetBrief(formData: FormData) {
+  const creativeAssetId = formText(formData, "creativeAssetId");
+
+  if (!creativeAssetId) {
+    errorRedirect("Не выбран креативный материал для перегенерации.");
+  }
+
+  const asset = await prisma.creativeAsset.findUnique({
+    where: { id: creativeAssetId },
+    include: {
+      scheduledPublication: true,
+      client: true,
+      blueprint: {
+        include: {
+          riskRules: true,
+        },
+      },
+      monthlyPlan: true,
+      plannedContentItem: true,
+      contentDraft: true,
+    },
+  });
+
+  if (!asset) {
+    errorRedirect("Креативный материал не найден.");
+  }
+
+  try {
+    const brief = await generateCreativeAssetBriefFromContext({
+      ...asset.scheduledPublication,
+      client: asset.client,
+      blueprint: asset.blueprint,
+      monthlyPlan: asset.monthlyPlan,
+      plannedContentItem: asset.plannedContentItem,
+      contentDraft: asset.contentDraft,
+    });
+
+    await prisma.creativeAsset.update({
+      where: { id: asset.id },
+      data: {
+        assetType: brief.assetType,
+        title: brief.title,
+        brief: brief.brief,
+        formatRequirements: brief.formatRequirements,
+        textOnAsset: brief.textOnAsset || null,
+        references: brief.references,
+        status: "brief_ready",
+        source: "ai",
+        approvalRequired: brief.approvalRequired,
+        notes: brief.notes,
+      },
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Не удалось перегенерировать ТЗ. Проверьте материал и попробуйте ещё раз.";
+    monthlyPlanErrorRedirect(
+      asset.blueprintId,
+      asset.monthlyPlanId,
+      `Не удалось обновить ТЗ на креатив: ${message}`,
+    );
+  }
+
+  revalidatePath("/");
+  redirect(
+    `/?blueprint=${asset.blueprintId}&plan=${asset.monthlyPlanId}&notice=${encodeURIComponent("AI обновил ТЗ на креативный материал.")}#assets`,
   );
 }
 

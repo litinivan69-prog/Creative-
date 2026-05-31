@@ -12,6 +12,7 @@ import {
   markScheduledPublicationReady,
   markScheduledPublicationScheduled,
   markScheduledPublicationSkipped,
+  regenerateCreativeAssetBrief,
   rejectDraft,
   requestDraftChanges,
   scheduleContentDraft,
@@ -390,6 +391,7 @@ type ScheduledPublicationPreview = {
     id: string;
     assetType: string;
     status: string;
+    source: string;
   }>;
 };
 
@@ -403,6 +405,7 @@ type CreativeAssetPreview = {
   textOnAsset: string | null;
   references: string | null;
   status: string;
+  source: string;
   approvalRequired: boolean;
   notes: string | null;
   scheduledPublication: {
@@ -810,17 +813,20 @@ function SchedulingLayer({
                       <StatusBadge tone={creativeAssetTone(publication.creativeAssets[0].status)}>
                         {formatStatus(publication.creativeAssets[0].status)}
                       </StatusBadge>
+                      <CreativeAssetSourceBadge source={publication.creativeAssets[0].source} />
                       <a href="#assets" className="inline-flex items-center text-xs font-bold text-teal-800 transition hover:text-teal-950">
                         Открыть ТЗ
                       </a>
                     </>
                   ) : (
-                    <StatusBadge tone="neutral">ТЗ на визуал не создано</StatusBadge>
+                    <StatusBadge tone="amber">Нет ТЗ на креатив</StatusBadge>
                   )}
-                  {publication.status === "needs_assets" && publication.creativeAssets.length === 0 ? (
-                    <StatusBadge tone="amber">Нужно сгенерировать или создать ТЗ</StatusBadge>
-                  ) : null}
                 </div>
+                {publication.status === "needs_assets" && publication.creativeAssets.length === 0 ? (
+                  <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-900">
+                    Нужно создать или сгенерировать ТЗ перед производством визуала.
+                  </p>
+                ) : null}
 
                 <details className="mt-3 rounded-md border border-stone-200 bg-stone-50/70">
                   <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-stone-700">Изменить дату, время или заметку</summary>
@@ -913,6 +919,14 @@ function creativeAssetTone(status: string): "neutral" | "teal" | "amber" | "rose
   return tones[status] ?? "neutral";
 }
 
+function CreativeAssetSourceBadge({ source, compact = false }: { source: string; compact?: boolean }) {
+  return (
+    <StatusBadge tone={source === "ai" ? "teal" : "neutral"}>
+      {source === "ai" ? "AI-ТЗ" : compact ? "Вручную" : "Создано вручную"}
+    </StatusBadge>
+  );
+}
+
 function CreativeAssetStatusAction({
   assetId,
   status,
@@ -981,67 +995,74 @@ function CreativeAssetLayer({
                     {publication.scheduledDate}{publication.scheduledTime ? `, ${publication.scheduledTime}` : ""}
                   </StatusBadge>
                 </div>
-                <div className="mt-4 rounded-md border border-teal-200 bg-teal-50/70 p-3">
-                  <p className="text-xs font-bold text-teal-950">AI-помощник для ТЗ</p>
-                  <p className="mt-1 text-xs leading-5 text-teal-800">
-                    Система подготовит ТЗ на основе черновика, площадки, формата и темы публикации.
+                <div className="mt-4 rounded-lg border border-teal-300 bg-teal-50 p-4 shadow-[0_4px_12px_rgba(13,148,136,0.08)]">
+                  <p className="text-sm font-semibold text-teal-950">Нет ТЗ на креатив</p>
+                  <p className="mt-2 text-sm leading-6 text-teal-800">
+                    Можно сгенерировать ТЗ через AI на основе черновика, площадки, формата и темы публикации.
                   </p>
                   <form action={generateCreativeAssetBriefForPublication} className="mt-3">
                     <input type="hidden" name="scheduledPublicationId" value={publication.id} />
-                    <PendingSubmitButton pendingLabel="Генерируем ТЗ..." className={primaryButtonClass}>
+                    <PendingSubmitButton pendingLabel="Генерируем ТЗ..." className={`${primaryButtonClass} w-full justify-center py-3 text-sm`}>
                       Сгенерировать ТЗ через AI
                     </PendingSubmitButton>
                   </form>
                 </div>
-                <p className="mt-4 text-xs font-bold text-stone-500">Или заполните ТЗ вручную</p>
-                <form action={createCreativeAssetBrief} className="mt-4 grid gap-2 sm:grid-cols-2">
-                  <input type="hidden" name="scheduledPublicationId" value={publication.id} />
-                  <label className="grid gap-1 text-xs font-bold text-stone-600">
-                    Тип материала
-                    <select name="assetType" className={inputClass} defaultValue="visual">
-                      {creativeAssetTypes.map((type) => (
-                        <option key={type} value={type}>{formatStatus(type)}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="grid gap-1 text-xs font-bold text-stone-600">
-                    Название ТЗ
-                    <input type="text" name="title" required className={inputClass} placeholder="Например: обложка для публикации" />
-                  </label>
-                  <label className="grid gap-1 text-xs font-bold text-stone-600 sm:col-span-2">
-                    Описание ТЗ
-                    <textarea name="brief" required rows={4} className={inputClass} placeholder="Что нужно показать, настроение, ключевой акцент" />
-                  </label>
-                  <label className="grid gap-1 text-xs font-bold text-stone-600">
-                    Требования к формату
-                    <input type="text" name="formatRequirements" className={inputClass} placeholder="Размер, ориентация, длительность" />
-                  </label>
-                  <label className="grid gap-1 text-xs font-bold text-stone-600">
-                    Текст на материале
-                    <input type="text" name="textOnAsset" className={inputClass} placeholder="Необязательно" />
-                  </label>
-                  <label className="grid gap-1 text-xs font-bold text-stone-600">
-                    Референсы
-                    <input type="text" name="references" className={inputClass} placeholder="Ссылки или описание примеров" />
-                  </label>
-                  <label className="grid gap-1 text-xs font-bold text-stone-600">
-                    Заметка
-                    <input type="text" name="notes" className={inputClass} placeholder="Необязательно" />
-                  </label>
-                  <label className="flex items-center gap-2 text-xs font-bold text-stone-600 sm:col-span-2">
-                    <input type="checkbox" name="approvalRequired" className="h-4 w-4 rounded border-stone-300 accent-teal-700" />
-                    Требуется согласование
-                  </label>
-                  <div className="sm:col-span-2">
-                    <PendingSubmitButton pendingLabel="Создаём ТЗ..." className={primaryButtonClass}>
-                      Создать ТЗ на визуал
-                    </PendingSubmitButton>
-                  </div>
-                </form>
+                <details className="mt-3 rounded-md border border-stone-200 bg-white">
+                  <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-stone-600">Или заполнить ТЗ вручную</summary>
+                  <form action={createCreativeAssetBrief} className="grid gap-2 border-t border-stone-200 p-3 sm:grid-cols-2">
+                    <input type="hidden" name="scheduledPublicationId" value={publication.id} />
+                    <label className="grid gap-1 text-xs font-bold text-stone-600">
+                      Тип материала
+                      <select name="assetType" className={inputClass} defaultValue="visual">
+                        {creativeAssetTypes.map((type) => (
+                          <option key={type} value={type}>{formatStatus(type)}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="grid gap-1 text-xs font-bold text-stone-600">
+                      Название ТЗ
+                      <input type="text" name="title" required className={inputClass} placeholder="Например: обложка для публикации" />
+                    </label>
+                    <label className="grid gap-1 text-xs font-bold text-stone-600 sm:col-span-2">
+                      Описание ТЗ
+                      <textarea name="brief" required rows={4} className={inputClass} placeholder="Что нужно показать, настроение, ключевой акцент" />
+                    </label>
+                    <label className="grid gap-1 text-xs font-bold text-stone-600">
+                      Требования к формату
+                      <input type="text" name="formatRequirements" className={inputClass} placeholder="Размер, ориентация, длительность" />
+                    </label>
+                    <label className="grid gap-1 text-xs font-bold text-stone-600">
+                      Текст на материале
+                      <input type="text" name="textOnAsset" className={inputClass} placeholder="Необязательно" />
+                    </label>
+                    <label className="grid gap-1 text-xs font-bold text-stone-600">
+                      Референсы
+                      <input type="text" name="references" className={inputClass} placeholder="Ссылки или описание примеров" />
+                    </label>
+                    <label className="grid gap-1 text-xs font-bold text-stone-600">
+                      Заметка
+                      <input type="text" name="notes" className={inputClass} placeholder="Необязательно" />
+                    </label>
+                    <label className="flex items-center gap-2 text-xs font-bold text-stone-600 sm:col-span-2">
+                      <input type="checkbox" name="approvalRequired" className="h-4 w-4 rounded border-stone-300 accent-teal-700" />
+                      Требуется согласование
+                    </label>
+                    <div className="sm:col-span-2">
+                      <PendingSubmitButton pendingLabel="Создаём ТЗ..." className={secondaryButtonClass}>
+                        Создать ТЗ вручную
+                      </PendingSubmitButton>
+                    </div>
+                  </form>
+                </details>
               </article>
             ))}
             {publicationsNeedingBrief.length === 0 ? (
-              <EmptyState>Публикаций без ТЗ на визуал сейчас нет. Новые задачи появятся здесь после планирования материалов.</EmptyState>
+              <EmptyState>
+                <p className="font-semibold text-stone-700">Все публикации уже имеют ТЗ на креатив.</p>
+                <p className="mt-1 text-xs leading-5 text-stone-500">
+                  Новые задачи появятся здесь, когда публикация будет отмечена как «Нужен визуал» и у неё ещё не будет ТЗ.
+                </p>
+              </EmptyState>
             ) : null}
           </div>
         </div>
@@ -1056,6 +1077,7 @@ function CreativeAssetLayer({
                     <div className="flex flex-wrap gap-1.5">
                       <StatusBadge tone="teal">{formatStatus(asset.assetType)}</StatusBadge>
                       <StatusBadge>{asset.scheduledPublication.platformName} &middot; {asset.scheduledPublication.format}</StatusBadge>
+                      <CreativeAssetSourceBadge source={asset.source} />
                     </div>
                     <h4 className="mt-3 font-semibold leading-6 text-stone-950">{asset.title}</h4>
                     <p className="mt-1 text-xs leading-5 text-stone-500">{asset.scheduledPublication.topic}</p>
@@ -1079,6 +1101,18 @@ function CreativeAssetLayer({
                       <CreativeAssetStatusAction key={status} assetId={asset.id} status={status} />
                     ),
                   )}
+                </div>
+                <div className="mt-3 rounded-md border border-teal-200 bg-teal-50/70 p-3">
+                  <p className="text-xs font-bold text-teal-950">Обновить ТЗ через AI</p>
+                  <p className="mt-1 text-xs leading-5 text-teal-800">
+                    AI пересоберёт ТЗ по текущему черновику, площадке и публикации. Старое ТЗ будет заменено.
+                  </p>
+                  <form action={regenerateCreativeAssetBrief} className="mt-3">
+                    <input type="hidden" name="creativeAssetId" value={asset.id} />
+                    <PendingSubmitButton pendingLabel="Перегенерируем..." className={secondaryButtonClass}>
+                      Перегенерировать ТЗ через AI
+                    </PendingSubmitButton>
+                  </form>
                 </div>
                 <details className="mt-3 rounded-md border border-stone-200 bg-stone-50/70">
                   <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-stone-700">Изменить ТЗ</summary>
@@ -1326,9 +1360,10 @@ function ScheduledPublicationCalendar({
                 <>
                   <StatusBadge tone="teal">{formatStatus(asset.assetType)}</StatusBadge>
                   <StatusBadge tone={creativeAssetTone(asset.status)}>{formatStatus(asset.status)}</StatusBadge>
+                  <CreativeAssetSourceBadge source={asset.source} compact />
                 </>
               ) : publication.status === "needs_assets" ? (
-                <StatusBadge tone="amber">Нет ТЗ на визуал</StatusBadge>
+                <StatusBadge tone="amber">Нет ТЗ на креатив</StatusBadge>
               ) : null}
             </div>
             <a
