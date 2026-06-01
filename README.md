@@ -287,6 +287,14 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - This is not a public portal and does not include authentication yet.
 - Real client approval actions will be added later.
 
+## Sprint Product-3B Client Approval Workflow
+
+- Client Approval Workflow was added.
+- Client Portal Preview now supports approve and request changes actions.
+- Optional client comments are recorded in Content Draft review events.
+- Redirects preserve the selected Client Portal view, Blueprint, and monthly plan.
+- Public authentication and external client links are still not included.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.

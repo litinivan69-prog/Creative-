@@ -30,7 +30,7 @@ function formText(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
 }
 
-type WorkspaceView = "overview" | "clients" | "client_setup" | "approvals" | "calendar" | "drafts" | "assets";
+type WorkspaceView = "overview" | "clients" | "client_setup" | "approvals" | "calendar" | "drafts" | "assets" | "client_portal";
 
 function workspaceLocation(
   view: WorkspaceView,
@@ -164,7 +164,9 @@ function draftReviewActor(formData: FormData) {
 }
 
 function returnViewFromForm(formData: FormData, fallback: WorkspaceView) {
-  return formText(formData, "returnView") === "drafts" ? "drafts" : fallback;
+  const returnView = formText(formData, "returnView");
+
+  return returnView === "drafts" || returnView === "client_portal" ? returnView : fallback;
 }
 
 async function generateCreativeAssetBriefFromContext(context: CreativeAssetGenerationContext) {
@@ -1009,7 +1011,7 @@ export async function requestDraftChanges(formData: FormData) {
   await updateDraftWorkflow(formData, {
     status: "client_changes_requested",
     action: "changes_requested",
-    notice: "Для материала запрошены правки.",
+    notice: draftReviewActor(formData) === "client" ? "Правки по материалу отправлены." : "Для материала запрошены правки.",
   });
 }
 

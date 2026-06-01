@@ -2293,7 +2293,7 @@ function getClientPortalStatus(item: CalendarPreviewItem, publication?: Schedule
   if (draftStatus === "sent_to_client") return "awaiting_approval";
   if (visualRequired && !visual) return "in_progress";
   if (["approved", "ready_to_schedule"].includes(draftStatus ?? "")) return "approved";
-  if (visual && visual.status !== "approved") return "ready_for_review";
+  if (draftStatus === "needs_review") return "ready_for_review";
   return "in_progress";
 }
 
@@ -2459,8 +2459,52 @@ function ClientPortalPreview({
                                   {publication.notes}
                                 </p>
                               ) : null}
-                              <div className="mt-3 rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-xs leading-5 text-teal-800">
-                                Согласование клиентом будет добавлено следующим этапом.
+                              <div className="mt-4 border-t border-stone-200 pt-4">
+                                <p className="text-sm font-semibold text-stone-950">Решение по материалу</p>
+                                {!item.contentDraft ? (
+                                  <p className="mt-2 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs leading-5 text-stone-500">
+                                    Материал ещё готовится. Согласование появится после подготовки текста и визуала.
+                                  </p>
+                                ) : status === "approved" ? (
+                                  <p className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold leading-5 text-emerald-800">
+                                    Материал согласован.
+                                  </p>
+                                ) : status === "changes_requested" ? (
+                                  <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-900">
+                                    Правки отправлены команде.
+                                  </p>
+                                ) : status === "awaiting_approval" || status === "ready_for_review" ? (
+                                  <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                                    <form action={approveDraft} className="rounded-md border border-emerald-200 bg-emerald-50/60 p-3">
+                                      <input type="hidden" name="contentDraftId" value={item.contentDraft.id} />
+                                      <input type="hidden" name="actorType" value="client" />
+                                      <input type="hidden" name="returnView" value="client_portal" />
+                                      <label className="grid gap-1 text-xs font-bold text-stone-600">
+                                        Комментарий
+                                        <textarea name="comment" rows={3} className={inputClass} placeholder="Необязательно" />
+                                      </label>
+                                      <PendingSubmitButton pendingLabel="Согласовываем..." className={`${primaryButtonClass} mt-3 w-full`}>
+                                        Согласовать
+                                      </PendingSubmitButton>
+                                    </form>
+                                    <form action={requestDraftChanges} className="rounded-md border border-amber-200 bg-amber-50/60 p-3">
+                                      <input type="hidden" name="contentDraftId" value={item.contentDraft.id} />
+                                      <input type="hidden" name="actorType" value="client" />
+                                      <input type="hidden" name="returnView" value="client_portal" />
+                                      <label className="grid gap-1 text-xs font-bold text-stone-600">
+                                        Что нужно изменить
+                                        <textarea name="comment" rows={3} className={inputClass} placeholder="Опишите правки, если они нужны" />
+                                      </label>
+                                      <PendingSubmitButton pendingLabel="Отправляем правки..." className={`${secondaryButtonClass} mt-3 w-full`}>
+                                        Запросить правки
+                                      </PendingSubmitButton>
+                                    </form>
+                                  </div>
+                                ) : (
+                                  <p className="mt-2 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs leading-5 text-stone-500">
+                                    Материал ещё готовится. Согласование появится после подготовки текста и визуала.
+                                  </p>
+                                )}
                               </div>
                             </div>
                           </details>
