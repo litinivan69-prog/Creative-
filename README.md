@@ -279,6 +279,14 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - This is not a full background worker yet.
 - External queue and background processing will be added later.
 
+## Sprint Product-3A Client Calendar Portal Preview
+
+- Client Calendar Portal Preview was added.
+- The client-facing view shows a monthly publication calendar, texts, visual previews, and simple statuses.
+- Internal prompts, model names, provider metadata, Generation Jobs, raw Blueprint JSON, and manager tasks are hidden from the client view.
+- This is not a public portal and does not include authentication yet.
+- Real client approval actions will be added later.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.

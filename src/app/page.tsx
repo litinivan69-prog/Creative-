@@ -58,6 +58,7 @@ const workspaceViews = [
   "calendar",
   "drafts",
   "assets",
+  "client_portal",
   "reports",
   "settings",
 ] as const;
@@ -92,6 +93,7 @@ const viewTitles: Record<WorkspaceView, string> = {
   calendar: "Календарь",
   drafts: "Материалы",
   assets: "Креативы",
+  client_portal: "Клиентский календарь",
   reports: "Отчёты",
   settings: "Настройки",
 };
@@ -104,6 +106,7 @@ const navigationGroups = [
       { label: "Клиенты", view: "clients" as const, glyph: "К" },
       { label: "Настройка клиента", view: "client_setup" as const, glyph: "Н" },
       { label: "Календарь", view: "calendar" as const, glyph: "К" },
+      { label: "Клиентский вид", view: "client_portal" as const, glyph: "В" },
     ],
   },
   {
@@ -1628,6 +1631,7 @@ function WorkspaceSwitcher({
     { label: "Календарь", view: "calendar" as const },
     { label: "Материалы", view: "drafts" as const },
     { label: "Креативы", view: "assets" as const },
+    { label: "Клиентский вид", view: "client_portal" as const },
   ];
 
   return (
@@ -1893,6 +1897,7 @@ function DraftsView({
   approvalsHref,
   calendarHref,
   assetsHref,
+  clientPortalHref,
 }: {
   items: MaterialPlannedItem[];
   publications: ScheduledPublicationPreview[];
@@ -1902,6 +1907,7 @@ function DraftsView({
   approvalsHref: string;
   calendarHref: string;
   assetsHref: string;
+  clientPortalHref: string;
 }) {
   const totalMaterialsCount = items.length;
   const textsCreatedCount = items.filter((item) => item.contentDraft).length;
@@ -1922,6 +1928,9 @@ function DraftsView({
         title="Материалы публикаций"
         description="Каждая публикация собрана в одной рабочей карточке: текст, согласование, дата, ТЗ и визуал. Начните со следующего рекомендованного действия."
       />
+      <div className="mt-4">
+        <a href={clientPortalHref} className={secondaryButtonClass}>Открыть клиентский вид</a>
+      </div>
       <article className={`${panelClass} mt-5 overflow-hidden border-teal-200`}>
         <div className="grid gap-5 bg-teal-50/60 p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           <div>
@@ -2239,80 +2248,232 @@ function OperationsOverview({
   );
 }
 
+type ClientPortalStatus = "in_progress" | "ready_for_review" | "awaiting_approval" | "approved" | "changes_requested";
+
+function formatClientPortalStatus(status: ClientPortalStatus) {
+  const labels: Record<ClientPortalStatus, string> = {
+    in_progress: "В работе",
+    ready_for_review: "Готово к просмотру",
+    awaiting_approval: "Ожидает согласования",
+    approved: "Согласовано",
+    changes_requested: "Нужны правки",
+  };
+
+  return labels[status];
+}
+
+function clientPortalStatusTone(status: ClientPortalStatus): "neutral" | "teal" | "amber" | "rose" | "green" {
+  if (status === "approved") return "green";
+  if (status === "changes_requested") return "rose";
+  if (status === "awaiting_approval") return "amber";
+  if (status === "ready_for_review") return "teal";
+  return "neutral";
+}
+
+function formatClientCalendarGroup(label: string) {
+  const normalized = label.trim().toLowerCase().replaceAll("-", " ").replaceAll("_", " ");
+  const weekMatch = normalized.match(/^week\s*(\d+)$/);
+
+  return weekMatch ? `Неделя ${weekMatch[1]}` : label || "Без даты";
+}
+
+function getClientPortalVisual(publication?: ScheduledPublicationPreview) {
+  const variants = publication?.creativeAssets[0]?.generatedVariants ?? [];
+
+  return variants.find((variant) => variant.status === "approved") ?? variants[0];
+}
+
+function getClientPortalStatus(item: CalendarPreviewItem, publication?: ScheduledPublicationPreview): ClientPortalStatus {
+  const draftStatus = item.contentDraft?.status;
+  const visual = getClientPortalVisual(publication);
+  const visualRequired = suggestsVisualAsset(item.format) || publication?.status === "needs_assets";
+
+  if (!item.contentDraft) return "in_progress";
+  if (draftStatus === "client_changes_requested" || draftStatus === "rejected") return "changes_requested";
+  if (draftStatus === "sent_to_client") return "awaiting_approval";
+  if (visualRequired && !visual) return "in_progress";
+  if (["approved", "ready_to_schedule"].includes(draftStatus ?? "")) return "approved";
+  if (visual && visual.status !== "approved") return "ready_for_review";
+  return "in_progress";
+}
+
 function ClientPortalPreview({
   clientName,
-  approvalCount,
-  weeklyCount,
-  selectedItem,
+  month,
+  items,
+  publications,
 }: {
-  clientName: string;
-  approvalCount: number;
-  weeklyCount: number;
-  selectedItem?: CalendarPreviewItem;
+  clientName?: string;
+  month?: string;
+  items: CalendarPreviewItem[];
+  publications: ScheduledPublicationPreview[];
 }) {
-  const timeline = ["Планирование", "Подготовка контента", "Согласования", "Публикации", "Отчётность"];
+  if (!month) {
+    return (
+      <section>
+        <WorkspaceViewHeader
+          eyebrow="Клиентский портал"
+          title="Клиентский календарь"
+          description="Чистый клиентский вид месячного плана без внутренних производственных деталей."
+        />
+        <div className="mt-5 rounded-lg border border-teal-200 bg-teal-50/70 px-4 py-3 text-xs leading-5 text-teal-900">
+          Это предварительный клиентский вид. Публичный доступ и авторизация будут добавлены позже.
+        </div>
+        <div className="mt-5"><EmptyState>Выберите месячный план, чтобы посмотреть клиентский календарь.</EmptyState></div>
+      </section>
+    );
+  }
+
+  const materials = items.map((item) => {
+    const publication = publications.find((candidate) => candidate.plannedContentItemId === item.id);
+    const status = getClientPortalStatus(item, publication);
+
+    return {
+      item,
+      publication,
+      status,
+      visual: getClientPortalVisual(publication),
+      groupLabel: formatClientCalendarGroup(publication?.scheduledDate || item.week || item.plannedDate || "Без даты"),
+    };
+  });
+  const groupedMaterials = Array.from(
+    materials.reduce((groups, material) => {
+      groups.set(material.groupLabel, [...(groups.get(material.groupLabel) ?? []), material]);
+      return groups;
+    }, new Map<string, typeof materials>()),
+    ([label, groupedItems]) => ({ label, items: groupedItems }),
+  );
+  const attentionMaterials = materials
+    .filter(({ item, status, visual }) =>
+      ["awaiting_approval", "changes_requested"].includes(status) ||
+      ["draft", "needs_review"].includes(item.contentDraft?.status ?? "") ||
+      Boolean(visual && visual.qualityStatus !== "passed"),
+    )
+    .slice(0, 5);
+  const readyForReviewCount = materials.filter(({ status }) => ["ready_for_review", "awaiting_approval"].includes(status)).length;
+  const approvedCount = materials.filter(({ status }) => status === "approved").length;
+  const needsChangesCount = materials.filter(({ status }) => status === "changes_requested").length;
+  const missingVisualCount = materials.filter(({ item, publication, visual }) =>
+    (suggestsVisualAsset(item.format) || publication?.status === "needs_assets") && !visual,
+  ).length;
 
   return (
-    <section className={`${panelClass} overflow-hidden`}>
-      <div className="border-b border-stone-200 bg-[#f8fbfa] px-5 py-5 sm:px-6">
-        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Вид клиента</p>
-        <h2 className="mt-2 text-2xl font-semibold text-stone-950">Здравствуйте, {clientName}</h2>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
-          Будущий кабинет клиента: простой экран для согласований и контроля прогресса на базе той же операционной системы.
-        </p>
+    <section>
+      <div className="rounded-lg border border-teal-200 bg-teal-50/70 px-4 py-3 text-xs leading-5 text-teal-900">
+        Это предварительный клиентский вид. Публичный доступ и авторизация будут добавлены позже.
       </div>
-      <div className="grid gap-5 p-5 sm:p-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div>
-          <h3 className="text-sm font-semibold text-stone-950">Что требует вашего внимания</h3>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-            <MetricCard label="Ждут согласования" value={approvalCount} tone="amber" />
-            <MetricCard label="В плане на неделю" value={weeklyCount} tone="teal" />
-            <MetricCard label="Опубликовано за месяц" value="-" detail="Появится позже" />
-            <MetricCard label="Новые отзывы" value="-" detail="События появятся позже" />
+      <div className="mt-5 overflow-hidden rounded-lg border border-stone-200 bg-white shadow-[0_1px_2px_rgba(28,36,38,0.04)]">
+        <div className="border-b border-stone-200 bg-[#f8fbfa] px-5 py-6 sm:px-7">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Adaptive Presence OS &middot; by Creative</p>
+          <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold text-stone-950">{clientName || "Клиентский календарь"}</h2>
+              <p className="mt-2 text-sm leading-6 text-stone-500">Календарь публикаций и материалы для понятного согласования.</p>
+            </div>
+            <StatusBadge tone="teal">{month}</StatusBadge>
           </div>
-          <div className="mt-6">
-            <p className="text-sm font-semibold text-stone-950">Этапы месяца</p>
-            <div className="mt-3 grid gap-2 sm:grid-cols-5">
-              {timeline.map((stage, index) => (
-                <div key={stage} className={`rounded-md border px-3 py-3 ${index < 3 ? "border-teal-200 bg-teal-50" : "border-stone-200 bg-stone-50"}`}>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-stone-400">0{index + 1}</p>
-                  <p className="mt-2 text-xs font-semibold text-stone-700">{stage}</p>
+        </div>
+
+        <div className="p-5 sm:p-7">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            <MetricCard label="Материалов в плане" value={materials.length} />
+            <MetricCard label="Готово к просмотру" value={readyForReviewCount} tone="teal" />
+            <MetricCard label="Ожидает согласования" value={materials.filter(({ status }) => status === "awaiting_approval").length} tone="amber" />
+            <MetricCard label="Согласовано" value={approvedCount} />
+            <MetricCard label="Нужны правки" value={needsChangesCount} tone={needsChangesCount > 0 ? "rose" : "stone"} />
+            <MetricCard label="Визуалы в работе" value={missingVisualCount} tone={missingVisualCount > 0 ? "amber" : "stone"} />
+          </div>
+
+          <section className="mt-7 rounded-lg border border-amber-200 bg-amber-50/50 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-amber-700">Ваше внимание</p>
+                <h3 className="mt-1 text-lg font-semibold text-stone-950">Требует внимания</h3>
+              </div>
+              <StatusBadge tone={attentionMaterials.length > 0 ? "amber" : "green"}>{attentionMaterials.length}</StatusBadge>
+            </div>
+            <div className="mt-3 grid gap-2 lg:grid-cols-2">
+              {attentionMaterials.map(({ item, status }) => (
+                <div key={item.id} className="rounded-md border border-amber-200 bg-white px-3 py-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge tone="teal">{item.platformName}</StatusBadge>
+                    <StatusBadge tone={clientPortalStatusTone(status)}>{formatClientPortalStatus(status)}</StatusBadge>
+                  </div>
+                  <p className="mt-2 text-sm font-semibold leading-6 text-stone-900">{item.topic}</p>
                 </div>
               ))}
+              {attentionMaterials.length === 0 ? <p className="text-sm leading-6 text-stone-500">Сейчас нет материалов, требующих вашего внимания.</p> : null}
+            </div>
+          </section>
+
+          <div className="mt-7">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Месячный план</p>
+              <h3 className="mt-1 text-xl font-semibold text-stone-950">Календарь публикаций</h3>
+            </div>
+            <div className="mt-4 grid gap-5">
+              {groupedMaterials.map((group) => (
+                <section key={group.label}>
+                  <div className="flex items-center justify-between gap-3 border-b border-stone-200 pb-2">
+                    <h4 className="font-semibold text-stone-900">{group.label}</h4>
+                    <StatusBadge>{group.items.length} материалов</StatusBadge>
+                  </div>
+                  <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                    {group.items.map(({ item, publication, status, visual }) => (
+                      <article key={item.id} className="overflow-hidden rounded-lg border border-stone-200 bg-white">
+                        {visual ? (
+                          <img
+                            src={`data:${visual.mimeType};base64,${visual.imageBase64}`}
+                            alt={item.topic}
+                            className="aspect-[16/8] max-h-52 w-full bg-stone-100 object-contain"
+                          />
+                        ) : (
+                          <div className="flex h-28 items-center justify-center border-b border-dashed border-stone-200 bg-stone-50 px-4 text-center text-xs font-semibold text-stone-400">
+                            Визуал ещё готовится.
+                          </div>
+                        )}
+                        <div className="p-4">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <StatusBadge tone="teal">{item.platformName}</StatusBadge>
+                            <StatusBadge>{item.format}</StatusBadge>
+                            <StatusBadge tone={clientPortalStatusTone(status)}>{formatClientPortalStatus(status)}</StatusBadge>
+                          </div>
+                          <p className="mt-3 text-xs font-bold uppercase tracking-[0.08em] text-stone-400">
+                            {publication?.scheduledDate || item.week || item.plannedDate}
+                            {publication?.scheduledTime ? `, ${publication.scheduledTime}` : ""}
+                          </p>
+                          <h5 className="mt-2 font-semibold leading-6 text-stone-950">{item.topic}</h5>
+                          <p className="mt-2 line-clamp-3 text-sm leading-6 text-stone-500">
+                            {item.contentDraft?.draftBody || "Текст публикации ещё готовится."}
+                          </p>
+                          <details className="mt-3 rounded-md border border-stone-200 bg-stone-50/70">
+                            <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-teal-800">Открыть материал</summary>
+                            <div className="border-t border-stone-200 p-3">
+                              <p className="text-xs font-bold text-stone-500">Текст публикации</p>
+                              <p className="mt-2 text-sm font-semibold leading-6 text-stone-900">{item.contentDraft?.draftTitle || item.topic}</p>
+                              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-stone-600">
+                                {item.contentDraft?.draftBody || "Текст публикации ещё готовится."}
+                              </p>
+                              {publication?.notes ? (
+                                <p className="mt-3 rounded-md border border-stone-200 bg-white px-3 py-2 text-xs leading-5 text-stone-500">
+                                  {publication.notes}
+                                </p>
+                              ) : null}
+                              <div className="mt-3 rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-xs leading-5 text-teal-800">
+                                Согласование клиентом будет добавлено следующим этапом.
+                              </div>
+                            </div>
+                          </details>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              ))}
+              {groupedMaterials.length === 0 ? <EmptyState>Публикационные материалы для этого месяца ещё готовятся.</EmptyState> : null}
             </div>
           </div>
         </div>
-        <article className="rounded-lg border border-stone-200 bg-white p-4 shadow-[0_1px_2px_rgba(28,36,38,0.04)]">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-xs font-bold text-stone-700">Карточка согласования</p>
-            <StatusBadge tone="amber">Предпросмотр</StatusBadge>
-          </div>
-          {selectedItem ? (
-            <>
-              <div className="mt-4 flex flex-wrap gap-1.5">
-                <StatusBadge tone="teal">{selectedItem.platformName}</StatusBadge>
-                <StatusBadge>{selectedItem.format}</StatusBadge>
-              </div>
-              <p className="mt-3 text-sm font-semibold leading-6 text-stone-900">{selectedItem.topic}</p>
-              <div className="mt-3 flex h-24 items-center justify-center rounded-md border border-dashed border-stone-300 bg-stone-50 text-[10px] font-bold uppercase tracking-[0.1em] text-stone-400">
-                Превью визуала
-              </div>
-              <p className="mt-3 line-clamp-4 text-xs leading-5 text-stone-500">
-                {selectedItem.contentDraft?.draftBody || "Здесь появится текст публикации для простого и понятного согласования с клиентом."}
-              </p>
-            </>
-          ) : (
-            <p className="mt-4 text-sm leading-6 text-stone-500">Здесь появится следующий материал, готовый к согласованию.</p>
-          )}
-          <div className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3">
-            <p className="text-xs font-bold text-stone-700">Комментарии</p>
-            <p className="mt-1 text-xs leading-5 text-stone-400">Здесь появится обсуждение клиента и менеджера.</p>
-          </div>
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            <button type="button" disabled className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs font-bold text-stone-400">Запросить правки</button>
-            <button type="button" disabled className="rounded-md bg-teal-700 px-3 py-2 text-xs font-bold text-white opacity-60">Согласовать</button>
-          </div>
-        </article>
       </div>
     </section>
   );
@@ -2901,20 +3062,26 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <div className="hidden flex-wrap items-center gap-3 xl:flex">
-                <ConnectionBadge label={process.env.OPENAI_API_KEY ? "OpenAI подключен" : "Нужно настроить OpenAI"} active={Boolean(process.env.OPENAI_API_KEY)} />
-                <ConnectionBadge label="Neon подключен" />
-                <ConnectionBadge label={process.env.VERCEL ? "Онлайн" : "Локально"} />
-              </div>
-              <input
-                aria-label="Поиск по рабочему пространству"
-                className="w-64 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-700 outline-none placeholder:text-stone-400 focus:border-teal-500"
-                placeholder="Клиенты, материалы, события..."
-              />
-              <button type="button" aria-label="Уведомления" className="relative flex h-9 w-9 items-center justify-center rounded-md border border-stone-200 bg-white text-xs font-bold text-stone-600">
-                N
-                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] text-white">{approvalQueueCount}</span>
-              </button>
+              {activeView === "client_portal" ? (
+                <StatusBadge tone="teal">Предпросмотр для клиента</StatusBadge>
+              ) : (
+                <>
+                  <div className="hidden flex-wrap items-center gap-3 xl:flex">
+                    <ConnectionBadge label={process.env.OPENAI_API_KEY ? "OpenAI подключен" : "Нужно настроить OpenAI"} active={Boolean(process.env.OPENAI_API_KEY)} />
+                    <ConnectionBadge label="Neon подключен" />
+                    <ConnectionBadge label={process.env.VERCEL ? "Онлайн" : "Локально"} />
+                  </div>
+                  <input
+                    aria-label="Поиск по рабочему пространству"
+                    className="w-64 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-700 outline-none placeholder:text-stone-400 focus:border-teal-500"
+                    placeholder="Клиенты, материалы, события..."
+                  />
+                  <button type="button" aria-label="Уведомления" className="relative flex h-9 w-9 items-center justify-center rounded-md border border-stone-200 bg-white text-xs font-bold text-stone-600">
+                    N
+                    <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] text-white">{approvalQueueCount}</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </header>
@@ -3007,6 +3174,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                     {latestBlueprint ? "Сохраняйте фокус на качестве проверки и естественной подаче для каждой площадки." : "AI-слой активируется после генерации Blueprint."}
                   </p>
                 </div>
+                {selectedMonthlyPlan ? (
+                  <a href={workspaceLinks.client_portal} className="mt-4 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">
+                    Посмотреть клиентский календарь
+                  </a>
+                ) : null}
               </article>
             </section>
 
@@ -3153,6 +3325,16 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 approvalsHref={workspaceLinks.approvals}
                 calendarHref={workspaceLinks.calendar}
                 assetsHref={workspaceLinks.assets}
+                clientPortalHref={workspaceLinks.client_portal}
+              />
+            ) : null}
+
+            {activeView === "client_portal" ? (
+              <ClientPortalPreview
+                clientName={latestBlueprint?.client.name}
+                month={selectedMonthlyPlan?.month}
+                items={selectedMonthlyPlan?.plannedContentItems ?? []}
+                publications={selectedMonthlyPlan?.scheduledPublications ?? []}
               />
             ) : null}
 
