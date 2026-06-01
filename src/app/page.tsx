@@ -7,6 +7,7 @@ import {
   deleteCreativeVariant,
   generateBlueprint,
   generateContentDraftForItem,
+  regenerateContentDraftForItem,
   generateCreativeAssetBriefForPublication,
   generateCreativeVisualVariantForAsset,
   generateMonthlyPlan,
@@ -37,34 +38,83 @@ import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 
 type SearchParams = Promise<{
+  view?: string;
   blueprint?: string;
   plan?: string;
+  client?: string;
   error?: string;
   notice?: string;
 }>;
+
+const workspaceViews = [
+  "overview",
+  "clients",
+  "client_setup",
+  "approvals",
+  "calendar",
+  "drafts",
+  "assets",
+  "reports",
+  "settings",
+] as const;
+
+type WorkspaceView = (typeof workspaceViews)[number];
+
+type WorkspaceContext = {
+  blueprint?: string;
+  plan?: string;
+  client?: string;
+};
+
+function getActiveView(params: { view?: string }): WorkspaceView {
+  return workspaceViews.includes(params.view as WorkspaceView) ? (params.view as WorkspaceView) : "overview";
+}
+
+function workspaceHref(view: WorkspaceView, context: WorkspaceContext = {}) {
+  const searchParams = new URLSearchParams({ view });
+
+  if (context.blueprint) searchParams.set("blueprint", context.blueprint);
+  if (context.plan) searchParams.set("plan", context.plan);
+  if (context.client) searchParams.set("client", context.client);
+
+  return `/?${searchParams.toString()}`;
+}
+
+const viewTitles: Record<WorkspaceView, string> = {
+  overview: "Обзор",
+  clients: "Клиенты",
+  client_setup: "Настройка клиента",
+  approvals: "Согласования",
+  calendar: "Календарь",
+  drafts: "Материалы",
+  assets: "Креативы",
+  reports: "Отчёты",
+  settings: "Настройки",
+};
 
 const navigationGroups = [
   {
     label: "Работа",
     items: [
-      { label: "Обзор", href: "#overview", glyph: "О" },
-      { label: "Клиенты", href: "#clients", glyph: "К" },
-      { label: "Календарь", href: "#calendar", glyph: "К" },
+      { label: "Обзор", view: "overview" as const, glyph: "О" },
+      { label: "Клиенты", view: "clients" as const, glyph: "К" },
+      { label: "Настройка клиента", view: "client_setup" as const, glyph: "Н" },
+      { label: "Календарь", view: "calendar" as const, glyph: "К" },
     ],
   },
   {
     label: "Проверка",
     items: [
-      { label: "Согласования", href: "#approvals", glyph: "С" },
-      { label: "Черновики", href: "#drafts", glyph: "Ч" },
-      { label: "События", href: "#events", glyph: "С" },
+      { label: "Согласования", view: "approvals" as const, glyph: "С" },
+      { label: "Материалы", view: "drafts" as const, glyph: "М" },
+      { label: "Креативы", view: "assets" as const, glyph: "К" },
     ],
   },
   {
     label: "Система",
     items: [
-      { label: "Отчёты", href: "#reports", glyph: "О" },
-      { label: "Настройки", href: "#settings", glyph: "Н" },
+      { label: "Отчёты", view: "reports" as const, glyph: "О" },
+      { label: "Настройки", view: "settings" as const, glyph: "Н" },
     ],
   },
 ];
@@ -274,7 +324,7 @@ function formatStatus(value: string) {
     active: "Активно",
     planned: "Запланировано",
     open: "Открыто",
-    draft: "Черновик",
+    draft: "Текст готов",
     needs_review: "Требует проверки",
     sent_to_client: "У клиента",
     client_changes_requested: "Запрошены правки",
@@ -330,7 +380,7 @@ function formatStatus(value: string) {
 
 function formatDraftStatus(status: string) {
   const labels: Record<string, string> = {
-    draft: "Черновик",
+    draft: "Текст готов",
     needs_review: "Требует проверки",
     sent_to_client: "У клиента",
     client_changes_requested: "Запрошены правки",
@@ -340,6 +390,28 @@ function formatDraftStatus(status: string) {
   };
 
   return labels[status] ?? formatStatus(status);
+}
+
+function formatMaterialTextStatus(draft?: { status: string } | null) {
+  if (!draft) return "Текст не создан";
+
+  const labels: Record<string, string> = {
+    draft: "Текст готов",
+    needs_review: "На проверке",
+    sent_to_client: "У клиента",
+    client_changes_requested: "Запрошены правки",
+    approved: "Согласован",
+    rejected: "Отклонён",
+    ready_to_schedule: "Согласован",
+  };
+
+  return labels[draft.status] ?? formatDraftStatus(draft.status);
+}
+
+function materialTextStatusTone(draft?: { status: string } | null): "neutral" | "teal" | "amber" | "rose" | "green" {
+  if (!draft) return "neutral";
+  if (draft.status === "draft") return "teal";
+  return draftStatusTone(draft.status);
 }
 
 function formatReviewActor(actorType: string) {
@@ -354,7 +426,7 @@ function formatReviewActor(actorType: string) {
 
 function formatReviewAction(action: string) {
   const labels: Record<string, string> = {
-    created: "Черновик создан",
+    created: "Текст создан",
     submitted_for_review: "Отправлен на проверку",
     sent_to_client: "Отправлен клиенту",
     changes_requested: "Запрошены правки",
@@ -470,7 +542,7 @@ const draftStatusGroups = [
   { status: "approved", label: "Согласовано" },
   { status: "ready_to_schedule", label: "Готово к планированию" },
   { status: "rejected", label: "Отклонено" },
-  { status: "draft", label: "Черновики" },
+  { status: "draft", label: "Тексты готовы" },
 ];
 
 function groupDraftsByStatus(items: Array<{ contentDraft: DraftQueueItem | null }>) {
@@ -527,12 +599,12 @@ function DraftWorkflowForm({
   );
 }
 
-function DraftWorkflowControls({ draft }: { draft: DraftQueueItem }) {
+function DraftWorkflowControls({ draft, calendarHref }: { draft: DraftQueueItem; calendarHref: string }) {
   if (draft.status === "ready_to_schedule") {
     return (
       <div className="flex flex-wrap items-center gap-2">
         <StatusBadge tone="green">Готово к планированию</StatusBadge>
-        <a href="#scheduling" className="text-xs font-bold text-teal-700 transition hover:text-teal-900">
+        <a href={calendarHref} className="text-xs font-bold text-teal-700 transition hover:text-teal-900">
           Перейти к планированию
         </a>
       </div>
@@ -642,7 +714,7 @@ function ReviewEventTimeline({ events }: { events: DraftReviewEventPreview[] }) 
   );
 }
 
-function ReviewQueue({ groups }: { groups: ReturnType<typeof groupDraftsByStatus> }) {
+function ReviewQueue({ groups, calendarHref }: { groups: ReturnType<typeof groupDraftsByStatus>; calendarHref: string }) {
   const draftCount = groups.reduce((total, group) => total + group.drafts.length, 0);
 
   return (
@@ -652,10 +724,10 @@ function ReviewQueue({ groups }: { groups: ReturnType<typeof groupDraftsByStatus
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Процесс согласования</p>
           <h2 className="mt-1 text-xl font-semibold text-stone-950">Очередь согласований</h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
-            Здесь черновики проходят проверку менеджера, согласование с клиентом и подготовку к планированию.
+            Здесь тексты публикаций проходят проверку менеджера, согласование с клиентом и подготовку к планированию.
           </p>
         </div>
-        <StatusBadge tone={draftCount > 0 ? "teal" : "neutral"}>{draftCount} черновиков</StatusBadge>
+        <StatusBadge tone={draftCount > 0 ? "teal" : "neutral"}>{draftCount} материалов</StatusBadge>
       </div>
 
       {draftCount > 0 ? (
@@ -699,7 +771,7 @@ function ReviewQueue({ groups }: { groups: ReturnType<typeof groupDraftsByStatus
                         <ReviewEventTimeline events={draft.reviewEvents} />
                       </div>
                       <div className="mt-3 border-t border-stone-200 pt-3">
-                        <DraftWorkflowControls draft={draft} />
+                        <DraftWorkflowControls draft={draft} calendarHref={calendarHref} />
                       </div>
                     </article>
                   );
@@ -710,7 +782,7 @@ function ReviewQueue({ groups }: { groups: ReturnType<typeof groupDraftsByStatus
         </div>
       ) : (
         <div className="mt-5">
-          <EmptyState>Сгенерируйте черновики из запланированных материалов, чтобы запустить процесс согласования.</EmptyState>
+          <EmptyState>Сгенерируйте тексты публикаций из запланированных материалов, чтобы запустить процесс согласования.</EmptyState>
         </div>
       )}
     </section>
@@ -756,9 +828,13 @@ function ScheduledPublicationAction({
 function SchedulingLayer({
   drafts,
   publications,
+  assetsHref,
+  draftsHref,
 }: {
   drafts: DraftQueueItem[];
   publications: ScheduledPublicationPreview[];
+  assetsHref: string;
+  draftsHref: string;
 }) {
   const scheduledDraftIds = new Set(publications.map((publication) => publication.contentDraftId));
   const availableDrafts = drafts.filter(
@@ -774,7 +850,7 @@ function SchedulingLayer({
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Внутреннее планирование</p>
           <h2 className="mt-1 text-xl font-semibold text-stone-950">Планирование публикаций</h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
-            Согласованные черновики можно поставить в ручной план публикаций. Внешние площадки и автоматическая отправка пока не подключены.
+            Согласованные материалы можно поставить в ручной план публикаций. Внешние площадки и автоматическая отправка пока не подключены.
           </p>
         </div>
         <StatusBadge tone={publications.length > 0 ? "teal" : "neutral"}>{publications.length} запланировано</StatusBadge>
@@ -817,7 +893,7 @@ function SchedulingLayer({
               </article>
             ))}
             {availableDrafts.length === 0 ? (
-              <EmptyState>Согласуйте черновики и отметьте их готовыми к планированию. После этого здесь появится форма публикации.</EmptyState>
+              <EmptyState>Согласуйте материалы и отметьте их готовыми к планированию. После этого здесь появится форма публикации.</EmptyState>
             ) : null}
           </div>
         </div>
@@ -842,6 +918,20 @@ function SchedulingLayer({
                   {publication.scheduledDate}
                   {publication.scheduledTime ? `, ${publication.scheduledTime}` : ""}
                 </p>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <StatusBadge tone={materialTextStatusTone(drafts.find((draft) => draft.id === publication.contentDraftId))}>
+                    {formatMaterialTextStatus(drafts.find((draft) => draft.id === publication.contentDraftId))}
+                  </StatusBadge>
+                  <a href={`${draftsHref}#draft-${publication.contentDraftId}`} className="text-xs font-bold text-teal-800 transition hover:text-teal-950">
+                    Открыть материал
+                  </a>
+                  <form action={regenerateContentDraftForItem}>
+                    <input type="hidden" name="plannedContentItemId" value={publication.plannedContentItemId} />
+                    <PendingSubmitButton pendingLabel="Обновляем текст..." className="text-xs font-bold text-stone-600 transition hover:text-stone-950">
+                      Перегенерировать текст
+                    </PendingSubmitButton>
+                  </form>
+                </div>
                 {publication.timezone ? <p className="mt-1 text-xs text-stone-400">{publication.timezone}</p> : null}
                 {publication.notes ? <p className="mt-3 line-clamp-2 rounded-md bg-stone-50 px-3 py-2 text-sm leading-6 text-stone-600">{publication.notes}</p> : null}
                 <div className="mt-3 flex flex-wrap gap-1.5">
@@ -859,7 +949,7 @@ function SchedulingLayer({
                       ) : (
                         <StatusBadge tone="neutral">ТЗ есть, визуал не создан</StatusBadge>
                       )}
-                      <a href="#assets" className="inline-flex items-center text-xs font-bold text-teal-800 transition hover:text-teal-950">
+                      <a href={assetsHref} className="inline-flex items-center text-xs font-bold text-teal-800 transition hover:text-teal-950">
                         Открыть ТЗ
                       </a>
                     </>
@@ -881,7 +971,7 @@ function SchedulingLayer({
                   ) : (
                     <StatusBadge tone="green">Готово к размещению</StatusBadge>
                   )}
-                  <a href="#assets" className="inline-flex items-center text-xs font-bold text-teal-800 transition hover:text-teal-950">
+                  <a href={assetsHref} className="inline-flex items-center text-xs font-bold text-teal-800 transition hover:text-teal-950">
                     Открыть креативы
                   </a>
                 </div>
@@ -930,7 +1020,7 @@ function SchedulingLayer({
               </article>
             ))}
             {publications.length === 0 ? (
-              <EmptyState>Запланированных публикаций пока нет. Выберите согласованный черновик слева и укажите дату.</EmptyState>
+              <EmptyState>Запланированных публикаций пока нет. Выберите согласованный материал слева и укажите дату.</EmptyState>
             ) : null}
           </div>
         </div>
@@ -1084,7 +1174,7 @@ function CreativeAssetLayer({
                   <div>
                     <p className="text-xs font-bold uppercase tracking-[0.08em] text-teal-700">{publication.platformName} &middot; {publication.format}</p>
                     <h4 className="mt-2 font-semibold leading-6 text-stone-950">{publication.topic}</h4>
-                    <p className="mt-1 text-xs leading-5 text-stone-500">Черновик: {publication.contentDraft.draftTitle}</p>
+                    <p className="mt-1 text-xs leading-5 text-stone-500">Текст публикации: {publication.contentDraft.draftTitle}</p>
                   </div>
                   <StatusBadge tone="amber">
                     {publication.scheduledDate}{publication.scheduledTime ? `, ${publication.scheduledTime}` : ""}
@@ -1093,7 +1183,7 @@ function CreativeAssetLayer({
                 <div className="mt-4 rounded-lg border border-teal-300 bg-teal-50 p-4 shadow-[0_4px_12px_rgba(13,148,136,0.08)]">
                   <p className="text-sm font-semibold text-teal-950">Нет ТЗ на креатив</p>
                   <p className="mt-2 text-sm leading-6 text-teal-800">
-                    Можно сгенерировать ТЗ через AI на основе черновика, площадки, формата и темы публикации.
+                    Можно сгенерировать ТЗ через AI на основе текста, площадки, формата и темы публикации.
                   </p>
                   <form action={generateCreativeAssetBriefForPublication} className="mt-3">
                     <input type="hidden" name="scheduledPublicationId" value={publication.id} />
@@ -1204,7 +1294,7 @@ function CreativeAssetLayer({
                 <div className="mt-3 rounded-md border border-teal-200 bg-teal-50/70 p-3">
                   <p className="text-xs font-bold text-teal-950">Обновить ТЗ через AI</p>
                   <p className="mt-1 text-xs leading-5 text-teal-800">
-                    AI пересоберёт ТЗ по текущему черновику, площадке и публикации. Старое ТЗ будет заменено.
+                    AI пересоберёт ТЗ по текущему тексту, площадке и публикации. Старое ТЗ будет заменено.
                   </p>
                   <form action={regenerateCreativeAssetBrief} className="mt-3">
                     <input type="hidden" name="creativeAssetId" value={asset.id} />
@@ -1375,24 +1465,30 @@ function suggestsVisualAsset(format: string) {
   );
 }
 
-function WorkspaceSwitcher() {
+function WorkspaceSwitcher({
+  activeView,
+  links,
+}: {
+  activeView: WorkspaceView;
+  links: Record<WorkspaceView, string>;
+}) {
   const items = [
-    { label: "Обзор", href: "#overview" },
-    { label: "Согласования", href: "#review-queue" },
-    { label: "Календарь", href: "#calendar" },
-    { label: "Планирование", href: "#scheduling" },
-    { label: "Креативы", href: "#assets" },
+    { label: "Обзор", view: "overview" as const },
+    { label: "Согласования", view: "approvals" as const },
+    { label: "Календарь", view: "calendar" as const },
+    { label: "Материалы", view: "drafts" as const },
+    { label: "Креативы", view: "assets" as const },
   ];
 
   return (
     <nav aria-label="Рабочие зоны" className="mt-5 overflow-x-auto rounded-lg border border-stone-200 bg-white p-1.5 shadow-[0_1px_2px_rgba(28,36,38,0.04)]">
       <div className="flex min-w-max gap-1">
-        {items.map((item, index) => (
+        {items.map((item) => (
           <a
-            key={item.href}
-            href={item.href}
+            key={item.view}
+            href={links[item.view]}
             className={`rounded-md px-3 py-2 text-xs font-bold transition ${
-              index === 0 ? "bg-teal-800 text-white" : "text-stone-600 hover:bg-stone-100 hover:text-stone-950"
+              item.view === activeView ? "bg-teal-800 text-white" : "text-stone-600 hover:bg-stone-100 hover:text-stone-950"
             }`}
           >
             {item.label}
@@ -1407,10 +1503,12 @@ function OverviewPreviews({
   drafts,
   publications,
   assets,
+  links,
 }: {
   drafts: DraftQueueItem[];
   publications: ScheduledPublicationPreview[];
   assets: CreativeAssetPreview[];
+  links: Record<WorkspaceView, string>;
 }) {
   const reviewDrafts = drafts.filter((draft) => ["draft", "needs_review", "sent_to_client", "client_changes_requested"].includes(draft.status)).slice(0, 3);
   const calendarPublications = publications.slice(0, 3);
@@ -1434,9 +1532,9 @@ function OverviewPreviews({
               <p className="mt-1 text-xs text-stone-500">{formatDraftStatus(draft.status)}</p>
             </div>
           ))}
-          {reviewDrafts.length === 0 ? <p className={mutedTextClass}>Нет черновиков, требующих внимания.</p> : null}
+          {reviewDrafts.length === 0 ? <p className={mutedTextClass}>Нет материалов, требующих внимания.</p> : null}
         </div>
-        <a href="#review-queue" className="mt-4 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">Открыть согласования</a>
+        <a href={links.approvals} className="mt-4 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">Открыть согласования</a>
       </article>
 
       <article className={`${panelClass} min-w-0 p-4`}>
@@ -1457,7 +1555,7 @@ function OverviewPreviews({
           ))}
           {calendarPublications.length === 0 ? <p className={mutedTextClass}>Публикации с датой пока не запланированы.</p> : null}
         </div>
-        <a href="#calendar" className="mt-4 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">Открыть календарь</a>
+        <a href={links.calendar} className="mt-4 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">Открыть календарь</a>
       </article>
 
       <article className={`${panelClass} min-w-0 p-4`}>
@@ -1478,8 +1576,76 @@ function OverviewPreviews({
           ))}
           {creativeAssets.length === 0 ? <p className={mutedTextClass}>Нет креативов, требующих внимания.</p> : null}
         </div>
-        <a href="#assets" className="mt-4 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">Открыть креативы</a>
+        <a href={links.assets} className="mt-4 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">Открыть креативы</a>
       </article>
+    </section>
+  );
+}
+
+function WorkspaceViewHeader({
+  eyebrow,
+  title,
+  description,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div>
+      <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-teal-700">{eyebrow}</p>
+      <h2 className="mt-2 text-3xl font-semibold text-stone-950">{title}</h2>
+      <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">{description}</p>
+    </div>
+  );
+}
+
+function DraftsView({
+  drafts,
+  approvalsHref,
+}: {
+  drafts: DraftQueueItem[];
+  approvalsHref: string;
+}) {
+  return (
+    <section>
+      <WorkspaceViewHeader
+        eyebrow="Контент-производство"
+        title="Материалы публикаций"
+        description="Инвентарь подготовленных текстов. Полный материал и история открываются по запросу, а действия согласования собраны в отдельной очереди."
+      />
+      <div className="mt-5 grid gap-3 xl:grid-cols-2">
+        {drafts.map((draft) => (
+          <article id={`draft-${draft.id}`} key={draft.id} className={`${panelClass} min-w-0 scroll-mt-24 p-4`}>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-xs font-bold uppercase tracking-[0.08em] text-teal-700">{draft.platformName} &middot; {draft.format}</p>
+                <h3 className="mt-2 line-clamp-2 font-semibold leading-6 text-stone-950">{draft.draftTitle}</h3>
+                <p className="mt-1 line-clamp-1 text-xs leading-5 text-stone-400">{draft.topic}</p>
+              </div>
+              <StatusBadge tone={draftStatusTone(draft.status)}>{formatDraftStatus(draft.status)}</StatusBadge>
+            </div>
+            <p className="mt-3 line-clamp-2 whitespace-pre-wrap text-sm leading-6 text-stone-600">{draft.draftBody}</p>
+            <details className="mt-3 rounded-md border border-stone-200 bg-stone-50/70">
+              <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-stone-700">Показать текст и заметки</summary>
+              <div className="grid gap-3 border-t border-stone-200 p-3">
+                <p className="whitespace-pre-wrap text-sm leading-6 text-stone-600">{draft.draftBody}</p>
+                <ReviewEventTimeline events={draft.reviewEvents} />
+              </div>
+            </details>
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-stone-100 pt-3">
+              <StatusBadge tone={draft.riskLevel === "high" ? "rose" : draft.riskLevel === "medium" ? "amber" : "neutral"}>
+                Риск: {formatStatus(draft.riskLevel)}
+              </StatusBadge>
+              {draft.approvalRequired ? <StatusBadge tone="amber">Нужно согласование</StatusBadge> : null}
+              <a href={approvalsHref} className="text-xs font-bold text-teal-800 transition hover:text-teal-950">
+                Открыть согласования
+              </a>
+            </div>
+          </article>
+        ))}
+        {drafts.length === 0 ? <EmptyState>Сгенерируйте тексты из месячного плана, чтобы материалы появились в этом разделе.</EmptyState> : null}
+      </div>
     </section>
   );
 }
@@ -1504,7 +1670,7 @@ function OperationsOverview({
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Операционный обзор</p>
           <h2 className="mt-1 text-xl font-semibold text-stone-950">Состояние работы на месяц</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-500">
-            Рабочий индикатор прогресса: готовность черновиков, нагрузка на согласование и состояние интеграций.
+            Рабочий индикатор прогресса: готовность текстов, нагрузка на согласование и состояние интеграций.
           </p>
         </div>
         <StatusBadge tone={integrationTaskCount > 0 ? "amber" : "green"}>
@@ -1515,7 +1681,7 @@ function OperationsOverview({
         <div>
           <p className="text-5xl font-semibold text-stone-950">{progress}%</p>
           <p className="mt-2 text-sm font-semibold text-stone-700">Готовность производства</p>
-          <p className="mt-1 text-xs leading-5 text-stone-400">Черновики подготовлены относительно материалов в календаре.</p>
+          <p className="mt-1 text-xs leading-5 text-stone-400">Тексты подготовлены относительно материалов в календаре.</p>
         </div>
         <div>
           <div className="flex h-44 items-end gap-3 rounded-lg border border-stone-200 bg-stone-50 px-5 pb-4 pt-6">
@@ -1540,7 +1706,7 @@ function OperationsOverview({
         </div>
       </div>
       <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Готовые черновики" value={draftCount} detail="Можно проверять" tone="teal" />
+        <MetricCard label="Готовые тексты" value={draftCount} detail="Можно проверять" tone="teal" />
         <MetricCard label="Требует внимания" value={attentionCount} detail="Нагрузка на согласование" tone="amber" />
         <MetricCard label="Задачи по интеграциям" value={integrationTaskCount} detail="До запуска" tone={integrationTaskCount > 0 ? "rose" : "stone"} />
         <MetricCard label="Нужны визуалы" value={creativeAssetAttentionCount} detail="ТЗ и материалы в работе" tone={creativeAssetAttentionCount > 0 ? "amber" : "stone"} />
@@ -1608,7 +1774,7 @@ function ClientPortalPreview({
                 Превью визуала
               </div>
               <p className="mt-3 line-clamp-4 text-xs leading-5 text-stone-500">
-                {selectedItem.contentDraft?.draftBody || "Здесь появится текст черновика для простого и понятного согласования с клиентом."}
+                {selectedItem.contentDraft?.draftBody || "Здесь появится текст публикации для простого и понятного согласования с клиентом."}
               </p>
             </>
           ) : (
@@ -1628,22 +1794,33 @@ function ClientPortalPreview({
   );
 }
 
-function ContentItemAction({ item }: { item: CalendarPreviewItem }) {
+function ContentItemAction({ item, draftsHref }: { item: CalendarPreviewItem; draftsHref: string }) {
   return item.contentDraft ? (
-    <a
-      href={`#draft-${item.contentDraft.id}`}
-      className="inline-flex rounded-md border border-teal-200 bg-teal-50 px-2.5 py-1.5 text-xs font-bold text-teal-800 transition hover:bg-teal-100"
-    >
-      Проверить черновик
-    </a>
+    <div className="flex flex-wrap gap-2">
+      <a
+        href={`${draftsHref}#draft-${item.contentDraft.id}`}
+        className="inline-flex rounded-md border border-teal-200 bg-teal-50 px-2.5 py-1.5 text-xs font-bold text-teal-800 transition hover:bg-teal-100"
+      >
+        Открыть материал
+      </a>
+      <form action={regenerateContentDraftForItem}>
+        <input type="hidden" name="plannedContentItemId" value={item.id} />
+        <PendingSubmitButton
+          pendingLabel="Обновляем текст..."
+          className="rounded-md border border-stone-200 bg-white px-2.5 py-1.5 text-xs font-bold text-stone-700 transition hover:bg-stone-50"
+        >
+          Перегенерировать текст
+        </PendingSubmitButton>
+      </form>
+    </div>
   ) : (
     <form action={generateContentDraftForItem}>
       <input type="hidden" name="plannedContentItemId" value={item.id} />
       <PendingSubmitButton
-        pendingLabel="Генерируем..."
+        pendingLabel="Генерируем текст..."
         className="rounded-md bg-stone-950 px-2.5 py-1.5 text-xs font-bold text-white transition hover:bg-stone-800 disabled:cursor-wait disabled:bg-stone-400"
       >
-        Сгенерировать черновик
+        Сгенерировать текст
       </PendingSubmitButton>
     </form>
   );
@@ -1684,7 +1861,7 @@ function ScheduledPublicationCalendar({
               {publication.scheduledTime ? `, ${publication.scheduledTime}` : ""}
             </p>
             <h4 className="mt-2 text-sm font-semibold leading-6 text-stone-950">{publication.topic}</h4>
-            <p className="mt-2 text-xs leading-5 text-stone-500">Черновик: {publication.contentDraft.draftTitle}</p>
+            <p className="mt-2 text-xs leading-5 text-stone-500">Текст публикации: {publication.contentDraft.draftTitle}</p>
             {publication.notes ? (
               <p className="mt-3 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs leading-5 text-stone-600">
                 {publication.notes}
@@ -1730,12 +1907,16 @@ function ContentCalendar({
   month,
   blueprintId,
   generationBlocked,
+  draftsHref,
+  clientSetupHref,
 }: {
   groups: ReturnType<typeof groupCalendarItems>;
   publications: ScheduledPublicationPreview[];
   month: string;
   blueprintId?: string;
   generationBlocked: boolean;
+  draftsHref: string;
+  clientSetupHref: string;
 }) {
   const items = groups.flatMap((group) => group.items);
   const inspectorItem = items[0];
@@ -1756,7 +1937,7 @@ function ContentCalendar({
             <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Рабочее пространство</p>
             <h2 className="mt-1 text-2xl font-semibold text-stone-950">Контент-календарь</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
-              Центр управления планом, черновиками, согласованиями и будущими публикациями.
+              Центр управления планом, текстами, согласованиями и будущими публикациями.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -1819,10 +2000,10 @@ function ContentCalendar({
                             <StatusBadge tone={item.status === "planned" ? "teal" : "amber"}>{formatStatus(item.status)}</StatusBadge>
                           )}
                           {item.approvalRequired ? <StatusBadge tone="amber">Нужно проверить</StatusBadge> : null}
-                          {item.contentDraft ? <StatusBadge tone="green">Черновик готов</StatusBadge> : null}
+                          <StatusBadge tone={materialTextStatusTone(item.contentDraft)}>{formatMaterialTextStatus(item.contentDraft)}</StatusBadge>
                         </div>
                         <div className="mt-3 border-t border-stone-100 pt-3">
-                          <ContentItemAction item={item} />
+                          <ContentItemAction item={item} draftsHref={draftsHref} />
                         </div>
                       </div>
                     );
@@ -1861,9 +2042,9 @@ function ContentCalendar({
                   Превью визуала
                 </div>
                 <div className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3">
-                  <p className="text-xs font-bold text-stone-700">Превью черновика</p>
+                  <p className="text-xs font-bold text-stone-700">Текст публикации</p>
                   <p className="mt-2 line-clamp-5 text-xs leading-5 text-stone-500">
-                    {inspectorItem.contentDraft?.draftBody || "Сгенерируйте черновик, чтобы подготовить текст материала к проверке менеджером."}
+                    {inspectorItem.contentDraft?.draftBody || "Сгенерируйте текст, чтобы подготовить материал к проверке менеджером."}
                   </p>
                 </div>
                 <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3">
@@ -1878,10 +2059,10 @@ function ContentCalendar({
                 </div>
                 <div className="mt-3 rounded-md border border-stone-200 p-3">
                   <p className="text-xs font-bold text-stone-700">Путь материала</p>
-                  <p className="mt-1 text-xs leading-5 text-stone-500">Черновик &rarr; Проверка &rarr; Согласование &rarr; Планирование</p>
+                  <p className="mt-1 text-xs leading-5 text-stone-500">Текст &rarr; Проверка &rarr; Согласование &rarr; Планирование</p>
                 </div>
                 <div className="mt-4 grid gap-2">
-                  <ContentItemAction item={inspectorItem} />
+                  <ContentItemAction item={inspectorItem} draftsHref={draftsHref} />
                   <button type="button" disabled className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs font-bold text-stone-400">Отправить клиенту</button>
                   <button type="button" disabled className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs font-bold text-stone-400">Согласовать и запланировать</button>
                 </div>
@@ -1906,7 +2087,7 @@ function ContentCalendar({
                 </PendingSubmitButton>
               </form>
             ) : (
-              <a href="#clients" className="mt-4 inline-flex text-sm font-bold text-teal-800 transition hover:text-teal-950">
+              <a href={clientSetupHref} className="mt-4 inline-flex text-sm font-bold text-teal-800 transition hover:text-teal-950">
                 Начать с настройки клиента
               </a>
             )}
@@ -1923,6 +2104,7 @@ function currentMonth() {
 
 export default async function Dashboard({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
+  const activeView = getActiveView(params);
   const isProductionBuild = process.env.NEXT_PHASE === "phase-production-build";
 
   const [clients, selectedBlueprint] = await Promise.all([
@@ -2086,17 +2268,23 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
         (token) => `${task.title} ${task.description}`.toLowerCase().includes(token),
       ),
     ).length ?? 0;
-  const firstCalendarGroup = calendarGroups[0];
   const plannedContentCount = selectedMonthlyPlan?.plannedContentItems.length ?? 0;
   const productionProgress =
     plannedContentCount > 0 ? Math.round((draftCount / plannedContentCount) * 100) : 0;
-  const selectedInspectorItem = selectedMonthlyPlan?.plannedContentItems[0];
   const creativeAssets = selectedMonthlyPlan?.creativeAssets ?? [];
   const creativeAssetAttentionCount =
     creativeAssets.filter((asset) => ["needed", "brief_ready", "in_production", "needs_review"].includes(asset.status)).length +
     (selectedMonthlyPlan?.scheduledPublications.filter(
       (publication) => publication.status === "needs_assets" && publication.creativeAssets.length === 0,
     ).length ?? 0);
+  const workspaceContext = {
+    blueprint: latestBlueprint?.id ?? params.blueprint,
+    plan: selectedMonthlyPlan?.id ?? params.plan,
+    client: params.client ?? latestBlueprint?.clientId,
+  };
+  const workspaceLinks = Object.fromEntries(
+    workspaceViews.map((view) => [view, workspaceHref(view, workspaceContext)]),
+  ) as Record<WorkspaceView, string>;
 
   return (
     <div className={pageBackgroundClass}>
@@ -2122,9 +2310,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   {group.items.map((item) => (
                     <a
                       key={item.label}
-                      href={item.href}
+                      href={workspaceLinks[item.view]}
                       className={`flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition ${
-                        item.label === "Обзор"
+                        item.view === activeView
                           ? "border border-stone-200 bg-white font-semibold text-stone-950 shadow-[0_1px_2px_rgba(28,36,38,0.04)]"
                           : "text-stone-500 hover:bg-white hover:text-stone-950"
                       }`}
@@ -2165,7 +2353,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
               </div>
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-base font-semibold text-stone-950">Панель менеджера</h1>
+                  <h1 className="text-base font-semibold text-stone-950">{viewTitles[activeView]}</h1>
                   <StatusBadge tone="teal">Adaptive Presence OS</StatusBadge>
                 </div>
                 <p className="mt-0.5 text-xs font-medium text-stone-400">by Creative</p>
@@ -2180,7 +2368,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
               <input
                 aria-label="Поиск по рабочему пространству"
                 className="w-64 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-700 outline-none placeholder:text-stone-400 focus:border-teal-500"
-                placeholder="Клиенты, черновики, события..."
+                placeholder="Клиенты, материалы, события..."
               />
               <button type="button" aria-label="Уведомления" className="relative flex h-9 w-9 items-center justify-center rounded-md border border-stone-200 bg-white text-xs font-bold text-stone-600">
                 N
@@ -2203,6 +2391,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
               </div>
             ) : null}
 
+            <WorkspaceSwitcher activeView={activeView} links={workspaceLinks} />
+
+            {activeView === "overview" ? (
+              <>
             <section id="overview" className="scroll-mt-24">
               <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                 <div>
@@ -2210,16 +2402,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   <h2 className="mt-2 text-3xl font-semibold text-stone-950">Центр управления присутствием</h2>
                   <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
                     Превращайте бриф клиента в исполнимый Blueprint, месячный операционный план и готовые к проверке
-                    черновики.
+                    материалы.
                   </p>
                 </div>
               <p className="text-xs font-semibold text-stone-400">Текущий цикл: {currentMonth()}</p>
               </div>
 
-              <WorkspaceSwitcher />
-
               <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <MetricCard label="Требует проверки" value={needsManagerReviewCount} detail="Черновики во внутренней очереди" tone="amber" />
+                <MetricCard label="Требует проверки" value={needsManagerReviewCount} detail="Материалы во внутренней очереди" tone="amber" />
                 <MetricCard label="У клиента" value={waitingForClientCount} detail="Согласование с клиентом" tone="teal" />
                 <MetricCard label="Согласовано" value={approvedDraftCount} detail="Можно перейти к планированию" />
                 <MetricCard label="Готово к планированию" value={readyToScheduleCount} detail="Публикации пока не подключены" tone="teal" />
@@ -2317,16 +2507,16 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                       <StatusBadge tone="teal">{selectedMonthlyPlan.totalPlannedUnits} материалов в плане</StatusBadge>
                       <StatusBadge>{selectedMonthlyPlan.plannedContentItems.length} материалов в календаре</StatusBadge>
                     </div>
-                    <a href="#monthly-plan" className="mt-4 inline-flex text-sm font-bold text-teal-700 transition hover:text-teal-900">
-                      Открыть месячный план
+                    <a href={workspaceLinks.client_setup} className="mt-4 inline-flex text-sm font-bold text-teal-700 transition hover:text-teal-900">
+                      Открыть настройку клиента
                     </a>
                   </div>
                 ) : (
                   <div className="mt-4">
                     <p className="text-sm leading-6 text-stone-500">
-                      Сгенерируйте месячный операционный план, чтобы активировать календарь и очередь черновиков.
+                      Сгенерируйте месячный операционный план, чтобы активировать календарь и очередь материалов.
                     </p>
-                    <a href="#calendar" className="mt-4 inline-flex text-sm font-bold text-teal-700 transition hover:text-teal-900">
+                    <a href={workspaceLinks.calendar} className="mt-4 inline-flex text-sm font-bold text-teal-700 transition hover:text-teal-900">
                       Открыть настройку календаря
                     </a>
                   </div>
@@ -2338,40 +2528,111 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
               drafts={contentDrafts}
               publications={selectedMonthlyPlan?.scheduledPublications ?? []}
               assets={creativeAssets}
+              links={workspaceLinks}
             />
+              </>
+            ) : null}
 
-            <ReviewQueue groups={reviewQueueGroups} />
+            {activeView === "approvals" ? (
+              <>
+                <WorkspaceViewHeader
+                  eyebrow="Проверка материалов"
+                  title="Согласования"
+                  description="Полная рабочая очередь для менеджера: внутренняя проверка, отправка клиенту, комментарии и подготовка к планированию."
+                />
+                <ReviewQueue groups={reviewQueueGroups} calendarHref={workspaceLinks.calendar} />
+              </>
+            ) : null}
 
-            <SchedulingLayer
-              drafts={contentDrafts}
-              publications={selectedMonthlyPlan?.scheduledPublications ?? []}
-            />
+            {activeView === "calendar" ? (
+              <>
+                <WorkspaceViewHeader
+                  eyebrow="Контент-операции"
+                  title="Календарь"
+                  description="Планируйте согласованные публикации, управляйте датами и отслеживайте состояние материалов в одном рабочем экране."
+                />
+                <SchedulingLayer
+                  drafts={contentDrafts}
+                  publications={selectedMonthlyPlan?.scheduledPublications ?? []}
+                  assetsHref={workspaceLinks.assets}
+                  draftsHref={workspaceLinks.drafts}
+                />
+                <section className="mt-7">
+                  <ContentCalendar
+                    groups={calendarGroups}
+                    publications={selectedMonthlyPlan?.scheduledPublications ?? []}
+                    month={selectedMonthlyPlan?.month ?? currentMonth()}
+                    blueprintId={latestBlueprint?.id}
+                    generationBlocked={latestBlueprint?.nextRecommendedAction === "request_more_brief_data"}
+                    draftsHref={workspaceLinks.drafts}
+                    clientSetupHref={workspaceLinks.client_setup}
+                  />
+                </section>
+              </>
+            ) : null}
 
-            <CreativeAssetLayer
-              publications={selectedMonthlyPlan?.scheduledPublications ?? []}
-              assets={creativeAssets}
-            />
+            {activeView === "assets" ? (
+              <>
+                <WorkspaceViewHeader
+                  eyebrow="Creative production"
+                  title="Креативы"
+                  description="Рабочая зона AI-ТЗ, премиум-визуалов и ручной проверки качества. Основные действия генерации всегда остаются на виду."
+                />
+                <CreativeAssetLayer
+                  publications={selectedMonthlyPlan?.scheduledPublications ?? []}
+                  assets={creativeAssets}
+                />
+              </>
+            ) : null}
 
-            <section className="mt-7">
-              <ContentCalendar
-                groups={calendarGroups}
-                publications={selectedMonthlyPlan?.scheduledPublications ?? []}
-                month={selectedMonthlyPlan?.month ?? currentMonth()}
-                blueprintId={latestBlueprint?.id}
-                generationBlocked={latestBlueprint?.nextRecommendedAction === "request_more_brief_data"}
-              />
-            </section>
+            {activeView === "drafts" ? <DraftsView drafts={contentDrafts} approvalsHref={workspaceLinks.approvals} /> : null}
 
-            <div className="mt-7">
-              <ClientPortalPreview
-                clientName={latestBlueprint?.client.name ?? "ваш бизнес"}
-                approvalCount={approvalQueueCount}
-                weeklyCount={firstCalendarGroup?.items.length ?? 0}
-                selectedItem={selectedInspectorItem}
-              />
-            </div>
+            {activeView === "clients" ? (
+              <section>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                  <WorkspaceViewHeader
+                    eyebrow="Клиентская база"
+                    title="Клиенты"
+                    description="Выберите клиента для работы или откройте настройку, чтобы добавить новый бриф и собрать операционную конфигурацию."
+                  />
+                  <a href={workspaceLinks.client_setup} className={primaryButtonClass}>Создать клиента</a>
+                </div>
+                <div className="mt-5 grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+                  {clients.map((client) => {
+                    const clientBlueprint = client.blueprints[0];
+                    const clientBrief = client.briefs[0];
 
-            <section id="clients" className="mt-10 scroll-mt-24">
+                    return (
+                      <article key={client.id} className={`${panelClass} min-w-0 p-4`}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h3 className="truncate font-semibold text-stone-950">{client.name}</h3>
+                            <p className="mt-1 text-xs text-stone-500">{client.industry || "Сфера бизнеса не указана"}</p>
+                          </div>
+                          <StatusBadge tone={clientBlueprint ? "green" : clientBrief ? "amber" : "neutral"}>
+                            {clientBlueprint ? "Blueprint готов" : clientBrief ? "Есть бриф" : "Нужен бриф"}
+                          </StatusBadge>
+                        </div>
+                        <div className="mt-4 grid gap-2 text-xs leading-5 text-stone-500">
+                          <p>Брифов: <span className="font-semibold text-stone-700">{client.briefs.length}</span></p>
+                          <p>Blueprint: <span className="font-semibold text-stone-700">{clientBlueprint ? "сгенерирован" : "не сгенерирован"}</span></p>
+                        </div>
+                        <a
+                          href={workspaceHref("client_setup", { ...workspaceContext, client: client.id, blueprint: clientBlueprint?.id })}
+                          className="mt-4 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950"
+                        >
+                          Открыть настройку клиента
+                        </a>
+                      </article>
+                    );
+                  })}
+                  {clients.length === 0 ? <EmptyState>Клиентов пока нет. Создайте первого клиента в отдельном экране настройки.</EmptyState> : null}
+                </div>
+              </section>
+            ) : null}
+
+            {activeView === "client_setup" ? (
+            <section id="clients" className="scroll-mt-24">
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Настройка клиента</p>
                 <h2 className="mt-1 text-2xl font-semibold text-stone-950">Операционная конфигурация клиента</h2>
@@ -2380,7 +2641,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 </p>
               </div>
               <div className="mt-5 grid items-start gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
-              <aside className="grid gap-5 xl:sticky xl:top-24">
+              <aside className="grid min-w-0 gap-5">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-stone-400">Подключение и бриф</p>
                   <p className="mt-1 text-sm leading-6 text-stone-500">Дополнительные инструменты для добавления клиента и обновления брифа.</p>
@@ -2800,7 +3061,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                         <div>
                           <h3 className="text-sm font-semibold text-stone-950">Запланированные материалы</h3>
-                          <p className="mt-1 text-sm leading-6 text-stone-500">Материалы для разных площадок готовы к последовательной генерации черновиков.</p>
+                          <p className="mt-1 text-sm leading-6 text-stone-500">Материалы для разных площадок готовы к последовательной генерации текстов публикаций.</p>
                         </div>
                         <StatusBadge>{selectedMonthlyPlan.plannedContentItems.length} материалов</StatusBadge>
                       </div>
@@ -2815,7 +3076,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                               <th className="px-3 py-3">Роль площадки</th>
                               <th className="px-3 py-3">Цель</th>
                               <th className="px-3 py-3">Проверка</th>
-                              <th className="px-3 py-3">Черновик</th>
+                              <th className="px-3 py-3">Текст публикации</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-stone-200 bg-white">
@@ -2845,14 +3106,23 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                                 </td>
                                 <td className="px-3 py-3">
                                   {item.contentDraft ? (
-                                    <a href={`#draft-${item.contentDraft.id}`} className="inline-flex rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-900 transition hover:bg-teal-100">
-                                      Черновик готов
-                                    </a>
+                                    <div className="grid gap-2">
+                                      <StatusBadge tone={materialTextStatusTone(item.contentDraft)}>{formatMaterialTextStatus(item.contentDraft)}</StatusBadge>
+                                      <a href={`${workspaceLinks.drafts}#draft-${item.contentDraft.id}`} className="inline-flex rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-900 transition hover:bg-teal-100">
+                                        Открыть материал
+                                      </a>
+                                      <form action={regenerateContentDraftForItem}>
+                                        <input type="hidden" name="plannedContentItemId" value={item.id} />
+                                        <PendingSubmitButton pendingLabel="Обновляем текст..." className="whitespace-nowrap text-xs font-bold text-stone-600 transition hover:text-stone-950">
+                                          Перегенерировать текст
+                                        </PendingSubmitButton>
+                                      </form>
+                                    </div>
                                   ) : (
                                     <form action={generateContentDraftForItem}>
                                       <input type="hidden" name="plannedContentItemId" value={item.id} />
-                                      <PendingSubmitButton pendingLabel="Генерируем черновик..." className="whitespace-nowrap rounded-md bg-stone-950 px-3 py-2 text-xs font-semibold text-white transition hover:bg-stone-800 disabled:cursor-wait disabled:bg-stone-400">
-                                        Сгенерировать черновик
+                                      <PendingSubmitButton pendingLabel="Генерируем текст..." className="whitespace-nowrap rounded-md bg-stone-950 px-3 py-2 text-xs font-semibold text-white transition hover:bg-stone-800 disabled:cursor-wait disabled:bg-stone-400">
+                                        Сгенерировать текст
                                       </PendingSubmitButton>
                                     </form>
                                   )}
@@ -2861,69 +3131,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                             ))}
                           </tbody>
                         </table>
-                      </div>
-                    </div>
-
-                    <div id="drafts" className="mt-7 scroll-mt-24">
-                      <h3 className="text-sm font-semibold text-stone-950">Проверка черновиков</h3>
-                      <p className="mt-1 text-sm leading-6 text-stone-500">Черновики генерируются по одному материалу и проходят проверку менеджера. Ничего не публикуется автоматически.</p>
-                      <div className="mt-3 grid gap-3">
-                        {selectedMonthlyPlan.plannedContentItems.filter((item) => item.contentDraft).map((item) => {
-                          const draft = item.contentDraft!;
-                          return (
-                            <article id={`draft-${draft.id}`} key={draft.id} className="scroll-mt-24 rounded-lg border border-stone-200 bg-white p-4">
-                              <div className="flex flex-col gap-3 border-b border-stone-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
-                                <div className="flex items-start gap-3">
-                                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-md border border-dashed border-stone-300 bg-stone-50 text-[9px] font-bold uppercase tracking-[0.1em] text-stone-400">
-                                    Визуал
-                                  </div>
-                                  <div>
-                                  <p className="text-xs font-bold uppercase tracking-[0.1em] text-teal-700">{draft.platformName} &middot; {draft.format}</p>
-                                  <h4 className="mt-2 text-lg font-semibold text-stone-950">{draft.draftTitle}</h4>
-                                  <p className="mt-1 text-xs text-stone-400">{draft.topic}</p>
-                                  </div>
-                                </div>
-                                <div className="flex flex-wrap gap-2">
-                                  <StatusBadge tone={draftStatusTone(draft.status)}>{formatDraftStatus(draft.status)}</StatusBadge>
-                                  <StatusBadge tone={draft.riskLevel === "high" ? "rose" : draft.riskLevel === "medium" ? "amber" : "green"}>риск: {formatStatus(draft.riskLevel)}</StatusBadge>
-                                </div>
-                              </div>
-                              <div className="mt-4">
-                                <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-stone-400">Превью текста</p>
-                                <p className="mt-2 line-clamp-2 whitespace-pre-wrap text-sm leading-7 text-stone-700">{draft.draftBody}</p>
-                                <details className="mt-3">
-                                  <summary className="cursor-pointer text-xs font-bold text-teal-700">Открыть полный черновик</summary>
-                                  <p className="mt-3 whitespace-pre-wrap rounded-md border border-stone-200 bg-stone-50 p-3 text-sm leading-7 text-stone-700">{draft.draftBody}</p>
-                                </details>
-                              </div>
-                              <div className="mt-4 flex flex-wrap gap-2 border-t border-stone-100 pt-4">
-                                <StatusBadge tone={draft.approvalRequired ? "amber" : "green"}>Согласование: {draft.approvalRequired ? "обязательно" : "не требуется"}</StatusBadge>
-                                <StatusBadge tone={draft.autopublishEligible ? "green" : "neutral"}>Автопубликация: {draft.autopublishEligible ? "доступна" : "нет"}</StatusBadge>
-                              </div>
-                              <details className="mt-4 rounded-md border border-stone-200 bg-stone-50/70">
-                                <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-stone-700">Заметки к черновику</summary>
-                                <div className="border-t border-stone-200 p-3">
-                                  {Array.isArray(draft.draftNotes) && draft.draftNotes.length > 0 ? (
-                                    <ul className="grid gap-2">
-                                      {draft.draftNotes.map((note) => <li key={String(note)} className="rounded-md bg-white px-3 py-2 text-sm leading-6 text-stone-600">{String(note)}</li>)}
-                                    </ul>
-                                  ) : <p className="text-sm text-stone-400">Заметок к черновику нет.</p>}
-                                </div>
-                              </details>
-                              <div className="mt-4">
-                                <ReviewEventTimeline events={draft.reviewEvents} />
-                              </div>
-                              <a href="#review-queue" className="mt-4 inline-flex text-xs font-bold text-teal-700 transition hover:text-teal-900">
-                                Открыть действия в очереди согласований
-                              </a>
-                            </article>
-                          );
-                        })}
-                        {selectedMonthlyPlan.plannedContentItems.every((item) => !item.contentDraft) ? (
-                          <EmptyState>
-                            Сгенерируйте черновики из запланированных материалов, чтобы запустить процесс согласования.
-                          </EmptyState>
-                        ) : null}
                       </div>
                     </div>
 
@@ -2952,17 +3159,53 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   </section>
                 ) : null}
 
-                <div id="reports" className="grid scroll-mt-24 gap-4 lg:grid-cols-2">
-                  <div className="scroll-mt-24">
-                    <PreviewCard title="Операционный календарь" glyph="К" copy="Здесь появятся запланированные материалы, черновики, согласования, визуалы, видео и статусы публикаций." />
-                  </div>
-                  <div id="events" className="scroll-mt-24">
-                    <PreviewCard title="Лента событий" glyph="С" copy="Здесь появятся новые отзывы, комментарии, согласования клиента, результаты публикаций и предложенные AI действия." />
-                  </div>
-                </div>
               </div>
               </div>
             </section>
+            ) : null}
+
+            {activeView === "reports" ? (
+              <section>
+                <WorkspaceViewHeader
+                  eyebrow="Аналитика"
+                  title="Отчёты"
+                  description="Отчёты будут собраны из календаря, согласований и публикаций. Сейчас раздел показывает направление следующего операционного слоя."
+                />
+                <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                  <PreviewCard title="Операционный отчёт" glyph="О" copy="Здесь появится сводка по плану, готовности материалов, согласованиям и выполненным публикациям." />
+                  <PreviewCard title="Лента событий" glyph="С" copy="Здесь появятся новые отзывы, комментарии, согласования клиента, результаты публикаций и предложенные AI действия." />
+                </div>
+              </section>
+            ) : null}
+
+            {activeView === "settings" ? (
+              <section>
+                <WorkspaceViewHeader
+                  eyebrow="Система"
+                  title="Настройки"
+                  description="Техническая информация рабочего окружения без секретов и токенов доступа."
+                />
+                <div className="mt-5 grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+                  <article className={`${panelClass} p-4`}>
+                    <p className="text-xs font-bold uppercase tracking-[0.1em] text-stone-400">OpenAI</p>
+                    <h3 className="mt-2 font-semibold text-stone-950">{process.env.OPENAI_API_KEY ? "Подключен" : "Нужно настроить"}</h3>
+                    <p className="mt-2 text-sm leading-6 text-stone-500">Модель текста: {process.env.OPENAI_MODEL || "не указана"}</p>
+                  </article>
+                  <article className={`${panelClass} p-4`}>
+                    <p className="text-xs font-bold uppercase tracking-[0.1em] text-stone-400">База данных</p>
+                    <h3 className="mt-2 font-semibold text-stone-950">Neon подключен</h3>
+                    <p className="mt-2 text-sm leading-6 text-stone-500">PostgreSQL используется для операционных данных и сохранённых материалов.</p>
+                  </article>
+                  <article className={`${panelClass} p-4`}>
+                    <p className="text-xs font-bold uppercase tracking-[0.1em] text-stone-400">Visual Engine</p>
+                    <h3 className="mt-2 font-semibold text-stone-950">{process.env.VISUAL_PROVIDER || "openai"}</h3>
+                    <p className="mt-2 text-sm leading-6 text-stone-500">
+                      {process.env.OPENAI_IMAGE_MODEL || "gpt-image-2"} &middot; {process.env.OPENAI_IMAGE_QUALITY || "high"} &middot; {process.env.VISUAL_TEXT_MODE || "image_text"}
+                    </p>
+                  </article>
+                </div>
+              </section>
+            ) : null}
           </div>
         </main>
       </div>

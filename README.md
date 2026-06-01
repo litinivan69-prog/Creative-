@@ -223,6 +223,17 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Review, scheduling, creative asset, and visual production sections were made more compact.
 - Creative brief, prompt, metadata, and secondary controls are now disclosed progressively when needed.
 
+## Sprint UI-2 Workspace Views
+
+- The Manager Console was converted from one long page into focused workspace views.
+- Sidebar navigation now switches URL-based views while preserving the selected client Blueprint and monthly plan.
+- Client creation and client setup were separated from the Overview.
+- Approvals, calendar operations, publication materials, creative assets, reports, and settings now have dedicated screens.
+- AI creative actions remain visible in the Creative Assets view.
+- The manager-facing workflow is publication-centric: internal `ContentDraft` records are presented as publication texts or materials.
+- Publication cards show text readiness and provide visible actions to generate, regenerate, or open the material.
+- No database schema, Prisma model, or OpenAI prompt changes were made.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.
