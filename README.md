@@ -270,6 +270,15 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Premium visual generation will move to background jobs or a queue in a later sprint.
 - No database schema or OpenAI prompt changes were required.
 
+## Sprint Product-2B Generation Jobs MVP
+
+- Generation Jobs MVP was added.
+- AI publication text, creative brief, and premium visual generation actions now create persistent production job records.
+- The Materials view shows recent production jobs and related status inside publication cards.
+- Premium visual generation records queued, running, completed, and failed states.
+- This is not a full background worker yet.
+- External queue and background processing will be added later.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.
@@ -309,5 +318,6 @@ The Prisma schema includes:
 - `ScheduledPublication`
 - `CreativeAsset`
 - `GeneratedCreativeVariant`
+- `GenerationJob`
 
 The blueprint intentionally stores platform names and module names as generated data. There is no fixed platform list and no fixed deliverable package baked into the application.

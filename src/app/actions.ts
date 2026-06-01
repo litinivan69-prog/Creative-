@@ -19,6 +19,12 @@ import {
 import { CreativeAssetBriefSchema } from "@/lib/creative-asset-schema";
 import { validateMonthlyPlanForBlueprint } from "@/lib/monthly-plan-schema";
 import { getAutopilotTextBatchLimit } from "@/lib/autopilot";
+import {
+  createGenerationJob,
+  markGenerationJobCompleted,
+  markGenerationJobFailedSafely,
+  markGenerationJobRunning,
+} from "@/lib/generation-jobs";
 
 function formText(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -611,6 +617,7 @@ async function generateContentTextForPlannedItem(
   options: {
     replaceExisting: boolean;
     createReviewEvent: boolean;
+    generationJobType?: "generate_publication_text" | "regenerate_publication_text";
   },
 ): Promise<ContentTextGenerationResult> {
   const item = await prisma.plannedContentItem.findUnique({
@@ -659,7 +666,23 @@ async function generateContentTextForPlannedItem(
     };
   }
 
+  let generationJobId: string | undefined;
+
   try {
+    if (options.generationJobType) {
+      const generationJob = await createGenerationJob({
+        clientId: plan.clientId,
+        blueprintId: plan.blueprintId,
+        monthlyPlanId: plan.id,
+        plannedContentItemId: item.id,
+        contentDraftId: item.contentDraft?.id,
+        jobType: options.generationJobType,
+        title: options.replaceExisting ? "Перегенерация текста публикации" : "Генерация текста публикации",
+      });
+      generationJobId = generationJob.id;
+      await markGenerationJobRunning(generationJob.id, "AI готовит текст публикации.");
+    }
+
     const generated = await generateContentDraft({
       clientName: plan.client.name,
       blueprintSummary: blueprint.clientSummary,
@@ -735,6 +758,12 @@ async function generateContentTextForPlannedItem(
         return updated;
       });
 
+      if (generationJobId) {
+        await markGenerationJobCompleted(generationJobId, "Текст публикации обновлён.", {
+          contentDraftId: updatedDraft.id,
+        });
+      }
+
       return {
         ...resultContext,
         status: "updated",
@@ -762,6 +791,12 @@ async function generateContentTextForPlannedItem(
         },
       });
 
+      if (generationJobId) {
+        await markGenerationJobCompleted(generationJobId, "Текст публикации сгенерирован.", {
+          contentDraftId: createdDraft.id,
+        });
+      }
+
       return {
         ...resultContext,
         status: "created",
@@ -769,15 +804,13 @@ async function generateContentTextForPlannedItem(
         message: "Текст публикации сгенерирован и готов к проверке менеджером.",
       };
     }
-  } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Не удалось сгенерировать текст. Проверьте материал и попробуйте ещё раз.";
+  } catch {
+    const message = "Не удалось сгенерировать текст публикации. Проверьте настройки AI и попробуйте ещё раз.";
+    await markGenerationJobFailedSafely(generationJobId, message);
     return {
       ...resultContext,
       status: "failed",
-      message: `Не удалось сгенерировать текст публикации: ${message}`,
+      message,
     };
   }
 }
@@ -787,6 +820,7 @@ async function generateContentTextForItem(formData: FormData, replaceExisting: b
   const result = await generateContentTextForPlannedItem(plannedContentItemId, {
     replaceExisting,
     createReviewEvent: true,
+    generationJobType: replaceExisting ? "regenerate_publication_text" : "generate_publication_text",
   });
 
   if (!result.blueprintId || !result.monthlyPlanId) {
@@ -840,40 +874,64 @@ export async function prepareMonthAutopilot(formData: FormData) {
     errorRedirect("Месячный план для автоподготовки не найден.", "drafts");
   }
 
-  const missingTextItems = plan.plannedContentItems.filter((item) => !item.contentDraft);
-  const textBatch = missingTextItems.slice(0, getAutopilotTextBatchLimit());
-  const existingTextsCount = plan.plannedContentItems.length - missingTextItems.length;
-  const results: ContentTextGenerationResult[] = [];
+  const generationJob = await createGenerationJob({
+    clientId: plan.clientId,
+    blueprintId: plan.blueprintId,
+    monthlyPlanId: plan.id,
+    jobType: "prepare_month_texts",
+    title: "Автоподготовка текстов месяца",
+  });
+  await markGenerationJobRunning(generationJob.id, "AI готовит недостающие тексты публикаций.");
 
-  for (const item of textBatch) {
-    results.push(
-      await generateContentTextForPlannedItem(item.id, {
-        replaceExisting: false,
-        createReviewEvent: true,
-      }),
+  let notice: string;
+  let hasItemFailures = false;
+
+  try {
+    const missingTextItems = plan.plannedContentItems.filter((item) => !item.contentDraft);
+    const textBatch = missingTextItems.slice(0, getAutopilotTextBatchLimit());
+    const existingTextsCount = plan.plannedContentItems.length - missingTextItems.length;
+    const results: ContentTextGenerationResult[] = [];
+
+    for (const item of textBatch) {
+      results.push(
+        await generateContentTextForPlannedItem(item.id, {
+          replaceExisting: false,
+          createReviewEvent: true,
+        }),
+      );
+    }
+
+    const createdTextsCount = results.filter((result) => result.status === "created").length;
+    const newlySkippedTextsCount = results.filter((result) => result.status === "skipped").length;
+    const skippedTextsCount = existingTextsCount + newlySkippedTextsCount;
+    const failedTextsCount = results.filter((result) => result.status === "failed").length;
+    const remainingMissingTextsCount = missingTextItems.length - createdTextsCount - newlySkippedTextsCount;
+    hasItemFailures = failedTextsCount > 0;
+    notice = `Автоподготовка месяца завершена: создано ${createdTextsCount} текстов, ${skippedTextsCount} уже были готовы.`;
+
+    if (remainingMissingTextsCount > 0) {
+      notice = `Создано ${createdTextsCount} текстов. Осталось подготовить ещё ${remainingMissingTextsCount} материалов. Запустите автоподготовку ещё раз, чтобы продолжить.`;
+    }
+
+    if (hasItemFailures) {
+      notice = `Автоподготовка выполнена частично: создано ${createdTextsCount} текстов, ${skippedTextsCount} уже были готовы. Не удалось подготовить ${failedTextsCount}. Осталось ${remainingMissingTextsCount} материалов. Проверьте карточки материалов.`;
+    }
+
+    await markGenerationJobCompleted(
+      generationJob.id,
+      `Создано ${createdTextsCount} текстов, пропущено ${skippedTextsCount}, ошибок ${failedTextsCount}.`,
     );
-  }
-
-  const createdTextsCount = results.filter((result) => result.status === "created").length;
-  const newlySkippedTextsCount = results.filter((result) => result.status === "skipped").length;
-  const skippedTextsCount = existingTextsCount + newlySkippedTextsCount;
-  const failedTextsCount = results.filter((result) => result.status === "failed").length;
-  const remainingMissingTextsCount = missingTextItems.length - createdTextsCount - newlySkippedTextsCount;
-  let notice = `Автоподготовка месяца завершена: создано ${createdTextsCount} текстов, ${skippedTextsCount} уже были готовы.`;
-
-  if (remainingMissingTextsCount > 0) {
-    notice = `Создано ${createdTextsCount} текстов. Осталось подготовить ещё ${remainingMissingTextsCount} материалов. Запустите автоподготовку ещё раз, чтобы продолжить.`;
-  }
-
-  if (failedTextsCount > 0) {
-    notice = `Автоподготовка выполнена частично: создано ${createdTextsCount} текстов, ${skippedTextsCount} уже были готовы. Не удалось подготовить ${failedTextsCount}. Осталось ${remainingMissingTextsCount} материалов. Проверьте карточки материалов.`;
+  } catch {
+    const message = "Не удалось завершить автоподготовку месяца. Проверьте настройки AI и попробуйте ещё раз.";
+    await markGenerationJobFailedSafely(generationJob.id, message);
+    monthlyPlanErrorRedirect(plan.blueprintId, plan.id, message, "drafts");
   }
 
   revalidatePath("/");
   redirect(workspaceLocation("drafts", {
     blueprintId: plan.blueprintId,
     planId: plan.id,
-    ...(failedTextsCount > 0 ? { error: notice } : { notice }),
+    ...(hasItemFailures ? { error: notice } : { notice }),
   }));
 }
 
@@ -1265,11 +1323,23 @@ export async function generateCreativeAssetBriefForPublication(formData: FormDat
     redirect(workspaceLocation(returnViewFromForm(formData, "assets"), { blueprintId: publication.blueprintId, planId: publication.monthlyPlanId, notice: "Для этой публикации уже есть ТЗ на креатив." }));
   }
 
+  const generationJob = await createGenerationJob({
+    clientId: publication.clientId,
+    blueprintId: publication.blueprintId,
+    monthlyPlanId: publication.monthlyPlanId,
+    plannedContentItemId: publication.plannedContentItemId,
+    contentDraftId: publication.contentDraftId,
+    scheduledPublicationId: publication.id,
+    jobType: "generate_creative_brief",
+    title: "Генерация ТЗ на креатив",
+  });
+
   try {
+    await markGenerationJobRunning(generationJob.id, "AI готовит ТЗ на креатив.");
     const brief = await generateCreativeAssetBriefFromContext(publication);
 
-    await prisma.$transaction([
-      prisma.creativeAsset.create({
+    const createdAsset = await prisma.$transaction(async (transaction) => {
+      const asset = await transaction.creativeAsset.create({
         data: {
           clientId: publication.clientId,
           blueprintId: publication.blueprintId,
@@ -1288,25 +1358,28 @@ export async function generateCreativeAssetBriefForPublication(formData: FormDat
           approvalRequired: brief.approvalRequired,
           notes: brief.notes,
         },
-      }),
-      ...(publication.status === "scheduled"
-        ? [
-            prisma.scheduledPublication.update({
-              where: { id: publication.id },
-              data: { status: "needs_assets" },
-            }),
-          ]
-        : []),
-    ]);
-  } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Не удалось сгенерировать ТЗ. Проверьте публикацию и попробуйте ещё раз.";
+      });
+
+      if (publication.status === "scheduled") {
+        await transaction.scheduledPublication.update({
+          where: { id: publication.id },
+          data: { status: "needs_assets" },
+        });
+      }
+
+      return asset;
+    });
+
+    await markGenerationJobCompleted(generationJob.id, "ТЗ на креатив сгенерировано.", {
+      creativeAssetId: createdAsset.id,
+    });
+  } catch {
+    const message = "Не удалось сгенерировать ТЗ на креатив. Проверьте настройки AI и попробуйте ещё раз.";
+    await markGenerationJobFailedSafely(generationJob.id, message);
     monthlyPlanErrorRedirect(
       publication.blueprintId,
       publication.monthlyPlanId,
-      `Не удалось сгенерировать ТЗ на креатив: ${message}`,
+      message,
       returnViewFromForm(formData, "assets"),
     );
   }
@@ -1342,7 +1415,20 @@ export async function regenerateCreativeAssetBrief(formData: FormData) {
     errorRedirect("Креативный материал не найден.");
   }
 
+  const generationJob = await createGenerationJob({
+    clientId: asset.clientId,
+    blueprintId: asset.blueprintId,
+    monthlyPlanId: asset.monthlyPlanId,
+    plannedContentItemId: asset.plannedContentItemId,
+    contentDraftId: asset.contentDraftId,
+    scheduledPublicationId: asset.scheduledPublicationId,
+    creativeAssetId: asset.id,
+    jobType: "regenerate_creative_brief",
+    title: "Перегенерация ТЗ на креатив",
+  });
+
   try {
+    await markGenerationJobRunning(generationJob.id, "AI обновляет ТЗ на креатив.");
     const brief = await generateCreativeAssetBriefFromContext({
       ...asset.scheduledPublication,
       client: asset.client,
@@ -1367,15 +1453,17 @@ export async function regenerateCreativeAssetBrief(formData: FormData) {
         notes: brief.notes,
       },
     });
-  } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Не удалось перегенерировать ТЗ. Проверьте материал и попробуйте ещё раз.";
+
+    await markGenerationJobCompleted(generationJob.id, "ТЗ на креатив обновлено.", {
+      creativeAssetId: asset.id,
+    });
+  } catch {
+    const message = "Не удалось обновить ТЗ на креатив. Проверьте настройки AI и попробуйте ещё раз.";
+    await markGenerationJobFailedSafely(generationJob.id, message);
     monthlyPlanErrorRedirect(
       asset.blueprintId,
       asset.monthlyPlanId,
-      `Не удалось обновить ТЗ на креатив: ${message}`,
+      message,
       returnViewFromForm(formData, "assets"),
     );
   }
@@ -1480,6 +1568,7 @@ export async function generateCreativeVisualVariantForAsset(formData: FormData) 
       plannedContentItem: true,
       contentDraft: true,
       scheduledPublication: true,
+      generatedVariants: true,
     },
   });
 
@@ -1487,7 +1576,20 @@ export async function generateCreativeVisualVariantForAsset(formData: FormData) 
     errorRedirect("Креативный материал не найден.");
   }
 
+  const generationJob = await createGenerationJob({
+    clientId: asset.clientId,
+    blueprintId: asset.blueprintId,
+    monthlyPlanId: asset.monthlyPlanId,
+    plannedContentItemId: asset.plannedContentItemId,
+    contentDraftId: asset.contentDraftId,
+    scheduledPublicationId: asset.scheduledPublicationId,
+    creativeAssetId: asset.id,
+    jobType: asset.generatedVariants.length > 0 ? "regenerate_visual" : "generate_visual",
+    title: asset.generatedVariants.length > 0 ? "Генерация нового варианта визуала" : "Генерация премиум-визуала",
+  });
+
   try {
+    await markGenerationJobRunning(generationJob.id, "Premium Visual Engine создаёт вариант визуала.");
     const variant = await generateCreativeVisualVariant({
       clientName: asset.client.name,
       clientIndustry: asset.client.industry,
@@ -1515,7 +1617,7 @@ export async function generateCreativeVisualVariantForAsset(formData: FormData) 
       },
     });
 
-    await prisma.generatedCreativeVariant.create({
+    const createdVariant = await prisma.generatedCreativeVariant.create({
       data: {
         clientId: asset.clientId,
         blueprintId: asset.blueprintId,
@@ -1541,11 +1643,17 @@ export async function generateCreativeVisualVariantForAsset(formData: FormData) 
         notes: null,
       },
     });
+
+    await markGenerationJobCompleted(generationJob.id, "Визуал сгенерирован.", {
+      generatedCreativeVariantId: createdVariant.id,
+    });
   } catch {
+    const message = "Не удалось сгенерировать визуал. Проверьте настройки визуального движка и попробуйте ещё раз.";
+    await markGenerationJobFailedSafely(generationJob.id, message);
     monthlyPlanErrorRedirect(
       asset.blueprintId,
       asset.monthlyPlanId,
-      "Не удалось сгенерировать визуал через визуальный движок. Проверьте настройки API и попробуйте ещё раз.",
+      message,
       returnViewFromForm(formData, "assets"),
     );
   }

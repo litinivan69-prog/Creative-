@@ -21,6 +21,7 @@ model Client {
   scheduledPublications ScheduledPublication[]
   creativeAssets CreativeAsset[]
   generatedCreativeVariants GeneratedCreativeVariant[]
+  generationJobs GenerationJob[]
 }
 
 model ClientBrief {
@@ -67,6 +68,7 @@ model ClientPresenceBlueprint {
   scheduledPublications          ScheduledPublication[]
   creativeAssets                 CreativeAsset[]
   generatedCreativeVariants      GeneratedCreativeVariant[]
+  generationJobs                 GenerationJob[]
 
   @@index([clientId])
 }
@@ -95,6 +97,7 @@ model MonthlyOperatingPlan {
   scheduledPublications ScheduledPublication[]
   creativeAssets      CreativeAsset[]
   generatedCreativeVariants GeneratedCreativeVariant[]
+  generationJobs            GenerationJob[]
 
   @@index([clientId])
   @@index([blueprintId])
@@ -153,6 +156,7 @@ model PlannedContentItem {
   scheduledPublications ScheduledPublication[]
   creativeAssets      CreativeAsset[]
   generatedCreativeVariants GeneratedCreativeVariant[]
+  generationJobs              GenerationJob[]
 
   @@index([monthlyPlanId])
 }
@@ -184,6 +188,7 @@ model ContentDraft {
   scheduledPublications ScheduledPublication[]
   creativeAssets       CreativeAsset[]
   generatedCreativeVariants GeneratedCreativeVariant[]
+  generationJobs              GenerationJob[]
 
   @@index([clientId])
   @@index([blueprintId])
@@ -227,6 +232,7 @@ model ScheduledPublication {
   contentDraft         ContentDraft            @relation(fields: [contentDraftId], references: [id], onDelete: Cascade)
   creativeAssets       CreativeAsset[]
   generatedCreativeVariants GeneratedCreativeVariant[]
+  generationJobs             GenerationJob[]
 
   @@index([clientId])
   @@index([monthlyPlanId])
@@ -261,6 +267,7 @@ model CreativeAsset {
   contentDraft           ContentDraft            @relation(fields: [contentDraftId], references: [id], onDelete: Cascade)
   scheduledPublication   ScheduledPublication    @relation(fields: [scheduledPublicationId], references: [id], onDelete: Cascade)
   generatedVariants      GeneratedCreativeVariant[]
+  generationJobs          GenerationJob[]
 
   @@index([clientId])
   @@index([monthlyPlanId])
@@ -301,11 +308,49 @@ model GeneratedCreativeVariant {
   contentDraft           ContentDraft            @relation(fields: [contentDraftId], references: [id], onDelete: Cascade)
   scheduledPublication   ScheduledPublication    @relation(fields: [scheduledPublicationId], references: [id], onDelete: Cascade)
   creativeAsset          CreativeAsset           @relation(fields: [creativeAssetId], references: [id], onDelete: Cascade)
+  generationJobs         GenerationJob[]
 
   @@index([clientId])
   @@index([monthlyPlanId])
   @@index([creativeAssetId])
   @@index([status])
+}
+
+model GenerationJob {
+  id                         String                    @id @default(cuid())
+  clientId                   String?
+  blueprintId                String?
+  monthlyPlanId              String?
+  plannedContentItemId       String?
+  contentDraftId             String?
+  scheduledPublicationId     String?
+  creativeAssetId            String?
+  generatedCreativeVariantId String?
+  jobType                    String
+  status                     String
+  title                      String
+  message                    String?
+  errorMessage               String?
+  resultSummary              String?
+  startedAt                  DateTime?
+  completedAt                DateTime?
+  createdAt                  DateTime                  @default(now())
+  updatedAt                  DateTime                  @updatedAt
+  client                     Client?                   @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  blueprint                  ClientPresenceBlueprint?  @relation(fields: [blueprintId], references: [id], onDelete: SetNull)
+  monthlyPlan                MonthlyOperatingPlan?     @relation(fields: [monthlyPlanId], references: [id], onDelete: SetNull)
+  plannedContentItem         PlannedContentItem?       @relation(fields: [plannedContentItemId], references: [id], onDelete: SetNull)
+  contentDraft               ContentDraft?             @relation(fields: [contentDraftId], references: [id], onDelete: SetNull)
+  scheduledPublication       ScheduledPublication?     @relation(fields: [scheduledPublicationId], references: [id], onDelete: SetNull)
+  creativeAsset              CreativeAsset?            @relation(fields: [creativeAssetId], references: [id], onDelete: SetNull)
+  generatedCreativeVariant   GeneratedCreativeVariant? @relation(fields: [generatedCreativeVariantId], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
+  @@index([monthlyPlanId])
+  @@index([creativeAssetId])
+  @@index([status])
+  @@index([jobType])
+  @@index([createdAt])
 }
 
 model ManagerTask {

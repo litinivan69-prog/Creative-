@@ -553,6 +553,117 @@ type CreativeAssetPreview = {
   generatedVariants: GeneratedCreativeVariantPreview[];
 };
 
+type GenerationJobPreview = {
+  id: string;
+  plannedContentItemId: string | null;
+  creativeAssetId: string | null;
+  jobType: string;
+  status: string;
+  title: string;
+  message: string | null;
+  errorMessage: string | null;
+  resultSummary: string | null;
+  createdAt: Date;
+  completedAt: Date | null;
+};
+
+function formatGenerationJobType(jobType: string) {
+  const labels: Record<string, string> = {
+    prepare_month_texts: "Автоподготовка месяца",
+    generate_publication_text: "Текст публикации",
+    regenerate_publication_text: "Обновление текста",
+    generate_creative_brief: "ТЗ на креатив",
+    regenerate_creative_brief: "Обновление ТЗ",
+    generate_visual: "Премиум-визуал",
+    regenerate_visual: "Новый вариант визуала",
+  };
+
+  return labels[jobType] ?? formatStatus(jobType);
+}
+
+function formatGenerationJobStatus(status: string) {
+  const labels: Record<string, string> = {
+    queued: "В очереди",
+    running: "Выполняется",
+    completed: "Готово",
+    failed: "Ошибка",
+  };
+
+  return labels[status] ?? formatStatus(status);
+}
+
+function generationJobTone(status: string): "neutral" | "teal" | "amber" | "rose" | "green" {
+  if (status === "running") return "teal";
+  if (status === "queued") return "amber";
+  if (status === "completed") return "green";
+  if (status === "failed") return "rose";
+  return "neutral";
+}
+
+function generationJobSummary(job: GenerationJobPreview) {
+  return job.errorMessage || job.resultSummary || job.message || "Статус задачи сохранён.";
+}
+
+function GenerationJobIndicator({ job, compact = false }: { job?: GenerationJobPreview; compact?: boolean }) {
+  if (!job) return null;
+
+  const prefix =
+    job.status === "running"
+      ? "Сейчас выполняется"
+      : job.status === "failed"
+        ? "Последняя генерация завершилась ошибкой"
+        : job.status === "completed"
+          ? "Последняя генерация выполнена"
+          : "Задача добавлена в очередь";
+
+  return (
+    <div className={`rounded-md border px-3 py-2 ${job.status === "failed" ? "border-rose-200 bg-rose-50" : "border-stone-200 bg-stone-50"}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge tone={generationJobTone(job.status)}>{formatGenerationJobStatus(job.status)}</StatusBadge>
+        <p className="text-xs font-bold text-stone-700">{prefix}: {formatGenerationJobType(job.jobType)}</p>
+      </div>
+      {!compact ? <p className="mt-1 text-xs leading-5 text-stone-500">{generationJobSummary(job)}</p> : null}
+    </div>
+  );
+}
+
+function GenerationJobsPanel({ jobs }: { jobs: GenerationJobPreview[] }) {
+  return (
+    <article className={`${panelClass} mt-5 p-5`}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">AI production</p>
+          <h3 className="mt-1 text-lg font-semibold text-stone-950">Производственные задачи</h3>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
+            Здесь отображаются генерации текстов, ТЗ и визуалов. Полноценная фоновая очередь будет добавлена позже.
+          </p>
+        </div>
+        <StatusBadge tone={jobs.some((job) => job.status === "running") ? "teal" : "neutral"}>{jobs.length} задач</StatusBadge>
+      </div>
+      <div className="mt-4 grid gap-2">
+        {jobs.map((job) => (
+          <div key={job.id} className="rounded-md border border-stone-200 bg-stone-50/70 p-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusBadge tone={generationJobTone(job.status)}>{formatGenerationJobStatus(job.status)}</StatusBadge>
+                  <StatusBadge>{formatGenerationJobType(job.jobType)}</StatusBadge>
+                </div>
+                <p className="mt-2 text-sm font-semibold text-stone-900">{job.title}</p>
+                <p className="mt-1 text-xs leading-5 text-stone-500">{generationJobSummary(job)}</p>
+              </div>
+              <p className="text-xs font-semibold text-stone-400">
+                {job.createdAt.toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" })}
+              </p>
+            </div>
+          </div>
+        ))}
+        {jobs.length === 0 ? <EmptyState>Пока нет производственных задач.</EmptyState> : null}
+      </div>
+    </article>
+  );
+}
+
 const draftStatusGroups = [
   { status: "needs_review", label: "Требует проверки менеджера" },
   { status: "sent_to_client", label: "Ждём клиента" },
@@ -1167,9 +1278,11 @@ function CreativeAssetVisualStatus({ variants }: { variants: GeneratedCreativeVa
 function CreativeAssetLayer({
   publications,
   assets,
+  jobs,
 }: {
   publications: ScheduledPublicationPreview[];
   assets: CreativeAssetPreview[];
+  jobs: GenerationJobPreview[];
 }) {
   const publicationsNeedingBrief = publications.filter(
     (publication) =>
@@ -1306,6 +1419,9 @@ function CreativeAssetLayer({
                   <StatusBadge>{asset.scheduledPublication.scheduledDate}{asset.scheduledPublication.scheduledTime ? `, ${asset.scheduledPublication.scheduledTime}` : ""}</StatusBadge>
                   <CreativeAssetVisualStatus variants={asset.generatedVariants} />
                 </div>
+                <div className="mt-3">
+                  <GenerationJobIndicator job={jobs.find((job) => job.creativeAssetId === asset.id)} />
+                </div>
                 <details className="mt-3 rounded-md border border-stone-200 bg-stone-50/70">
                   <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-stone-700">Открыть производство и ТЗ</summary>
                   <div className="border-t border-stone-200 p-3">
@@ -1355,6 +1471,9 @@ function CreativeAssetLayer({
                       <p className="text-sm font-semibold text-stone-950">Сгенерированные визуалы</p>
                       <p className="mt-1 text-xs leading-5 text-stone-500">
                         Premium Visual Engine создаёт клиентские варианты через OpenAI API и может расходовать кредиты.
+                      </p>
+                      <p className="mt-1 text-xs leading-5 text-teal-700">
+                        Генерация может занять 30–90 секунд. Задача появится в производственных задачах.
                       </p>
                       <p className="mt-1 text-xs leading-5 text-stone-400">
                         Сейчас используется OpenAI. Поддержка Nano Banana / Gemini Image будет добавлена отдельным провайдером.
@@ -1534,16 +1653,19 @@ function OverviewPreviews({
   drafts,
   publications,
   assets,
+  jobs,
   links,
 }: {
   drafts: DraftQueueItem[];
   publications: ScheduledPublicationPreview[];
   assets: CreativeAssetPreview[];
+  jobs: GenerationJobPreview[];
   links: Record<WorkspaceView, string>;
 }) {
   const reviewDrafts = drafts.filter((draft) => ["draft", "needs_review", "sent_to_client", "client_changes_requested"].includes(draft.status)).slice(0, 3);
   const calendarPublications = publications.slice(0, 3);
   const creativeAssets = assets.filter((asset) => asset.status !== "approved").slice(0, 3);
+  const productionJobs = jobs.filter((job) => ["running", "failed"].includes(job.status)).slice(0, 3);
 
   return (
     <section className={`mt-7 ${compactGridClass}`}>
@@ -1608,6 +1730,25 @@ function OverviewPreviews({
           {creativeAssets.length === 0 ? <p className={mutedTextClass}>Нет креативов, требующих внимания.</p> : null}
         </div>
         <a href={links.assets} className="mt-4 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">Открыть креативы</a>
+      </article>
+
+      <article className={`${panelClass} min-w-0 p-4`}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-teal-700">AI production</p>
+            <h3 className="mt-1 font-semibold text-stone-950">Производственные задачи</h3>
+          </div>
+          <StatusBadge tone={productionJobs.some((job) => job.status === "failed") ? "rose" : productionJobs.length > 0 ? "teal" : "green"}>
+            {productionJobs.length}
+          </StatusBadge>
+        </div>
+        <div className="mt-3 grid gap-2">
+          {productionJobs.map((job) => (
+            <GenerationJobIndicator key={job.id} job={job} compact />
+          ))}
+          {productionJobs.length === 0 ? <p className={mutedTextClass}>Нет активных или проблемных генераций.</p> : null}
+        </div>
+        <a href={links.drafts} className="mt-4 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">Открыть материалы</a>
       </article>
     </section>
   );
@@ -1746,6 +1887,7 @@ function MaterialPrimaryAction({
 function DraftsView({
   items,
   publications,
+  jobs,
   monthlyPlanId,
   blueprintId,
   approvalsHref,
@@ -1754,6 +1896,7 @@ function DraftsView({
 }: {
   items: MaterialPlannedItem[];
   publications: ScheduledPublicationPreview[];
+  jobs: GenerationJobPreview[];
   monthlyPlanId?: string;
   blueprintId?: string;
   approvalsHref: string;
@@ -1813,6 +1956,7 @@ function DraftsView({
         <MetricCard label="Нужны ТЗ" value={missingBriefsCount} detail="После планирования" tone={missingBriefsCount > 0 ? "amber" : "stone"} />
         <MetricCard label="Нужны визуалы" value={missingVisualsCount} detail="ТЗ уже подготовлено" tone={missingVisualsCount > 0 ? "amber" : "stone"} />
       </div>
+      <GenerationJobsPanel jobs={jobs} />
       {allTextsReady ? (
         <div className="mt-5 rounded-lg border border-teal-200 bg-teal-50/70 px-4 py-3 text-sm leading-6 text-teal-900">
           <span className="font-semibold">Все тексты созданы.</span> Откройте материал, чтобы редактировать, согласовать или подготовить визуал.
@@ -1825,6 +1969,10 @@ function DraftsView({
           const asset = publication?.creativeAssets[0];
           const nextStep = materialNextStep(item, publication);
           const latestEvent = draft?.reviewEvents.at(-1);
+          const latestJob = jobs.find((job) => job.plannedContentItemId === item.id);
+          const latestVisualJob = asset
+            ? jobs.find((job) => job.creativeAssetId === asset.id && ["generate_visual", "regenerate_visual"].includes(job.jobType))
+            : undefined;
 
           return (
             <article id={`material-${item.id}`} key={item.id} className={`${panelClass} min-w-0 scroll-mt-24 p-4 sm:p-5`}>
@@ -1844,6 +1992,7 @@ function DraftsView({
                   {asset ? <CreativeAssetVisualStatus variants={asset.generatedVariants} /> : <StatusBadge tone="neutral">Визуал не создан</StatusBadge>}
                 </div>
               </div>
+              {latestJob ? <div className="mt-3"><GenerationJobIndicator job={latestJob} /></div> : null}
 
               <div className="mt-4 rounded-lg border border-teal-200 bg-teal-50/70 p-4">
                 <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-teal-700">Следующий шаг</p>
@@ -1977,6 +2126,10 @@ function DraftsView({
                               </PendingSubmitButton>
                             </form>
                           </div>
+                          <p className="mt-2 text-xs leading-5 text-teal-700">
+                            Генерация может занять 30–90 секунд. Задача появится в производственных задачах.
+                          </p>
+                          {latestVisualJob ? <div className="mt-3"><GenerationJobIndicator job={latestVisualJob} /></div> : null}
                           {asset.generatedVariants.length > 0 ? (
                             <div className="mt-3 grid gap-3 lg:grid-cols-2">
                               {asset.generatedVariants.map((variant) => (
@@ -2522,6 +2675,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   },
                 },
                 managerTasks: true,
+                generationJobs: {
+                  orderBy: { createdAt: "desc" },
+                  take: 30,
+                },
                 creativeAssets: {
                   orderBy: { createdAt: "desc" },
                   include: {
@@ -2582,6 +2739,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   },
                 },
                 managerTasks: true,
+                generationJobs: {
+                  orderBy: { createdAt: "desc" },
+                  take: 30,
+                },
                 creativeAssets: {
                   orderBy: { createdAt: "desc" },
                   include: {
@@ -2646,6 +2807,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
     plannedContentCount > 0 ? Math.round((draftCount / plannedContentCount) * 100) : 0;
   const missingTextCount = Math.max(plannedContentCount - draftCount, 0);
   const creativeAssets = selectedMonthlyPlan?.creativeAssets ?? [];
+  const generationJobs = selectedMonthlyPlan?.generationJobs ?? [];
   const creativeAssetAttentionCount =
     creativeAssets.filter((asset) => ["needed", "brief_ready", "in_production", "needs_review"].includes(asset.status)).length +
     (selectedMonthlyPlan?.scheduledPublications.filter(
@@ -2922,6 +3084,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
               drafts={contentDrafts}
               publications={selectedMonthlyPlan?.scheduledPublications ?? []}
               assets={creativeAssets}
+              jobs={generationJobs}
               links={workspaceLinks}
             />
               </>
@@ -2975,6 +3138,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 <CreativeAssetLayer
                   publications={selectedMonthlyPlan?.scheduledPublications ?? []}
                   assets={creativeAssets}
+                  jobs={generationJobs}
                 />
               </>
             ) : null}
@@ -2983,6 +3147,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
               <DraftsView
                 items={selectedMonthlyPlan?.plannedContentItems ?? []}
                 publications={selectedMonthlyPlan?.scheduledPublications ?? []}
+                jobs={generationJobs}
                 monthlyPlanId={selectedMonthlyPlan?.id}
                 blueprintId={latestBlueprint?.id}
                 approvalsHref={workspaceLinks.approvals}
@@ -3633,6 +3798,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                     <h3 className="mt-2 font-semibold text-stone-950">До {autopilotTextBatchLimit} текстов за запуск</h3>
                     <p className="mt-2 text-sm leading-6 text-stone-500">
                       Лимит автоподготовки месяца задаётся переменной AUTOPILOT_TEXT_BATCH_LIMIT. Если переменная не указана, используется значение 5.
+                    </p>
+                  </article>
+                  <article className={`${panelClass} p-4`}>
+                    <p className="text-xs font-bold uppercase tracking-[0.1em] text-stone-400">Generation Jobs</p>
+                    <h3 className="mt-2 font-semibold text-stone-950">MVP-режим</h3>
+                    <p className="mt-2 text-sm font-semibold text-amber-800">Фоновая очередь: не подключена</p>
+                    <p className="mt-2 text-sm leading-6 text-stone-500">
+                      Долгие генерации сохраняют статус задачи, но полноценный background worker будет добавлен позже.
                     </p>
                   </article>
                 </div>
