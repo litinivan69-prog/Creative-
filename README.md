@@ -249,6 +249,15 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Reasoning effort can be tuned with `TEXT_REASONING_EFFORT_STRATEGY`, `TEXT_REASONING_EFFORT_CONTENT`, and `TEXT_REASONING_EFFORT_CREATIVE`.
 - `OPENAI_MODEL` remains available as a backward-compatible fallback when the newer text model variables are not set.
 
+## Sprint Product-1.1 Material Workspace Usability
+
+- Material Workspace usability was improved around publication-centric cards.
+- Publication text can be edited directly from a material card.
+- Editing previously approved text returns the material to review.
+- Every material now shows the next recommended operational action.
+- Creative brief and premium visual generation actions are available from material details.
+- No database schema or OpenAI prompt changes were made.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.

@@ -76,7 +76,8 @@ type DraftReviewAction =
   | "changes_requested"
   | "approved"
   | "rejected"
-  | "marked_ready_to_schedule";
+  | "marked_ready_to_schedule"
+  | "text_updated";
 
 const creativeAssetStatuses = [
   "needed",
@@ -153,6 +154,10 @@ function jsonArray(value: unknown) {
 
 function draftReviewActor(formData: FormData) {
   return formText(formData, "actorType") === "client" ? "client" : "manager";
+}
+
+function returnViewFromForm(formData: FormData, fallback: WorkspaceView) {
+  return formText(formData, "returnView") === "drafts" ? "drafts" : fallback;
 }
 
 async function generateCreativeAssetBriefFromContext(context: CreativeAssetGenerationContext) {
@@ -236,7 +241,7 @@ async function updateDraftWorkflow(
   ]);
 
   revalidatePath("/");
-  redirect(workspaceLocation("approvals", { blueprintId: draft.blueprintId, planId: draft.monthlyPlanId, notice: update.notice }));
+  redirect(workspaceLocation(returnViewFromForm(formData, "approvals"), { blueprintId: draft.blueprintId, planId: draft.monthlyPlanId, notice: update.notice }));
 }
 
 export async function createClient(formData: FormData) {
@@ -731,6 +736,60 @@ export async function regenerateContentDraftForItem(formData: FormData) {
   await generateContentTextForItem(formData, true);
 }
 
+export async function updatePublicationText(formData: FormData) {
+  const contentDraftId = formText(formData, "contentDraftId");
+  const draftTitle = formText(formData, "draftTitle");
+  const draftBody = formText(formData, "draftBody");
+  const comment = formText(formData, "comment");
+
+  if (!contentDraftId) {
+    errorRedirect("Не выбран материал.", "drafts");
+  }
+
+  const draft = await prisma.contentDraft.findUnique({
+    where: { id: contentDraftId },
+    select: {
+      id: true,
+      blueprintId: true,
+      monthlyPlanId: true,
+    },
+  });
+
+  if (!draft) {
+    errorRedirect("Материал не найден.", "drafts");
+  }
+
+  if (!draftTitle || !draftBody) {
+    monthlyPlanErrorRedirect(draft.blueprintId, draft.monthlyPlanId, "Укажите заголовок и текст публикации.", "drafts");
+  }
+
+  await prisma.$transaction([
+    prisma.contentDraft.update({
+      where: { id: draft.id },
+      data: {
+        draftTitle,
+        draftBody,
+        status: "needs_review",
+      },
+    }),
+    prisma.contentDraftReviewEvent.create({
+      data: {
+        contentDraftId: draft.id,
+        actorType: "manager",
+        action: "text_updated",
+        comment: comment || "Текст публикации обновлён менеджером.",
+      },
+    }),
+  ]);
+
+  revalidatePath("/");
+  redirect(workspaceLocation("drafts", {
+    blueprintId: draft.blueprintId,
+    planId: draft.monthlyPlanId,
+    notice: "Текст публикации обновлён и отправлен на проверку.",
+  }));
+}
+
 export async function submitDraftForReview(formData: FormData) {
   await updateDraftWorkflow(formData, {
     status: "needs_review",
@@ -813,6 +872,7 @@ export async function scheduleContentDraft(formData: FormData) {
       draft.blueprintId,
       draft.monthlyPlanId,
       "Сначала согласуйте материал перед планированием публикации.",
+      returnViewFromForm(formData, "calendar"),
     );
   }
 
@@ -821,7 +881,7 @@ export async function scheduleContentDraft(formData: FormData) {
   });
 
   if (existingPublication) {
-    redirect(workspaceLocation("calendar", { blueprintId: draft.blueprintId, planId: draft.monthlyPlanId, notice: "Для этого материала публикация уже запланирована." }));
+    redirect(workspaceLocation(returnViewFromForm(formData, "calendar"), { blueprintId: draft.blueprintId, planId: draft.monthlyPlanId, notice: "Для этого материала публикация уже запланирована." }));
   }
 
   await prisma.scheduledPublication.create({
@@ -844,7 +904,7 @@ export async function scheduleContentDraft(formData: FormData) {
   });
 
   revalidatePath("/");
-  redirect(workspaceLocation("calendar", { blueprintId: draft.blueprintId, planId: draft.monthlyPlanId, notice: "Публикация запланирована." }));
+  redirect(workspaceLocation(returnViewFromForm(formData, "calendar"), { blueprintId: draft.blueprintId, planId: draft.monthlyPlanId, notice: "Публикация запланирована." }));
 }
 
 async function updateScheduledPublicationStatus(
@@ -1061,7 +1121,7 @@ export async function generateCreativeAssetBriefForPublication(formData: FormDat
   }
 
   if (publication.creativeAssets.length > 0) {
-    redirect(workspaceLocation("assets", { blueprintId: publication.blueprintId, planId: publication.monthlyPlanId, notice: "Для этой публикации уже есть ТЗ на креатив." }));
+    redirect(workspaceLocation(returnViewFromForm(formData, "assets"), { blueprintId: publication.blueprintId, planId: publication.monthlyPlanId, notice: "Для этой публикации уже есть ТЗ на креатив." }));
   }
 
   try {
@@ -1106,12 +1166,12 @@ export async function generateCreativeAssetBriefForPublication(formData: FormDat
       publication.blueprintId,
       publication.monthlyPlanId,
       `Не удалось сгенерировать ТЗ на креатив: ${message}`,
-      "assets",
+      returnViewFromForm(formData, "assets"),
     );
   }
 
   revalidatePath("/");
-  redirect(workspaceLocation("assets", { blueprintId: publication.blueprintId, planId: publication.monthlyPlanId, notice: "AI сгенерировал ТЗ на креативный материал." }));
+  redirect(workspaceLocation(returnViewFromForm(formData, "assets"), { blueprintId: publication.blueprintId, planId: publication.monthlyPlanId, notice: "AI сгенерировал ТЗ на креативный материал." }));
 }
 
 export async function regenerateCreativeAssetBrief(formData: FormData) {
@@ -1175,12 +1235,12 @@ export async function regenerateCreativeAssetBrief(formData: FormData) {
       asset.blueprintId,
       asset.monthlyPlanId,
       `Не удалось обновить ТЗ на креатив: ${message}`,
-      "assets",
+      returnViewFromForm(formData, "assets"),
     );
   }
 
   revalidatePath("/");
-  redirect(workspaceLocation("assets", { blueprintId: asset.blueprintId, planId: asset.monthlyPlanId, notice: "AI обновил ТЗ на креативный материал." }));
+  redirect(workspaceLocation(returnViewFromForm(formData, "assets"), { blueprintId: asset.blueprintId, planId: asset.monthlyPlanId, notice: "AI обновил ТЗ на креативный материал." }));
 }
 
 export async function updateCreativeAssetStatus(formData: FormData) {
@@ -1345,12 +1405,12 @@ export async function generateCreativeVisualVariantForAsset(formData: FormData) 
       asset.blueprintId,
       asset.monthlyPlanId,
       "Не удалось сгенерировать визуал через визуальный движок. Проверьте настройки API и попробуйте ещё раз.",
-      "assets",
+      returnViewFromForm(formData, "assets"),
     );
   }
 
   revalidatePath("/");
-  redirect(workspaceLocation("assets", { blueprintId: asset.blueprintId, planId: asset.monthlyPlanId, notice: "AI сгенерировал визуал." }));
+  redirect(workspaceLocation(returnViewFromForm(formData, "assets"), { blueprintId: asset.blueprintId, planId: asset.monthlyPlanId, notice: "AI сгенерировал визуал." }));
 }
 
 async function updateCreativeVariantStatus(
@@ -1401,7 +1461,7 @@ async function updateCreativeVariantStatus(
   }
 
   revalidatePath("/");
-  redirect(workspaceLocation("assets", { blueprintId: variant.blueprintId, planId: variant.monthlyPlanId, notice }));
+  redirect(workspaceLocation(returnViewFromForm(formData, "assets"), { blueprintId: variant.blueprintId, planId: variant.monthlyPlanId, notice }));
 }
 
 export async function markCreativeVariantNeedsReview(formData: FormData) {
@@ -1478,7 +1538,7 @@ async function updateCreativeVariantQuality(
   });
 
   revalidatePath("/");
-  redirect(workspaceLocation("assets", { blueprintId: variant.blueprintId, planId: variant.monthlyPlanId, notice }));
+  redirect(workspaceLocation(returnViewFromForm(formData, "assets"), { blueprintId: variant.blueprintId, planId: variant.monthlyPlanId, notice }));
 }
 
 export async function markCreativeVariantQualityPassed(formData: FormData) {
