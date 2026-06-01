@@ -19,6 +19,7 @@ import {
   markScheduledPublicationReady,
   markScheduledPublicationScheduled,
   markScheduledPublicationSkipped,
+  prepareMonthAutopilot,
   regenerateCreativeAssetBrief,
   rejectDraft,
   rejectCreativeVariant,
@@ -34,6 +35,7 @@ import {
   updateScheduledPublication,
 } from "@/app/actions";
 import { PendingSubmitButton } from "@/app/pending-submit-button";
+import { getAutopilotTextBatchLimit } from "@/lib/autopilot";
 import { getTextModelSettings } from "@/lib/openai";
 import { prisma } from "@/lib/prisma";
 
@@ -1744,17 +1746,31 @@ function MaterialPrimaryAction({
 function DraftsView({
   items,
   publications,
+  monthlyPlanId,
+  blueprintId,
   approvalsHref,
   calendarHref,
   assetsHref,
 }: {
   items: MaterialPlannedItem[];
   publications: ScheduledPublicationPreview[];
+  monthlyPlanId?: string;
+  blueprintId?: string;
   approvalsHref: string;
   calendarHref: string;
   assetsHref: string;
 }) {
-  const allTextsReady = items.length > 0 && items.every((item) => item.contentDraft);
+  const totalMaterialsCount = items.length;
+  const textsCreatedCount = items.filter((item) => item.contentDraft).length;
+  const missingTextsCount = totalMaterialsCount - textsCreatedCount;
+  const approvedTextsCount = items.filter((item) => item.contentDraft && ["approved", "ready_to_schedule"].includes(item.contentDraft.status)).length;
+  const scheduledCount = publications.length;
+  const missingBriefsCount = publications.filter((publication) => publication.creativeAssets.length === 0).length;
+  const missingVisualsCount = publications.filter((publication) =>
+    publication.creativeAssets.some((asset) => asset.generatedVariants.length === 0),
+  ).length;
+  const allTextsReady = totalMaterialsCount > 0 && missingTextsCount === 0;
+  const autopilotBatchLimit = getAutopilotTextBatchLimit();
 
   return (
     <section>
@@ -1763,6 +1779,40 @@ function DraftsView({
         title="Материалы публикаций"
         description="Каждая публикация собрана в одной рабочей карточке: текст, согласование, дата, ТЗ и визуал. Начните со следующего рекомендованного действия."
       />
+      <article className={`${panelClass} mt-5 overflow-hidden border-teal-200`}>
+        <div className="grid gap-5 bg-teal-50/60 p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Production Autopilot</p>
+            <h3 className="mt-1 text-lg font-semibold text-stone-950">Автоподготовка месяца</h3>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">
+              Система создаст недостающие тексты публикаций для текущего месячного плана. ТЗ, визуалы и согласования останутся под контролем менеджера.
+            </p>
+            <p className="mt-2 text-xs leading-5 text-stone-500">
+              За один запуск готовится до {autopilotBatchLimit} материалов, чтобы не перегружать генерацию.
+            </p>
+          </div>
+          {missingTextsCount > 0 && monthlyPlanId ? (
+            <form action={prepareMonthAutopilot}>
+              <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} />
+              {blueprintId ? <input type="hidden" name="blueprintId" value={blueprintId} /> : null}
+              <PendingSubmitButton pendingLabel="Готовим материалы..." className={primaryButtonClass}>
+                Подготовить месяц
+              </PendingSubmitButton>
+            </form>
+          ) : (
+            <StatusBadge tone={allTextsReady ? "green" : "neutral"}>{allTextsReady ? "Тексты готовы" : "Нужен месячный план"}</StatusBadge>
+          )}
+        </div>
+      </article>
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+        <MetricCard label="Всего материалов" value={totalMaterialsCount} detail="В текущем плане" />
+        <MetricCard label="Тексты созданы" value={textsCreatedCount} detail="Можно проверять" tone="teal" />
+        <MetricCard label="Тексты не созданы" value={missingTextsCount} detail="Подготовит автопилот" tone={missingTextsCount > 0 ? "amber" : "stone"} />
+        <MetricCard label="Согласованы" value={approvedTextsCount} detail="Текст прошёл проверку" />
+        <MetricCard label="Запланированы" value={scheduledCount} detail="Есть дата публикации" tone="teal" />
+        <MetricCard label="Нужны ТЗ" value={missingBriefsCount} detail="После планирования" tone={missingBriefsCount > 0 ? "amber" : "stone"} />
+        <MetricCard label="Нужны визуалы" value={missingVisualsCount} detail="ТЗ уже подготовлено" tone={missingVisualsCount > 0 ? "amber" : "stone"} />
+      </div>
       {allTextsReady ? (
         <div className="mt-5 rounded-lg border border-teal-200 bg-teal-50/70 px-4 py-3 text-sm leading-6 text-teal-900">
           <span className="font-semibold">Все тексты созданы.</span> Откройте материал, чтобы редактировать, согласовать или подготовить визуал.
@@ -2428,6 +2478,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
   const activeView = getActiveView(params);
   const isProductionBuild = process.env.NEXT_PHASE === "phase-production-build";
   const textModelSettings = getTextModelSettings();
+  const autopilotTextBatchLimit = getAutopilotTextBatchLimit();
 
   const [clients, selectedBlueprint] = await Promise.all([
     isProductionBuild
@@ -2593,12 +2644,18 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
   const plannedContentCount = selectedMonthlyPlan?.plannedContentItems.length ?? 0;
   const productionProgress =
     plannedContentCount > 0 ? Math.round((draftCount / plannedContentCount) * 100) : 0;
+  const missingTextCount = Math.max(plannedContentCount - draftCount, 0);
   const creativeAssets = selectedMonthlyPlan?.creativeAssets ?? [];
   const creativeAssetAttentionCount =
     creativeAssets.filter((asset) => ["needed", "brief_ready", "in_production", "needs_review"].includes(asset.status)).length +
     (selectedMonthlyPlan?.scheduledPublications.filter(
       (publication) => publication.status === "needs_assets" && publication.creativeAssets.length === 0,
     ).length ?? 0);
+  const missingVisualCount =
+    selectedMonthlyPlan?.scheduledPublications.filter((publication) =>
+      publication.creativeAssets.length === 0 ||
+      publication.creativeAssets.some((asset) => asset.generatedVariants.length === 0),
+    ).length ?? 0;
   const workspaceContext = {
     blueprint: latestBlueprint?.id ?? params.blueprint,
     plan: selectedMonthlyPlan?.id ?? params.plan,
@@ -2736,6 +2793,21 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 <MetricCard label="Согласовано" value={approvedDraftCount} detail="Можно перейти к планированию" />
                 <MetricCard label="Готово к планированию" value={readyToScheduleCount} detail="Публикации пока не подключены" tone="teal" />
               </div>
+              {selectedMonthlyPlan && (missingTextCount > 0 || missingVisualCount > 0) ? (
+                <div className="mt-4 flex flex-col gap-3 rounded-lg border border-teal-200 bg-teal-50/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-teal-950">
+                      {missingTextCount > 0 ? "Есть материалы без текста" : "Тексты готовы, осталось подготовить визуалы"}
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-teal-800">
+                      {missingTextCount > 0
+                        ? `${missingTextCount} материалов ждут автоподготовки или ручной генерации текста.`
+                        : `${missingVisualCount} публикаций ждут ТЗ или визуал.`}
+                    </p>
+                  </div>
+                  <a href={workspaceLinks.drafts} className={primaryButtonClass}>Открыть материалы</a>
+                </div>
+              ) : null}
             </section>
 
             <section className="mt-7 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -2911,6 +2983,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
               <DraftsView
                 items={selectedMonthlyPlan?.plannedContentItems ?? []}
                 publications={selectedMonthlyPlan?.scheduledPublications ?? []}
+                monthlyPlanId={selectedMonthlyPlan?.id}
+                blueprintId={latestBlueprint?.id}
                 approvalsHref={workspaceLinks.approvals}
                 calendarHref={workspaceLinks.calendar}
                 assetsHref={workspaceLinks.assets}
@@ -3552,6 +3626,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                     <h3 className="mt-2 font-semibold text-stone-950">{process.env.VISUAL_PROVIDER || "openai"}</h3>
                     <p className="mt-2 text-sm leading-6 text-stone-500">
                       {process.env.OPENAI_IMAGE_MODEL || "gpt-image-2"} &middot; {process.env.OPENAI_IMAGE_QUALITY || "high"} &middot; {process.env.VISUAL_TEXT_MODE || "image_text"}
+                    </p>
+                  </article>
+                  <article className={`${panelClass} p-4`}>
+                    <p className="text-xs font-bold uppercase tracking-[0.1em] text-stone-400">Production Autopilot</p>
+                    <h3 className="mt-2 font-semibold text-stone-950">До {autopilotTextBatchLimit} текстов за запуск</h3>
+                    <p className="mt-2 text-sm leading-6 text-stone-500">
+                      Лимит автоподготовки месяца задаётся переменной AUTOPILOT_TEXT_BATCH_LIMIT. Если переменная не указана, используется значение 5.
                     </p>
                   </article>
                 </div>

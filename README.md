@@ -260,6 +260,16 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Creative brief and premium visual generation actions are available from material details.
 - No database schema or OpenAI prompt changes were made.
 
+## Sprint Product-2A Prepare Month Autopilot MVP
+
+- Prepare Month Autopilot MVP was added.
+- Managers can generate missing publication texts for the selected monthly plan in controlled batches.
+- Autopilot is idempotent and skips publication texts that already exist.
+- Set `AUTOPILOT_TEXT_BATCH_LIMIT` to tune the batch size up to the safe maximum of `5`; the default is `5`.
+- Batch visual generation is intentionally not included yet.
+- Premium visual generation will move to background jobs or a queue in a later sprint.
+- No database schema or OpenAI prompt changes were required.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.
@@ -274,6 +284,7 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Vercel build runs `prisma migrate deploy` before `next build`.
 - `OPENAI_API_KEY` must be set in Vercel environment variables for real Blueprint generation.
 - `TEXT_MODEL_DEFAULT`, `TEXT_MODEL_PREMIUM`, `TEXT_MODEL_FAST`, `TEXT_MODEL_STRATEGY`, `TEXT_MODEL_MONTHLY_PLAN`, `TEXT_MODEL_CONTENT`, and `TEXT_MODEL_CREATIVE_BRIEF` can be set in Vercel environment variables to tune the text intelligence layer.
+- `AUTOPILOT_TEXT_BATCH_LIMIT` controls how many missing publication texts Prepare Month Autopilot creates per run; the default is `5`.
 - `VISUAL_PROVIDER`, `OPENAI_IMAGE_MODEL`, `OPENAI_IMAGE_QUALITY`, `OPENAI_IMAGE_SIZE`, and `VISUAL_TEXT_MODE` can be set in Vercel environment variables for visual generation.
 - The premium defaults are `openai`, `gpt-image-2`, `high`, `auto`, and `image_text`.
 

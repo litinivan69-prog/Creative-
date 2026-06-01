@@ -18,6 +18,7 @@ import {
 } from "@/lib/content-draft-schema";
 import { CreativeAssetBriefSchema } from "@/lib/creative-asset-schema";
 import { validateMonthlyPlanForBlueprint } from "@/lib/monthly-plan-schema";
+import { getAutopilotTextBatchLimit } from "@/lib/autopilot";
 
 function formText(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -596,9 +597,22 @@ export async function generateMonthlyPlan(formData: FormData) {
   redirect(workspaceLocation("client_setup", { blueprintId: blueprint.id, planId: createdId }));
 }
 
-async function generateContentTextForItem(formData: FormData, replaceExisting: boolean) {
-  const plannedContentItemId = formText(formData, "plannedContentItemId");
+type ContentTextGenerationResult = {
+  status: "created" | "updated" | "skipped" | "failed";
+  plannedContentItemId: string;
+  contentDraftId?: string;
+  blueprintId?: string;
+  monthlyPlanId?: string;
+  message: string;
+};
 
+async function generateContentTextForPlannedItem(
+  plannedContentItemId: string,
+  options: {
+    replaceExisting: boolean;
+    createReviewEvent: boolean;
+  },
+): Promise<ContentTextGenerationResult> {
   const item = await prisma.plannedContentItem.findUnique({
     where: { id: plannedContentItemId },
     include: {
@@ -613,18 +627,36 @@ async function generateContentTextForItem(formData: FormData, replaceExisting: b
   });
 
   if (!item) {
-    errorRedirect("Запланированный материал не найден.");
+    return {
+      status: "failed",
+      plannedContentItemId,
+      message: "Запланированный материал не найден.",
+    };
   }
 
   const plan = item.monthlyPlan;
   const blueprint = plan.blueprint;
+  const resultContext = {
+    plannedContentItemId: item.id,
+    blueprintId: blueprint.id,
+    monthlyPlanId: plan.id,
+  };
 
-  if (item.contentDraft && !replaceExisting) {
-    redirect(workspaceLocation("drafts", { blueprintId: blueprint.id, planId: plan.id, notice: "Текст для этого материала уже создан." }));
+  if (item.contentDraft && !options.replaceExisting) {
+    return {
+      ...resultContext,
+      status: "skipped",
+      contentDraftId: item.contentDraft.id,
+      message: "Текст для этого материала уже создан.",
+    };
   }
 
-  if (!item.contentDraft && replaceExisting) {
-    redirect(workspaceLocation("drafts", { blueprintId: blueprint.id, planId: plan.id, notice: "Сначала сгенерируйте текст материала." }));
+  if (!item.contentDraft && options.replaceExisting) {
+    return {
+      ...resultContext,
+      status: "failed",
+      message: "Сначала сгенерируйте текст материала.",
+    };
   }
 
   try {
@@ -680,51 +712,92 @@ async function generateContentTextForItem(formData: FormData, replaceExisting: b
       riskLevel: draft.riskLevel,
     };
 
-    if (item.contentDraft) {
-      await prisma.$transaction([
-        prisma.contentDraft.update({
-          where: { id: item.contentDraft.id },
+    const existingContentDraft = item.contentDraft;
+
+    if (existingContentDraft) {
+      const updatedDraft = await prisma.$transaction(async (transaction) => {
+        const updated = await transaction.contentDraft.update({
+          where: { id: existingContentDraft.id },
           data: draftData,
-        }),
-        prisma.contentDraftReviewEvent.create({
-          data: {
-            contentDraftId: item.contentDraft.id,
-            actorType: "system",
-            action: "created",
-            comment: "AI обновил текст материала.",
-          },
-        }),
-      ]);
+        });
+
+        if (options.createReviewEvent) {
+          await transaction.contentDraftReviewEvent.create({
+            data: {
+              contentDraftId: existingContentDraft.id,
+              actorType: "system",
+              action: "created",
+              comment: "AI обновил текст материала.",
+            },
+          });
+        }
+
+        return updated;
+      });
+
+      return {
+        ...resultContext,
+        status: "updated",
+        contentDraftId: updatedDraft.id,
+        message: "AI обновил текст публикации.",
+      };
     } else {
-      await prisma.contentDraft.create({
+      const createdDraft = await prisma.contentDraft.create({
         data: {
           clientId: plan.clientId,
           blueprintId: plan.blueprintId,
           monthlyPlanId: plan.id,
           plannedContentItemId: item.id,
           ...draftData,
-          reviewEvents: {
-            create: {
-              actorType: "system",
-              action: "created",
-            },
-          },
+          ...(options.createReviewEvent
+            ? {
+                reviewEvents: {
+                  create: {
+                    actorType: "system",
+                    action: "created",
+                  },
+                },
+              }
+            : {}),
         },
       });
+
+      return {
+        ...resultContext,
+        status: "created",
+        contentDraftId: createdDraft.id,
+        message: "Текст публикации сгенерирован и готов к проверке менеджером.",
+      };
     }
   } catch (error) {
     const message =
       error instanceof Error
         ? error.message
         : "Не удалось сгенерировать текст. Проверьте материал и попробуйте ещё раз.";
-    monthlyPlanErrorRedirect(blueprint.id, plan.id, `Не удалось сгенерировать текст публикации: ${message}`, "drafts");
+    return {
+      ...resultContext,
+      status: "failed",
+      message: `Не удалось сгенерировать текст публикации: ${message}`,
+    };
+  }
+}
+
+async function generateContentTextForItem(formData: FormData, replaceExisting: boolean) {
+  const plannedContentItemId = formText(formData, "plannedContentItemId");
+  const result = await generateContentTextForPlannedItem(plannedContentItemId, {
+    replaceExisting,
+    createReviewEvent: true,
+  });
+
+  if (!result.blueprintId || !result.monthlyPlanId) {
+    errorRedirect(result.message, "drafts");
   }
 
   revalidatePath("/");
   redirect(workspaceLocation("drafts", {
-    blueprintId: blueprint.id,
-    planId: plan.id,
-    notice: replaceExisting ? "AI обновил текст публикации." : "Текст публикации сгенерирован и готов к проверке менеджером.",
+    blueprintId: result.blueprintId,
+    planId: result.monthlyPlanId,
+    ...(result.status === "failed" ? { error: result.message } : { notice: result.message }),
   }));
 }
 
@@ -734,6 +807,74 @@ export async function generateContentDraftForItem(formData: FormData) {
 
 export async function regenerateContentDraftForItem(formData: FormData) {
   await generateContentTextForItem(formData, true);
+}
+
+export async function prepareMonthAutopilot(formData: FormData) {
+  const monthlyPlanId = formText(formData, "monthlyPlanId");
+
+  if (!monthlyPlanId) {
+    errorRedirect("Не выбран месячный план для автоподготовки.", "drafts");
+  }
+
+  const plan = await prisma.monthlyOperatingPlan.findUnique({
+    where: { id: monthlyPlanId },
+    include: {
+      client: true,
+      blueprint: true,
+      plannedContentItems: {
+        include: {
+          contentDraft: true,
+        },
+      },
+      contentDrafts: true,
+      scheduledPublications: true,
+      creativeAssets: {
+        include: {
+          generatedVariants: true,
+        },
+      },
+    },
+  });
+
+  if (!plan) {
+    errorRedirect("Месячный план для автоподготовки не найден.", "drafts");
+  }
+
+  const missingTextItems = plan.plannedContentItems.filter((item) => !item.contentDraft);
+  const textBatch = missingTextItems.slice(0, getAutopilotTextBatchLimit());
+  const existingTextsCount = plan.plannedContentItems.length - missingTextItems.length;
+  const results: ContentTextGenerationResult[] = [];
+
+  for (const item of textBatch) {
+    results.push(
+      await generateContentTextForPlannedItem(item.id, {
+        replaceExisting: false,
+        createReviewEvent: true,
+      }),
+    );
+  }
+
+  const createdTextsCount = results.filter((result) => result.status === "created").length;
+  const newlySkippedTextsCount = results.filter((result) => result.status === "skipped").length;
+  const skippedTextsCount = existingTextsCount + newlySkippedTextsCount;
+  const failedTextsCount = results.filter((result) => result.status === "failed").length;
+  const remainingMissingTextsCount = missingTextItems.length - createdTextsCount - newlySkippedTextsCount;
+  let notice = `Автоподготовка месяца завершена: создано ${createdTextsCount} текстов, ${skippedTextsCount} уже были готовы.`;
+
+  if (remainingMissingTextsCount > 0) {
+    notice = `Создано ${createdTextsCount} текстов. Осталось подготовить ещё ${remainingMissingTextsCount} материалов. Запустите автоподготовку ещё раз, чтобы продолжить.`;
+  }
+
+  if (failedTextsCount > 0) {
+    notice = `Автоподготовка выполнена частично: создано ${createdTextsCount} текстов, ${skippedTextsCount} уже были готовы. Не удалось подготовить ${failedTextsCount}. Осталось ${remainingMissingTextsCount} материалов. Проверьте карточки материалов.`;
+  }
+
+  revalidatePath("/");
+  redirect(workspaceLocation("drafts", {
+    blueprintId: plan.blueprintId,
+    planId: plan.id,
+    ...(failedTextsCount > 0 ? { error: notice } : { notice }),
+  }));
 }
 
 export async function updatePublicationText(formData: FormData) {

@@ -38,6 +38,7 @@ jobs:
       TEXT_REASONING_EFFORT_STRATEGY: medium
       TEXT_REASONING_EFFORT_CONTENT: low
       TEXT_REASONING_EFFORT_CREATIVE: medium
+      AUTOPILOT_TEXT_BATCH_LIMIT: 5
 
     steps:
       - name: Checkout repository
