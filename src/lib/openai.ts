@@ -8,7 +8,32 @@ import { ContentDraftSchema } from "@/lib/content-draft-schema";
 import { CreativeAssetBriefSchema } from "@/lib/creative-asset-schema";
 import { MonthlyOperatingPlanSchema } from "@/lib/monthly-plan-schema";
 
-const model = process.env.OPENAI_MODEL ?? "gpt-4.1-mini";
+const legacyTextModel = process.env.OPENAI_MODEL;
+
+export const TEXT_MODEL_DEFAULT = process.env.TEXT_MODEL_DEFAULT ?? legacyTextModel ?? "gpt-5.4";
+export const TEXT_MODEL_PREMIUM = process.env.TEXT_MODEL_PREMIUM ?? legacyTextModel ?? "gpt-5.5";
+export const TEXT_MODEL_FAST = process.env.TEXT_MODEL_FAST ?? legacyTextModel ?? "gpt-5.4-mini";
+export const TEXT_MODEL_STRATEGY = process.env.TEXT_MODEL_STRATEGY ?? TEXT_MODEL_PREMIUM;
+export const TEXT_MODEL_CONTENT = process.env.TEXT_MODEL_CONTENT ?? TEXT_MODEL_DEFAULT;
+export const TEXT_MODEL_CREATIVE_BRIEF = process.env.TEXT_MODEL_CREATIVE_BRIEF ?? TEXT_MODEL_DEFAULT;
+
+const textModelTasks = ["strategy", "monthly_plan", "content_draft", "creative_brief", "fast"] as const;
+type TextModelTask = (typeof textModelTasks)[number];
+
+export function getTextModelForTask(task: TextModelTask) {
+  switch (task) {
+    case "strategy":
+    case "monthly_plan":
+      return TEXT_MODEL_STRATEGY;
+    case "content_draft":
+      return TEXT_MODEL_CONTENT;
+    case "creative_brief":
+      return TEXT_MODEL_CREATIVE_BRIEF;
+    case "fast":
+      return TEXT_MODEL_FAST;
+  }
+}
+
 const imageModel = process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-2";
 
 const visualProviders = ["openai", "google_later"] as const;
@@ -23,6 +48,9 @@ type ImageQuality = (typeof imageQualities)[number];
 const imageSizes = ["auto", "1024x1024", "1536x1024", "1024x1536"] as const;
 type ImageSize = (typeof imageSizes)[number];
 
+const reasoningEfforts = ["low", "medium", "high"] as const;
+type ReasoningEffort = (typeof reasoningEfforts)[number];
+
 function configuredValue<T extends string>(value: string | undefined, allowed: readonly T[], fallback: T): T {
   return allowed.includes(value as T) ? (value as T) : fallback;
 }
@@ -31,6 +59,38 @@ const visualProvider = configuredValue(process.env.VISUAL_PROVIDER, visualProvid
 const visualTextMode = configuredValue(process.env.VISUAL_TEXT_MODE, visualTextModes, "image_text");
 const imageQuality = configuredValue(process.env.OPENAI_IMAGE_QUALITY, imageQualities, "high");
 const imageSize = configuredValue(process.env.OPENAI_IMAGE_SIZE ?? "auto", imageSizes, "1024x1024");
+
+function supportsReasoningEffort(model: string) {
+  return /^gpt-5(?:[.-]|$)/i.test(model) || /^o\d/i.test(model);
+}
+
+function getTextReasoningForTask(task: TextModelTask) {
+  const model = getTextModelForTask(task);
+
+  if (!supportsReasoningEffort(model)) {
+    return {};
+  }
+
+  let effort: ReasoningEffort;
+
+  switch (task) {
+    case "strategy":
+    case "monthly_plan":
+      effort = configuredValue(process.env.TEXT_REASONING_EFFORT_STRATEGY, reasoningEfforts, "medium");
+      break;
+    case "content_draft":
+      effort = configuredValue(process.env.TEXT_REASONING_EFFORT_CONTENT, reasoningEfforts, "low");
+      break;
+    case "creative_brief":
+      effort = configuredValue(process.env.TEXT_REASONING_EFFORT_CREATIVE, reasoningEfforts, "medium");
+      break;
+    case "fast":
+      effort = "low";
+      break;
+  }
+
+  return { reasoning: { effort } };
+}
 
 export async function generateClientPresenceBlueprint(input: {
   clientName: string;
@@ -47,7 +107,8 @@ export async function generateClientPresenceBlueprint(input: {
   });
 
   const response = await openai.responses.parse({
-    model,
+    model: getTextModelForTask("strategy"),
+    ...getTextReasoningForTask("strategy"),
     input: [
       {
         role: "system",
@@ -92,7 +153,8 @@ export async function generateMonthlyOperatingPlan(input: {
   });
 
   const response = await openai.responses.parse({
-    model,
+    model: getTextModelForTask("monthly_plan"),
+    ...getTextReasoningForTask("monthly_plan"),
     input: [
       {
         role: "system",
@@ -145,7 +207,8 @@ export async function generateContentDraft(input: {
   });
 
   const response = await openai.responses.parse({
-    model,
+    model: getTextModelForTask("content_draft"),
+    ...getTextReasoningForTask("content_draft"),
     input: [
       {
         role: "system",
@@ -203,7 +266,8 @@ export async function generateCreativeAssetBrief(input: {
   });
 
   const response = await openai.responses.parse({
-    model,
+    model: getTextModelForTask("creative_brief"),
+    ...getTextReasoningForTask("creative_brief"),
     input: [
       {
         role: "system",
