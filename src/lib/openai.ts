@@ -8,12 +8,13 @@ import { ContentDraftSchema } from "@/lib/content-draft-schema";
 import { CreativeAssetBriefSchema } from "@/lib/creative-asset-schema";
 import { MonthlyOperatingPlanSchema } from "@/lib/monthly-plan-schema";
 
-const legacyTextModel = process.env.OPENAI_MODEL;
+const legacyModel = process.env.OPENAI_MODEL;
 
-export const TEXT_MODEL_DEFAULT = process.env.TEXT_MODEL_DEFAULT ?? legacyTextModel ?? "gpt-5.4";
-export const TEXT_MODEL_PREMIUM = process.env.TEXT_MODEL_PREMIUM ?? legacyTextModel ?? "gpt-5.5";
-export const TEXT_MODEL_FAST = process.env.TEXT_MODEL_FAST ?? legacyTextModel ?? "gpt-5.4-mini";
+export const TEXT_MODEL_DEFAULT = process.env.TEXT_MODEL_DEFAULT ?? legacyModel ?? "gpt-5.4";
+export const TEXT_MODEL_PREMIUM = process.env.TEXT_MODEL_PREMIUM ?? process.env.TEXT_MODEL_DEFAULT ?? legacyModel ?? "gpt-5.5";
+export const TEXT_MODEL_FAST = process.env.TEXT_MODEL_FAST ?? legacyModel ?? "gpt-5.4-mini";
 export const TEXT_MODEL_STRATEGY = process.env.TEXT_MODEL_STRATEGY ?? TEXT_MODEL_PREMIUM;
+export const TEXT_MODEL_MONTHLY_PLAN = process.env.TEXT_MODEL_MONTHLY_PLAN ?? TEXT_MODEL_PREMIUM;
 export const TEXT_MODEL_CONTENT = process.env.TEXT_MODEL_CONTENT ?? TEXT_MODEL_DEFAULT;
 export const TEXT_MODEL_CREATIVE_BRIEF = process.env.TEXT_MODEL_CREATIVE_BRIEF ?? TEXT_MODEL_DEFAULT;
 
@@ -23,8 +24,9 @@ type TextModelTask = (typeof textModelTasks)[number];
 export function getTextModelForTask(task: TextModelTask) {
   switch (task) {
     case "strategy":
-    case "monthly_plan":
       return TEXT_MODEL_STRATEGY;
+    case "monthly_plan":
+      return TEXT_MODEL_MONTHLY_PLAN;
     case "content_draft":
       return TEXT_MODEL_CONTENT;
     case "creative_brief":
@@ -32,6 +34,26 @@ export function getTextModelForTask(task: TextModelTask) {
     case "fast":
       return TEXT_MODEL_FAST;
   }
+}
+
+export function getTextModelSettings() {
+  const defaultUsesLegacy = Boolean(legacyModel && !process.env.TEXT_MODEL_DEFAULT);
+  const premiumUsesLegacy = Boolean(legacyModel && !process.env.TEXT_MODEL_PREMIUM && !process.env.TEXT_MODEL_DEFAULT);
+  const fastUsesLegacy = Boolean(legacyModel && !process.env.TEXT_MODEL_FAST);
+
+  return {
+    strategyModel: getTextModelForTask("strategy"),
+    monthlyPlanModel: getTextModelForTask("monthly_plan"),
+    contentModel: getTextModelForTask("content_draft"),
+    creativeBriefModel: getTextModelForTask("creative_brief"),
+    fastModel: getTextModelForTask("fast"),
+    legacyModelUsed:
+      (!process.env.TEXT_MODEL_STRATEGY && premiumUsesLegacy) ||
+      (!process.env.TEXT_MODEL_MONTHLY_PLAN && premiumUsesLegacy) ||
+      (!process.env.TEXT_MODEL_CONTENT && defaultUsesLegacy) ||
+      (!process.env.TEXT_MODEL_CREATIVE_BRIEF && defaultUsesLegacy) ||
+      fastUsesLegacy,
+  };
 }
 
 const imageModel = process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-2";

@@ -43,6 +43,7 @@ Planned Content Item -> OpenAI structured draft generation -> Content Draft -> m
    TEXT_MODEL_PREMIUM="gpt-5.5"
    TEXT_MODEL_FAST="gpt-5.4-mini"
    TEXT_MODEL_STRATEGY="gpt-5.5"
+   TEXT_MODEL_MONTHLY_PLAN="gpt-5.5"
    TEXT_MODEL_CONTENT="gpt-5.4"
    TEXT_MODEL_CREATIVE_BRIEF="gpt-5.4"
    ```
@@ -243,7 +244,8 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 
 - A configurable text model router was added for premium intelligence tasks.
 - `gpt-4.1-mini` is no longer the default premium intelligence layer.
-- Strategy and Monthly Plan generation use `TEXT_MODEL_STRATEGY`, with `gpt-5.5` as the premium default.
+- Text generation now uses task-based model routing.
+- Strategy and Monthly Plan generation can use `TEXT_MODEL_STRATEGY` and `TEXT_MODEL_MONTHLY_PLAN`, with `gpt-5.5` as the premium default.
 - Publication texts and creative briefs use configurable `gpt-5.4` defaults.
 - Fast or internal tasks can use `TEXT_MODEL_FAST`, with `gpt-5.4-mini` as the default.
 - Reasoning effort can be tuned with `TEXT_REASONING_EFFORT_STRATEGY`, `TEXT_REASONING_EFFORT_CONTENT`, and `TEXT_REASONING_EFFORT_CREATIVE`.
@@ -271,7 +273,7 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Vercel requires `DATABASE_URL` to point to a real cloud PostgreSQL database, not `localhost`.
 - Vercel build runs `prisma migrate deploy` before `next build`.
 - `OPENAI_API_KEY` must be set in Vercel environment variables for real Blueprint generation.
-- `TEXT_MODEL_DEFAULT`, `TEXT_MODEL_PREMIUM`, `TEXT_MODEL_FAST`, `TEXT_MODEL_STRATEGY`, `TEXT_MODEL_CONTENT`, and `TEXT_MODEL_CREATIVE_BRIEF` can be set in Vercel environment variables to tune the text intelligence layer.
+- `TEXT_MODEL_DEFAULT`, `TEXT_MODEL_PREMIUM`, `TEXT_MODEL_FAST`, `TEXT_MODEL_STRATEGY`, `TEXT_MODEL_MONTHLY_PLAN`, `TEXT_MODEL_CONTENT`, and `TEXT_MODEL_CREATIVE_BRIEF` can be set in Vercel environment variables to tune the text intelligence layer.
 - `VISUAL_PROVIDER`, `OPENAI_IMAGE_MODEL`, `OPENAI_IMAGE_QUALITY`, `OPENAI_IMAGE_SIZE`, and `VISUAL_TEXT_MODE` can be set in Vercel environment variables for visual generation.
 - The premium defaults are `openai`, `gpt-image-2`, `high`, `auto`, and `image_text`.
 

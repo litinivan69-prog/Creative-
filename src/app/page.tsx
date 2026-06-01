@@ -34,7 +34,7 @@ import {
   updateScheduledPublication,
 } from "@/app/actions";
 import { PendingSubmitButton } from "@/app/pending-submit-button";
-import { getTextModelForTask } from "@/lib/openai";
+import { getTextModelSettings } from "@/lib/openai";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -2427,6 +2427,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
   const params = await searchParams;
   const activeView = getActiveView(params);
   const isProductionBuild = process.env.NEXT_PHASE === "phase-production-build";
+  const textModelSettings = getTextModelSettings();
 
   const [clients, selectedBlueprint] = await Promise.all([
     isProductionBuild
@@ -3520,11 +3521,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                     <h3 className="mt-2 font-semibold text-stone-950">{process.env.OPENAI_API_KEY ? "Подключен" : "Нужно настроить"}</h3>
                     <dl className="mt-3 space-y-2 text-sm leading-5">
                       {[
-                        ["Стратегия", getTextModelForTask("strategy")],
-                        ["Месячный план", getTextModelForTask("monthly_plan")],
-                        ["Тексты публикаций", getTextModelForTask("content_draft")],
-                        ["ТЗ на креатив", getTextModelForTask("creative_brief")],
-                        ["Быстрые задачи", getTextModelForTask("fast")],
+                        ["Стратегия", textModelSettings.strategyModel],
+                        ["Месячный план", textModelSettings.monthlyPlanModel],
+                        ["Тексты публикаций", textModelSettings.contentModel],
+                        ["ТЗ на креатив", textModelSettings.creativeBriefModel],
+                        ["Быстрые задачи", textModelSettings.fastModel],
                       ].map(([label, model]) => (
                         <div className="flex items-start justify-between gap-3" key={label}>
                           <dt className="text-stone-500">{label}</dt>
@@ -3532,6 +3533,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                         </div>
                       ))}
                     </dl>
+                    <p className="mt-4 border-t border-stone-200 pt-3 text-xs leading-5 text-stone-500">
+                      Модели можно переопределить через переменные окружения Vercel.
+                    </p>
+                    {textModelSettings.legacyModelUsed ? (
+                      <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-900">
+                        Сейчас используется совместимый fallback OPENAI_MODEL. Добавьте новые TEXT_MODEL_* переменные в Vercel для раздельной настройки задач.
+                      </p>
+                    ) : null}
                   </article>
                   <article className={`${panelClass} p-4`}>
                     <p className="text-xs font-bold uppercase tracking-[0.1em] text-stone-400">База данных</p>
