@@ -295,6 +295,15 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Redirects preserve the selected Client Portal view, Blueprint, and monthly plan.
 - Public authentication and external client links are still not included.
 
+## Sprint Product-3C Secure Client Portal Share Links MVP
+
+- Secure Client Portal share links were added.
+- Managers can create and revoke tokenized links for one monthly plan.
+- The public portal route shows only the client-facing calendar and materials.
+- Clients can approve materials or request changes from a shared link.
+- Raw portal tokens are not stored in the database.
+- Full user authentication, video, and voice feedback are still not included.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.

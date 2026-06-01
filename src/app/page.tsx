@@ -2,6 +2,7 @@ import {
   addClientBrief,
   approveDraft,
   approveCreativeVariant,
+  createClientPortalLink,
   createCreativeAssetBrief,
   createClient,
   deleteCreativeVariant,
@@ -24,6 +25,7 @@ import {
   rejectDraft,
   rejectCreativeVariant,
   requestDraftChanges,
+  revokeClientPortalLink,
   scheduleContentDraft,
   sendDraftToClient,
   submitDraftForReview,
@@ -34,6 +36,7 @@ import {
   updatePublicationText,
   updateScheduledPublication,
 } from "@/app/actions";
+import { ClientPortalView } from "@/app/client-portal-view";
 import { PendingSubmitButton } from "@/app/pending-submit-button";
 import { getAutopilotTextBatchLimit } from "@/lib/autopilot";
 import { getTextModelSettings } from "@/lib/openai";
@@ -48,6 +51,7 @@ type SearchParams = Promise<{
   client?: string;
   error?: string;
   notice?: string;
+  portalLink?: string;
 }>;
 
 const workspaceViews = [
@@ -2248,276 +2252,78 @@ function OperationsOverview({
   );
 }
 
-type ClientPortalStatus = "in_progress" | "ready_for_review" | "awaiting_approval" | "approved" | "changes_requested";
-
-function formatClientPortalStatus(status: ClientPortalStatus) {
-  const labels: Record<ClientPortalStatus, string> = {
-    in_progress: "В работе",
-    ready_for_review: "Готово к просмотру",
-    awaiting_approval: "Ожидает согласования",
-    approved: "Согласовано",
-    changes_requested: "Нужны правки",
-  };
-
-  return labels[status];
-}
-
-function clientPortalStatusTone(status: ClientPortalStatus): "neutral" | "teal" | "amber" | "rose" | "green" {
-  if (status === "approved") return "green";
-  if (status === "changes_requested") return "rose";
-  if (status === "awaiting_approval") return "amber";
-  if (status === "ready_for_review") return "teal";
-  return "neutral";
-}
-
-function formatClientCalendarGroup(label: string) {
-  const normalized = label.trim().toLowerCase().replaceAll("-", " ").replaceAll("_", " ");
-  const weekMatch = normalized.match(/^week\s*(\d+)$/);
-
-  return weekMatch ? `Неделя ${weekMatch[1]}` : label || "Без даты";
-}
-
-function getClientPortalVisual(publication?: ScheduledPublicationPreview) {
-  const variants = publication?.creativeAssets[0]?.generatedVariants ?? [];
-
-  return variants.find((variant) => variant.status === "approved") ?? variants[0];
-}
-
-function getClientPortalStatus(item: CalendarPreviewItem, publication?: ScheduledPublicationPreview): ClientPortalStatus {
-  const draftStatus = item.contentDraft?.status;
-  const visual = getClientPortalVisual(publication);
-  const visualRequired = suggestsVisualAsset(item.format) || publication?.status === "needs_assets";
-
-  if (!item.contentDraft) return "in_progress";
-  if (draftStatus === "client_changes_requested" || draftStatus === "rejected") return "changes_requested";
-  if (draftStatus === "sent_to_client") return "awaiting_approval";
-  if (visualRequired && !visual) return "in_progress";
-  if (["approved", "ready_to_schedule"].includes(draftStatus ?? "")) return "approved";
-  if (draftStatus === "needs_review") return "ready_for_review";
-  return "in_progress";
-}
-
-function ClientPortalPreview({
-  clientName,
-  month,
-  items,
-  publications,
+function ClientPortalLinksPanel({
+  blueprintId,
+  monthlyPlanId,
+  links,
+  newPortalLink,
 }: {
-  clientName?: string;
-  month?: string;
-  items: CalendarPreviewItem[];
-  publications: ScheduledPublicationPreview[];
+  blueprintId?: string;
+  monthlyPlanId?: string;
+  links: Array<{
+    id: string;
+    tokenPrefix: string;
+    label: string | null;
+    status: string;
+    createdAt: Date;
+    lastOpenedAt: Date | null;
+  }>;
+  newPortalLink?: string;
 }) {
-  if (!month) {
-    return (
-      <section>
-        <WorkspaceViewHeader
-          eyebrow="Клиентский портал"
-          title="Клиентский календарь"
-          description="Чистый клиентский вид месячного плана без внутренних производственных деталей."
-        />
-        <div className="mt-5 rounded-lg border border-teal-200 bg-teal-50/70 px-4 py-3 text-xs leading-5 text-teal-900">
-          Это предварительный клиентский вид. Публичный доступ и авторизация будут добавлены позже.
-        </div>
-        <div className="mt-5"><EmptyState>Выберите месячный план, чтобы посмотреть клиентский календарь.</EmptyState></div>
-      </section>
-    );
-  }
-
-  const materials = items.map((item) => {
-    const publication = publications.find((candidate) => candidate.plannedContentItemId === item.id);
-    const status = getClientPortalStatus(item, publication);
-
-    return {
-      item,
-      publication,
-      status,
-      visual: getClientPortalVisual(publication),
-      groupLabel: formatClientCalendarGroup(publication?.scheduledDate || item.week || item.plannedDate || "Без даты"),
-    };
-  });
-  const groupedMaterials = Array.from(
-    materials.reduce((groups, material) => {
-      groups.set(material.groupLabel, [...(groups.get(material.groupLabel) ?? []), material]);
-      return groups;
-    }, new Map<string, typeof materials>()),
-    ([label, groupedItems]) => ({ label, items: groupedItems }),
-  );
-  const attentionMaterials = materials
-    .filter(({ item, status, visual }) =>
-      ["awaiting_approval", "changes_requested"].includes(status) ||
-      ["draft", "needs_review"].includes(item.contentDraft?.status ?? "") ||
-      Boolean(visual && visual.qualityStatus !== "passed"),
-    )
-    .slice(0, 5);
-  const readyForReviewCount = materials.filter(({ status }) => ["ready_for_review", "awaiting_approval"].includes(status)).length;
-  const approvedCount = materials.filter(({ status }) => status === "approved").length;
-  const needsChangesCount = materials.filter(({ status }) => status === "changes_requested").length;
-  const missingVisualCount = materials.filter(({ item, publication, visual }) =>
-    (suggestsVisualAsset(item.format) || publication?.status === "needs_assets") && !visual,
-  ).length;
-
   return (
-    <section>
-      <div className="rounded-lg border border-teal-200 bg-teal-50/70 px-4 py-3 text-xs leading-5 text-teal-900">
-        Это предварительный клиентский вид. Публичный доступ и авторизация будут добавлены позже.
+    <section className="mb-5 rounded-lg border border-stone-200 bg-white p-4 shadow-[0_1px_2px_rgba(28,36,38,0.04)] sm:p-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Доступ для клиента</p>
+          <h2 className="mt-1 text-lg font-semibold text-stone-950">Клиентская ссылка</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
+            Ссылка открывает только клиентский календарь выбранного месячного плана. Менеджерская панель недоступна.
+          </p>
+        </div>
+        {monthlyPlanId && blueprintId ? (
+          <form action={createClientPortalLink} className="grid w-full gap-2 sm:max-w-sm">
+            <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} />
+            <input type="hidden" name="blueprintId" value={blueprintId} />
+            <input name="label" className={inputClass} placeholder="Название ссылки, например Основная" />
+            <PendingSubmitButton pendingLabel="Создаём ссылку..." className={primaryButtonClass}>Создать клиентскую ссылку</PendingSubmitButton>
+          </form>
+        ) : (
+          <StatusBadge tone="amber">Выберите месячный план</StatusBadge>
+        )}
       </div>
-      <div className="mt-5 overflow-hidden rounded-lg border border-stone-200 bg-white shadow-[0_1px_2px_rgba(28,36,38,0.04)]">
-        <div className="border-b border-stone-200 bg-[#f8fbfa] px-5 py-6 sm:px-7">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Adaptive Presence OS &middot; by Creative</p>
-          <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h2 className="text-2xl font-semibold text-stone-950">{clientName || "Клиентский календарь"}</h2>
-              <p className="mt-2 text-sm leading-6 text-stone-500">Календарь публикаций и материалы для понятного согласования.</p>
-            </div>
-            <StatusBadge tone="teal">{month}</StatusBadge>
-          </div>
+
+      {newPortalLink ? (
+        <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-3">
+          <p className="text-sm font-semibold text-emerald-900">Скопируйте ссылку для клиента</p>
+          <p className="mt-1 text-xs leading-5 text-emerald-800">Эта ссылка показана после создания. Сырой токен не хранится в базе.</p>
+          <input readOnly value={newPortalLink} className={`${inputClass} mt-3 font-mono text-xs`} />
         </div>
+      ) : null}
 
-        <div className="p-5 sm:p-7">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-            <MetricCard label="Материалов в плане" value={materials.length} />
-            <MetricCard label="Готово к просмотру" value={readyForReviewCount} tone="teal" />
-            <MetricCard label="Ожидает согласования" value={materials.filter(({ status }) => status === "awaiting_approval").length} tone="amber" />
-            <MetricCard label="Согласовано" value={approvedCount} />
-            <MetricCard label="Нужны правки" value={needsChangesCount} tone={needsChangesCount > 0 ? "rose" : "stone"} />
-            <MetricCard label="Визуалы в работе" value={missingVisualCount} tone={missingVisualCount > 0 ? "amber" : "stone"} />
-          </div>
-
-          <section className="mt-7 rounded-lg border border-amber-200 bg-amber-50/50 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-amber-700">Ваше внимание</p>
-                <h3 className="mt-1 text-lg font-semibold text-stone-950">Требует внимания</h3>
+      <div className="mt-4 grid gap-2">
+        {links.map((link) => (
+          <article key={link.id} className="flex flex-col gap-3 rounded-md border border-stone-200 bg-stone-50/60 px-3 py-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-semibold text-stone-900">{link.label || "Клиентская ссылка"}</p>
+                <StatusBadge tone={link.status === "active" ? "green" : "neutral"}>{link.status === "active" ? "Активна" : "Отключена"}</StatusBadge>
+                <StatusBadge>{link.tokenPrefix}...</StatusBadge>
               </div>
-              <StatusBadge tone={attentionMaterials.length > 0 ? "amber" : "green"}>{attentionMaterials.length}</StatusBadge>
+              <p className="mt-2 text-xs leading-5 text-stone-500">
+                Создана: {link.createdAt.toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" })}
+                {" · "}
+                Последнее открытие: {link.lastOpenedAt ? link.lastOpenedAt.toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" }) : "ещё не открывали"}
+              </p>
             </div>
-            <div className="mt-3 grid gap-2 lg:grid-cols-2">
-              {attentionMaterials.map(({ item, status }) => (
-                <div key={item.id} className="rounded-md border border-amber-200 bg-white px-3 py-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <StatusBadge tone="teal">{item.platformName}</StatusBadge>
-                    <StatusBadge tone={clientPortalStatusTone(status)}>{formatClientPortalStatus(status)}</StatusBadge>
-                  </div>
-                  <p className="mt-2 text-sm font-semibold leading-6 text-stone-900">{item.topic}</p>
-                </div>
-              ))}
-              {attentionMaterials.length === 0 ? <p className="text-sm leading-6 text-stone-500">Сейчас нет материалов, требующих вашего внимания.</p> : null}
-            </div>
-          </section>
-
-          <div className="mt-7">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Месячный план</p>
-              <h3 className="mt-1 text-xl font-semibold text-stone-950">Календарь публикаций</h3>
-            </div>
-            <div className="mt-4 grid gap-5">
-              {groupedMaterials.map((group) => (
-                <section key={group.label}>
-                  <div className="flex items-center justify-between gap-3 border-b border-stone-200 pb-2">
-                    <h4 className="font-semibold text-stone-900">{group.label}</h4>
-                    <StatusBadge>{group.items.length} материалов</StatusBadge>
-                  </div>
-                  <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                    {group.items.map(({ item, publication, status, visual }) => (
-                      <article key={item.id} className="overflow-hidden rounded-lg border border-stone-200 bg-white">
-                        {visual ? (
-                          <img
-                            src={`data:${visual.mimeType};base64,${visual.imageBase64}`}
-                            alt={item.topic}
-                            className="aspect-[16/8] max-h-52 w-full bg-stone-100 object-contain"
-                          />
-                        ) : (
-                          <div className="flex h-28 items-center justify-center border-b border-dashed border-stone-200 bg-stone-50 px-4 text-center text-xs font-semibold text-stone-400">
-                            Визуал ещё готовится.
-                          </div>
-                        )}
-                        <div className="p-4">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <StatusBadge tone="teal">{item.platformName}</StatusBadge>
-                            <StatusBadge>{item.format}</StatusBadge>
-                            <StatusBadge tone={clientPortalStatusTone(status)}>{formatClientPortalStatus(status)}</StatusBadge>
-                          </div>
-                          <p className="mt-3 text-xs font-bold uppercase tracking-[0.08em] text-stone-400">
-                            {publication?.scheduledDate || item.week || item.plannedDate}
-                            {publication?.scheduledTime ? `, ${publication.scheduledTime}` : ""}
-                          </p>
-                          <h5 className="mt-2 font-semibold leading-6 text-stone-950">{item.topic}</h5>
-                          <p className="mt-2 line-clamp-3 text-sm leading-6 text-stone-500">
-                            {item.contentDraft?.draftBody || "Текст публикации ещё готовится."}
-                          </p>
-                          <details className="mt-3 rounded-md border border-stone-200 bg-stone-50/70">
-                            <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-teal-800">Открыть материал</summary>
-                            <div className="border-t border-stone-200 p-3">
-                              <p className="text-xs font-bold text-stone-500">Текст публикации</p>
-                              <p className="mt-2 text-sm font-semibold leading-6 text-stone-900">{item.contentDraft?.draftTitle || item.topic}</p>
-                              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-stone-600">
-                                {item.contentDraft?.draftBody || "Текст публикации ещё готовится."}
-                              </p>
-                              {publication?.notes ? (
-                                <p className="mt-3 rounded-md border border-stone-200 bg-white px-3 py-2 text-xs leading-5 text-stone-500">
-                                  {publication.notes}
-                                </p>
-                              ) : null}
-                              <div className="mt-4 border-t border-stone-200 pt-4">
-                                <p className="text-sm font-semibold text-stone-950">Решение по материалу</p>
-                                {!item.contentDraft ? (
-                                  <p className="mt-2 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs leading-5 text-stone-500">
-                                    Материал ещё готовится. Согласование появится после подготовки текста и визуала.
-                                  </p>
-                                ) : status === "approved" ? (
-                                  <p className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold leading-5 text-emerald-800">
-                                    Материал согласован.
-                                  </p>
-                                ) : status === "changes_requested" ? (
-                                  <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-900">
-                                    Правки отправлены команде.
-                                  </p>
-                                ) : status === "awaiting_approval" || status === "ready_for_review" ? (
-                                  <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                                    <form action={approveDraft} className="rounded-md border border-emerald-200 bg-emerald-50/60 p-3">
-                                      <input type="hidden" name="contentDraftId" value={item.contentDraft.id} />
-                                      <input type="hidden" name="actorType" value="client" />
-                                      <input type="hidden" name="returnView" value="client_portal" />
-                                      <label className="grid gap-1 text-xs font-bold text-stone-600">
-                                        Комментарий
-                                        <textarea name="comment" rows={3} className={inputClass} placeholder="Необязательно" />
-                                      </label>
-                                      <PendingSubmitButton pendingLabel="Согласовываем..." className={`${primaryButtonClass} mt-3 w-full`}>
-                                        Согласовать
-                                      </PendingSubmitButton>
-                                    </form>
-                                    <form action={requestDraftChanges} className="rounded-md border border-amber-200 bg-amber-50/60 p-3">
-                                      <input type="hidden" name="contentDraftId" value={item.contentDraft.id} />
-                                      <input type="hidden" name="actorType" value="client" />
-                                      <input type="hidden" name="returnView" value="client_portal" />
-                                      <label className="grid gap-1 text-xs font-bold text-stone-600">
-                                        Что нужно изменить
-                                        <textarea name="comment" rows={3} className={inputClass} placeholder="Опишите правки, если они нужны" />
-                                      </label>
-                                      <PendingSubmitButton pendingLabel="Отправляем правки..." className={`${secondaryButtonClass} mt-3 w-full`}>
-                                        Запросить правки
-                                      </PendingSubmitButton>
-                                    </form>
-                                  </div>
-                                ) : (
-                                  <p className="mt-2 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs leading-5 text-stone-500">
-                                    Материал ещё готовится. Согласование появится после подготовки текста и визуала.
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          </details>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                </section>
-              ))}
-              {groupedMaterials.length === 0 ? <EmptyState>Публикационные материалы для этого месяца ещё готовятся.</EmptyState> : null}
-            </div>
-          </div>
-        </div>
+            {link.status === "active" ? (
+              <form action={revokeClientPortalLink}>
+                <input type="hidden" name="portalLinkId" value={link.id} />
+                <PendingSubmitButton pendingLabel="Отключаем..." className={secondaryButtonClass}>Отключить ссылку</PendingSubmitButton>
+              </form>
+            ) : null}
+          </article>
+        ))}
+        {links.length === 0 ? <EmptyState>Для этого месячного плана ещё нет клиентских ссылок.</EmptyState> : null}
       </div>
     </section>
   );
@@ -2880,6 +2686,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   },
                 },
                 managerTasks: true,
+                clientPortalLinks: {
+                  orderBy: { createdAt: "desc" },
+                },
                 generationJobs: {
                   orderBy: { createdAt: "desc" },
                   take: 30,
@@ -2944,6 +2753,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   },
                 },
                 managerTasks: true,
+                clientPortalLinks: {
+                  orderBy: { createdAt: "desc" },
+                },
                 generationJobs: {
                   orderBy: { createdAt: "desc" },
                   take: 30,
@@ -3374,12 +3186,21 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
             ) : null}
 
             {activeView === "client_portal" ? (
-              <ClientPortalPreview
-                clientName={latestBlueprint?.client.name}
-                month={selectedMonthlyPlan?.month}
-                items={selectedMonthlyPlan?.plannedContentItems ?? []}
-                publications={selectedMonthlyPlan?.scheduledPublications ?? []}
-              />
+              <>
+                <ClientPortalLinksPanel
+                  blueprintId={latestBlueprint?.id}
+                  monthlyPlanId={selectedMonthlyPlan?.id}
+                  links={selectedMonthlyPlan?.clientPortalLinks ?? []}
+                  newPortalLink={params.portalLink}
+                />
+                <ClientPortalView
+                  clientName={latestBlueprint?.client.name}
+                  month={selectedMonthlyPlan?.month}
+                  items={selectedMonthlyPlan?.plannedContentItems ?? []}
+                  publications={selectedMonthlyPlan?.scheduledPublications ?? []}
+                  showPreviewNotice
+                />
+              </>
             ) : null}
 
             {activeView === "clients" ? (

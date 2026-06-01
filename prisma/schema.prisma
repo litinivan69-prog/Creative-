@@ -22,6 +22,7 @@ model Client {
   creativeAssets CreativeAsset[]
   generatedCreativeVariants GeneratedCreativeVariant[]
   generationJobs GenerationJob[]
+  clientPortalLinks ClientPortalLink[]
 }
 
 model ClientBrief {
@@ -69,6 +70,7 @@ model ClientPresenceBlueprint {
   creativeAssets                 CreativeAsset[]
   generatedCreativeVariants      GeneratedCreativeVariant[]
   generationJobs                 GenerationJob[]
+  clientPortalLinks               ClientPortalLink[]
 
   @@index([clientId])
 }
@@ -98,6 +100,7 @@ model MonthlyOperatingPlan {
   creativeAssets      CreativeAsset[]
   generatedCreativeVariants GeneratedCreativeVariant[]
   generationJobs            GenerationJob[]
+  clientPortalLinks          ClientPortalLink[]
 
   @@index([clientId])
   @@index([blueprintId])
@@ -350,6 +353,29 @@ model GenerationJob {
   @@index([creativeAssetId])
   @@index([status])
   @@index([jobType])
+  @@index([createdAt])
+}
+
+model ClientPortalLink {
+  id            String                  @id @default(cuid())
+  clientId      String
+  blueprintId   String
+  monthlyPlanId String
+  tokenHash     String                  @unique
+  tokenPrefix   String
+  label         String?
+  status        String                  @default("active")
+  expiresAt     DateTime?
+  lastOpenedAt  DateTime?
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+  client        Client                  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  blueprint     ClientPresenceBlueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+  monthlyPlan   MonthlyOperatingPlan    @relation(fields: [monthlyPlanId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([monthlyPlanId])
+  @@index([status])
   @@index([createdAt])
 }
 

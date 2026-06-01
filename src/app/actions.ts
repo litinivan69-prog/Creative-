@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Prisma } from "@prisma/client";
 import {
@@ -25,6 +26,11 @@ import {
   markGenerationJobFailedSafely,
   markGenerationJobRunning,
 } from "@/lib/generation-jobs";
+import {
+  generatePortalToken,
+  hashPortalToken,
+  tokenPrefix,
+} from "@/lib/client-portal-links";
 
 function formText(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -39,6 +45,7 @@ function workspaceLocation(
     planId?: string;
     error?: string;
     notice?: string;
+    portalLink?: string;
   } = {},
 ) {
   const searchParams = new URLSearchParams({ view });
@@ -47,8 +54,33 @@ function workspaceLocation(
   if (options.planId) searchParams.set("plan", options.planId);
   if (options.error) searchParams.set("error", options.error);
   if (options.notice) searchParams.set("notice", options.notice);
+  if (options.portalLink) searchParams.set("portalLink", options.portalLink);
 
   return `/?${searchParams.toString()}`;
+}
+
+function portalLocation(token: string, options: { error?: string; notice?: string } = {}) {
+  const searchParams = new URLSearchParams();
+
+  if (options.error) searchParams.set("error", options.error);
+  if (options.notice) searchParams.set("notice", options.notice);
+
+  const query = searchParams.toString();
+
+  return `/portal/${encodeURIComponent(token)}${query ? `?${query}` : ""}`;
+}
+
+function portalErrorRedirect(token: string, message: string): never {
+  redirect(portalLocation(token || "invalid", { error: message }));
+}
+
+async function absolutePortalUrl(token: string) {
+  const requestHeaders = await headers();
+  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
+  const protocol = requestHeaders.get("x-forwarded-proto") ?? (host?.includes("localhost") || host?.startsWith("127.0.0.1") ? "http" : "https");
+  const path = portalLocation(token);
+
+  return host ? `${protocol}://${host}${path}` : path;
 }
 
 function errorRedirect(message: string, view: WorkspaceView = "overview"): never {
@@ -251,6 +283,148 @@ async function updateDraftWorkflow(
 
   revalidatePath("/");
   redirect(workspaceLocation(returnViewFromForm(formData, "approvals"), { blueprintId: draft.blueprintId, planId: draft.monthlyPlanId, notice: update.notice }));
+}
+
+async function updateDraftWorkflowFromPortal(
+  formData: FormData,
+  update: {
+    status: DraftWorkflowStatus;
+    action: DraftReviewAction;
+    notice: string;
+  },
+) {
+  const token = formText(formData, "token");
+  const contentDraftId = formText(formData, "contentDraftId");
+  const comment = formText(formData, "comment");
+
+  if (!token || !contentDraftId) {
+    portalErrorRedirect(token, "Не удалось определить материал для согласования.");
+  }
+
+  const portalLink = await prisma.clientPortalLink.findUnique({
+    where: { tokenHash: hashPortalToken(token) },
+    select: {
+      monthlyPlanId: true,
+      status: true,
+      expiresAt: true,
+    },
+  });
+
+  if (!portalLink || portalLink.status !== "active") {
+    portalErrorRedirect(token, "Ссылка недействительна или была отключена.");
+  }
+
+  if (portalLink.expiresAt && portalLink.expiresAt < new Date()) {
+    portalErrorRedirect(token, "Срок действия ссылки истёк.");
+  }
+
+  const draft = await prisma.contentDraft.findUnique({
+    where: { id: contentDraftId },
+    select: {
+      id: true,
+      monthlyPlanId: true,
+    },
+  });
+
+  if (!draft || draft.monthlyPlanId !== portalLink.monthlyPlanId) {
+    portalErrorRedirect(token, "Материал не найден в доступном клиентском календаре.");
+  }
+
+  await prisma.$transaction([
+    prisma.contentDraft.update({
+      where: { id: draft.id },
+      data: { status: update.status },
+    }),
+    prisma.contentDraftReviewEvent.create({
+      data: {
+        contentDraftId: draft.id,
+        actorType: "client",
+        action: update.action,
+        comment: comment || null,
+      },
+    }),
+  ]);
+
+  revalidatePath("/");
+  revalidatePath(portalLocation(token));
+  redirect(portalLocation(token, { notice: update.notice }));
+}
+
+export async function createClientPortalLink(formData: FormData) {
+  const monthlyPlanId = formText(formData, "monthlyPlanId");
+  const blueprintId = formText(formData, "blueprintId");
+  const label = formText(formData, "label");
+
+  if (!monthlyPlanId || !blueprintId) {
+    errorRedirect("Выберите месячный план для создания клиентской ссылки.", "client_portal");
+  }
+
+  const monthlyPlan = await prisma.monthlyOperatingPlan.findUnique({
+    where: { id: monthlyPlanId },
+    select: {
+      id: true,
+      clientId: true,
+      blueprintId: true,
+    },
+  });
+
+  if (!monthlyPlan || monthlyPlan.blueprintId !== blueprintId) {
+    errorRedirect("Месячный план для клиентской ссылки не найден.", "client_portal");
+  }
+
+  const token = generatePortalToken();
+
+  await prisma.clientPortalLink.create({
+    data: {
+      clientId: monthlyPlan.clientId,
+      blueprintId: monthlyPlan.blueprintId,
+      monthlyPlanId: monthlyPlan.id,
+      tokenHash: hashPortalToken(token),
+      tokenPrefix: tokenPrefix(token),
+      label: label || null,
+    },
+  });
+
+  revalidatePath("/");
+  redirect(workspaceLocation("client_portal", {
+    blueprintId: monthlyPlan.blueprintId,
+    planId: monthlyPlan.id,
+    notice: "Клиентская ссылка создана.",
+    portalLink: await absolutePortalUrl(token),
+  }));
+}
+
+export async function revokeClientPortalLink(formData: FormData) {
+  const portalLinkId = formText(formData, "portalLinkId");
+
+  if (!portalLinkId) {
+    errorRedirect("Клиентская ссылка не выбрана.", "client_portal");
+  }
+
+  const portalLink = await prisma.clientPortalLink.findUnique({
+    where: { id: portalLinkId },
+    select: {
+      id: true,
+      blueprintId: true,
+      monthlyPlanId: true,
+    },
+  });
+
+  if (!portalLink) {
+    errorRedirect("Клиентская ссылка не найдена.", "client_portal");
+  }
+
+  await prisma.clientPortalLink.update({
+    where: { id: portalLink.id },
+    data: { status: "revoked" },
+  });
+
+  revalidatePath("/");
+  redirect(workspaceLocation("client_portal", {
+    blueprintId: portalLink.blueprintId,
+    planId: portalLink.monthlyPlanId,
+    notice: "Клиентская ссылка отключена.",
+  }));
 }
 
 export async function createClient(formData: FormData) {
@@ -1020,6 +1194,22 @@ export async function approveDraft(formData: FormData) {
     status: "approved",
     action: "approved",
     notice: "Материал согласован.",
+  });
+}
+
+export async function approveDraftFromPortal(formData: FormData) {
+  await updateDraftWorkflowFromPortal(formData, {
+    status: "approved",
+    action: "approved",
+    notice: "Материал согласован.",
+  });
+}
+
+export async function requestDraftChangesFromPortal(formData: FormData) {
+  await updateDraftWorkflowFromPortal(formData, {
+    status: "client_changes_requested",
+    action: "changes_requested",
+    notice: "Правки по материалу отправлены.",
   });
 }
 
