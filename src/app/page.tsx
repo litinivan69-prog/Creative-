@@ -39,6 +39,11 @@ import {
 import { ClientPortalView } from "@/app/client-portal-view";
 import { PendingSubmitButton } from "@/app/pending-submit-button";
 import { getAutopilotTextBatchLimit } from "@/lib/autopilot";
+import {
+  formatGeneratedVisualFileSize,
+  formatGeneratedVisualStorage,
+  getGeneratedVariantImageSrc,
+} from "@/lib/generated-visuals";
 import { getTextModelSettings } from "@/lib/openai";
 import { prisma } from "@/lib/prisma";
 
@@ -520,7 +525,11 @@ type GeneratedCreativeVariantPreview = {
   variantTitle: string;
   prompt: string;
   revisedPrompt: string | null;
-  imageBase64: string;
+  imageBase64: string | null;
+  imageUrl: string | null;
+  storageKey: string | null;
+  storageProvider: string;
+  fileSize: number | null;
   mimeType: string;
   status: string;
   source: string;
@@ -1282,6 +1291,26 @@ function CreativeAssetVisualStatus({ variants }: { variants: GeneratedCreativeVa
   return <StatusBadge tone="neutral">Визуал не создан</StatusBadge>;
 }
 
+function GeneratedVisualImage({
+  variant,
+  alt,
+  className,
+}: {
+  variant: GeneratedCreativeVariantPreview;
+  alt: string;
+  className: string;
+}) {
+  const imageSrc = getGeneratedVariantImageSrc(variant);
+
+  return imageSrc ? (
+    <img src={imageSrc} alt={alt} className={className} />
+  ) : (
+    <div className={`flex items-center justify-center bg-stone-100 px-4 text-center text-xs font-semibold text-stone-400 ${className}`}>
+      Изображение недоступно.
+    </div>
+  );
+}
+
 function CreativeAssetLayer({
   publications,
   assets,
@@ -1500,8 +1529,8 @@ function CreativeAssetLayer({
                     <div className="mt-3 grid gap-3 md:grid-cols-2">
                       {asset.generatedVariants.map((variant) => (
                         <article key={variant.id} className="overflow-hidden rounded-lg border border-stone-200 bg-stone-50/60">
-                          <img
-                            src={`data:${variant.mimeType};base64,${variant.imageBase64}`}
+                          <GeneratedVisualImage
+                            variant={variant}
                             alt={variant.variantTitle}
                             className="aspect-square max-h-80 w-full bg-stone-100 object-contain"
                           />
@@ -1509,6 +1538,8 @@ function CreativeAssetLayer({
                             <div className="flex flex-wrap gap-1.5">
                               <StatusBadge tone={creativeVariantTone(variant.status)}>{formatStatus(variant.status)}</StatusBadge>
                               <StatusBadge tone={creativeVariantQualityTone(variant.qualityStatus)}>{formatStatus(variant.qualityStatus)}</StatusBadge>
+                              <StatusBadge>{formatGeneratedVisualStorage(variant.storageProvider)}</StatusBadge>
+                              {formatGeneratedVisualFileSize(variant.fileSize) ? <StatusBadge>{formatGeneratedVisualFileSize(variant.fileSize)}</StatusBadge> : null}
                             </div>
                             <p className="mt-3 text-sm font-semibold text-stone-900">{variant.variantTitle}</p>
                             {variant.notes ? <p className="mt-2 text-xs leading-5 text-stone-500">{variant.notes}</p> : null}
@@ -2147,11 +2178,13 @@ function DraftsView({
                             <div className="mt-3 grid gap-3 lg:grid-cols-2">
                               {asset.generatedVariants.map((variant) => (
                                 <article key={variant.id} className="overflow-hidden rounded-lg border border-stone-200 bg-white">
-                                  <img src={`data:${variant.mimeType};base64,${variant.imageBase64}`} alt={variant.variantTitle} className="aspect-square max-h-72 w-full bg-stone-100 object-contain" />
+                                  <GeneratedVisualImage variant={variant} alt={variant.variantTitle} className="aspect-square max-h-72 w-full bg-stone-100 object-contain" />
                                   <div className="p-3">
                                     <div className="flex flex-wrap gap-1.5">
                                       <StatusBadge tone={creativeVariantTone(variant.status)}>{formatStatus(variant.status)}</StatusBadge>
                                       <StatusBadge tone={creativeVariantQualityTone(variant.qualityStatus)}>{formatStatus(variant.qualityStatus)}</StatusBadge>
+                                      <StatusBadge>{formatGeneratedVisualStorage(variant.storageProvider)}</StatusBadge>
+                                      {formatGeneratedVisualFileSize(variant.fileSize) ? <StatusBadge>{formatGeneratedVisualFileSize(variant.fileSize)}</StatusBadge> : null}
                                     </div>
                                     <p className="mt-2 text-sm font-semibold text-stone-900">{variant.variantTitle}</p>
                                     <div className="mt-3 flex flex-wrap gap-2">
@@ -3839,6 +3872,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                     <h3 className="mt-2 font-semibold text-stone-950">{process.env.VISUAL_PROVIDER || "openai"}</h3>
                     <p className="mt-2 text-sm leading-6 text-stone-500">
                       {process.env.OPENAI_IMAGE_MODEL || "gpt-image-2"} &middot; {process.env.OPENAI_IMAGE_QUALITY || "high"} &middot; {process.env.VISUAL_TEXT_MODE || "image_text"}
+                    </p>
+                  </article>
+                  <article className={`${panelClass} p-4`}>
+                    <p className="text-xs font-bold uppercase tracking-[0.1em] text-stone-400">Хранилище визуалов</p>
+                    <h3 className="mt-2 font-semibold text-stone-950">{process.env.BLOB_READ_WRITE_TOKEN ? "Vercel Blob подключён" : "Vercel Blob не подключён"}</h3>
+                    <p className="mt-2 text-sm leading-6 text-stone-500">
+                      {process.env.BLOB_READ_WRITE_TOKEN
+                        ? "Новые визуалы сохраняются во внешнем хранилище."
+                        : "Новые визуалы временно сохраняются в базе. Для продакшена подключите Vercel Blob."}
                     </p>
                   </article>
                   <article className={`${panelClass} p-4`}>

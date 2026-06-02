@@ -31,6 +31,7 @@ import {
   hashPortalToken,
   tokenPrefix,
 } from "@/lib/client-portal-links";
+import { storeGeneratedVisual } from "@/lib/visual-storage";
 
 function formText(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -1814,6 +1815,13 @@ export async function generateCreativeVisualVariantForAsset(formData: FormData) 
         approvalRequired: asset.contentDraft.approvalRequired,
       },
     });
+    const storedVisual = await storeGeneratedVisual({
+      imageBase64: variant.imageBase64,
+      mimeType: variant.mimeType,
+      clientId: asset.clientId,
+      monthlyPlanId: asset.monthlyPlanId,
+      creativeAssetId: asset.id,
+    });
 
     const createdVariant = await prisma.generatedCreativeVariant.create({
       data: {
@@ -1827,7 +1835,11 @@ export async function generateCreativeVisualVariantForAsset(formData: FormData) 
         variantTitle: `Вариант визуала: ${asset.title}`,
         prompt: variant.prompt,
         revisedPrompt: variant.revisedPrompt,
-        imageBase64: variant.imageBase64,
+        imageBase64: storedVisual.storageProvider === "database_base64" ? storedVisual.imageBase64 : null,
+        imageUrl: storedVisual.storageProvider === "vercel_blob" ? storedVisual.imageUrl : null,
+        storageKey: storedVisual.storageProvider === "vercel_blob" ? storedVisual.storageKey : null,
+        storageProvider: storedVisual.storageProvider,
+        fileSize: storedVisual.fileSize,
         mimeType: variant.mimeType,
         status: "generated",
         source: variant.provider,
@@ -1842,9 +1854,15 @@ export async function generateCreativeVisualVariantForAsset(formData: FormData) 
       },
     });
 
-    await markGenerationJobCompleted(generationJob.id, "Визуал сгенерирован.", {
-      generatedCreativeVariantId: createdVariant.id,
-    });
+    await markGenerationJobCompleted(
+      generationJob.id,
+      storedVisual.storageProvider === "vercel_blob"
+        ? "Визуал сгенерирован и сохранён в хранилище."
+        : "Визуал сгенерирован и временно сохранён в базе.",
+      {
+        generatedCreativeVariantId: createdVariant.id,
+      },
+    );
   } catch {
     const message = "Не удалось сгенерировать визуал. Проверьте настройки визуального движка и попробуйте ещё раз.";
     await markGenerationJobFailedSafely(generationJob.id, message);

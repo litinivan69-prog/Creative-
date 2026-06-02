@@ -290,7 +290,11 @@ model GeneratedCreativeVariant {
   variantTitle           String
   prompt                 String
   revisedPrompt          String?
-  imageBase64            String
+  imageBase64            String?
+  imageUrl               String?
+  storageKey             String?
+  storageProvider        String                  @default("database_base64")
+  fileSize               Int?
   mimeType               String                  @default("image/png")
   status                 String
   source                 String                  @default("openai")
@@ -317,6 +321,7 @@ model GeneratedCreativeVariant {
   @@index([monthlyPlanId])
   @@index([creativeAssetId])
   @@index([status])
+  @@index([storageProvider])
 }
 
 model GenerationJob {

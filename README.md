@@ -304,6 +304,14 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Raw portal tokens are not stored in the database.
 - Full user authentication, video, and voice feedback are still not included.
 
+## Sprint Product-4A Object Storage for Generated Visuals
+
+- Generated visuals now support object storage.
+- Vercel Blob is used when `BLOB_READ_WRITE_TOKEN` is configured.
+- Existing base64 visuals remain supported.
+- `imageBase64` is now a fallback instead of the desired production storage path.
+- New visual records store `imageUrl`, `storageKey`, `storageProvider`, and `fileSize` when possible.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.
@@ -321,6 +329,7 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - `TEXT_MODEL_DEFAULT`, `TEXT_MODEL_PREMIUM`, `TEXT_MODEL_FAST`, `TEXT_MODEL_STRATEGY`, `TEXT_MODEL_MONTHLY_PLAN`, `TEXT_MODEL_CONTENT`, and `TEXT_MODEL_CREATIVE_BRIEF` can be set in Vercel environment variables to tune the text intelligence layer.
 - `AUTOPILOT_TEXT_BATCH_LIMIT` controls how many missing publication texts Prepare Month Autopilot creates per run; the default is `5`.
 - `VISUAL_PROVIDER`, `OPENAI_IMAGE_MODEL`, `OPENAI_IMAGE_QUALITY`, `OPENAI_IMAGE_SIZE`, and `VISUAL_TEXT_MODE` can be set in Vercel environment variables for visual generation.
+- `BLOB_READ_WRITE_TOKEN` is required for Vercel Blob uploads. Without it, generated visuals temporarily fall back to database base64 storage.
 - The premium defaults are `openai`, `gpt-image-2`, `high`, `auto`, and `image_text`.
 
 ## Data Model

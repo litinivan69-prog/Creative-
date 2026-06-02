@@ -5,6 +5,7 @@ import {
   requestDraftChangesFromPortal,
 } from "@/app/actions";
 import { PendingSubmitButton } from "@/app/pending-submit-button";
+import { getGeneratedVariantImageSrc } from "@/lib/generated-visuals";
 
 type ClientPortalStatus = "in_progress" | "ready_for_review" | "awaiting_approval" | "approved" | "changes_requested";
 
@@ -32,7 +33,8 @@ export type ClientPortalPublication = {
   creativeAssets: Array<{
     generatedVariants: Array<{
       status: string;
-      imageBase64: string;
+      imageBase64: string | null;
+      imageUrl: string | null;
       mimeType: string;
       qualityStatus: string;
     }>;
@@ -287,8 +289,8 @@ export function ClientPortalView({
                   <div className="mt-3 grid gap-3 lg:grid-cols-2">
                     {group.items.map(({ item, publication, status, visual }) => (
                       <article key={item.id} className="overflow-hidden rounded-lg border border-stone-200 bg-white">
-                        {visual ? (
-                          <img src={`data:${visual.mimeType};base64,${visual.imageBase64}`} alt={item.topic} className="aspect-[16/8] max-h-52 w-full bg-stone-100 object-contain" />
+                        {visual && getGeneratedVariantImageSrc(visual) ? (
+                          <img src={getGeneratedVariantImageSrc(visual) ?? ""} alt={item.topic} className="aspect-[16/8] max-h-52 w-full bg-stone-100 object-contain" />
                         ) : (
                           <div className="flex h-28 items-center justify-center border-b border-dashed border-stone-200 bg-stone-50 px-4 text-center text-xs font-semibold text-stone-400">
                             Визуал ещё готовится.

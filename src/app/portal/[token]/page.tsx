@@ -83,6 +83,7 @@ export default async function ClientPortalPage({
                     select: {
                       status: true,
                       imageBase64: true,
+                      imageUrl: true,
                       mimeType: true,
                       qualityStatus: true,
                     },
