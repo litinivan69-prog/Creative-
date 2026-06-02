@@ -23,6 +23,8 @@ model Client {
   generatedCreativeVariants GeneratedCreativeVariant[]
   generationJobs GenerationJob[]
   clientPortalLinks ClientPortalLink[]
+  brandProfile ClientBrandProfile?
+  brandAssets ClientBrandAsset[]
 }
 
 model ClientBrief {
@@ -34,6 +36,48 @@ model ClientBrief {
   blueprint ClientPresenceBlueprint?
 
   @@index([clientId])
+}
+
+model ClientBrandProfile {
+  id                   String   @id @default(cuid())
+  clientId             String   @unique
+  toneOfVoice          String?
+  keyMessages          String?
+  targetAudienceNotes  String?
+  brandColors          String?
+  fonts                String?
+  visualStyle          String?
+  forbiddenTopics      String?
+  requiredDisclaimers  String?
+  legalNotes           String?
+  productServiceNotes  String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  client               Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+model ClientBrandAsset {
+  id              String   @id @default(cuid())
+  clientId        String
+  assetType       String
+  title           String
+  description     String?
+  fileUrl         String?
+  storageKey      String?
+  storageProvider String   @default("vercel_blob")
+  mimeType        String?
+  fileSize        Int?
+  textContent     String?
+  sourceUrl       String?
+  status          String   @default("active")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  client          Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([assetType])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model ClientPresenceBlueprint {

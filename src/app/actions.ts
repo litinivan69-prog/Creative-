@@ -32,18 +32,21 @@ import {
   tokenPrefix,
 } from "@/lib/client-portal-links";
 import { storeGeneratedVisual } from "@/lib/visual-storage";
+import { storeClientBrandAssetFile } from "@/lib/brand-asset-storage";
+import { getClientBrandContext } from "@/lib/brand-context";
 
 function formText(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
 }
 
-type WorkspaceView = "overview" | "clients" | "client_setup" | "approvals" | "calendar" | "drafts" | "assets" | "client_portal";
+type WorkspaceView = "overview" | "clients" | "client_setup" | "approvals" | "calendar" | "drafts" | "assets" | "brand_assets" | "client_portal";
 
 function workspaceLocation(
   view: WorkspaceView,
   options: {
     blueprintId?: string;
     planId?: string;
+    clientId?: string;
     error?: string;
     notice?: string;
     portalLink?: string;
@@ -53,6 +56,7 @@ function workspaceLocation(
 
   if (options.blueprintId) searchParams.set("blueprint", options.blueprintId);
   if (options.planId) searchParams.set("plan", options.planId);
+  if (options.clientId) searchParams.set("client", options.clientId);
   if (options.error) searchParams.set("error", options.error);
   if (options.notice) searchParams.set("notice", options.notice);
   if (options.portalLink) searchParams.set("portalLink", options.portalLink);
@@ -147,6 +151,7 @@ type CreativeVariantStatus = (typeof creativeVariantStatuses)[number];
 
 type CreativeAssetGenerationContext = {
   client: {
+    id: string;
     name: string;
     industry: string | null;
   };
@@ -209,6 +214,7 @@ function returnViewFromForm(formData: FormData, fallback: WorkspaceView) {
 }
 
 async function generateCreativeAssetBriefFromContext(context: CreativeAssetGenerationContext) {
+  const brandContext = await getClientBrandContext(context.client.id);
   const generated = await generateCreativeAssetBrief({
     clientName: context.client.name,
     clientIndustry: context.client.industry,
@@ -240,6 +246,7 @@ async function generateCreativeAssetBriefFromContext(context: CreativeAssetGener
     platformName: context.platformName,
     format: context.format,
     topic: context.topic,
+    brandContext,
   });
 
   return CreativeAssetBriefSchema.parse(generated);
@@ -454,6 +461,67 @@ export async function createClient(formData: FormData) {
   revalidatePath("/");
 }
 
+export async function updateClientBrandProfile(formData: FormData) {
+  const clientId = formText(formData, "clientId");
+  if (!clientId) errorRedirect("Выберите клиента.", "brand_assets");
+
+  const fields = ["toneOfVoice", "keyMessages", "targetAudienceNotes", "brandColors", "fonts", "visualStyle", "forbiddenTopics", "requiredDisclaimers", "legalNotes", "productServiceNotes"] as const;
+  const data = Object.fromEntries(fields.map((field) => [field, formText(formData, field) || null]));
+
+  await prisma.clientBrandProfile.upsert({
+    where: { clientId },
+    create: { clientId, ...data },
+    update: data,
+  });
+
+  revalidatePath("/");
+  redirect(workspaceLocation("brand_assets", { clientId, notice: "Профиль бренда обновлён." }));
+}
+
+export async function createClientBrandAsset(formData: FormData) {
+  const clientId = formText(formData, "clientId");
+  const assetType = formText(formData, "assetType");
+  const title = formText(formData, "title");
+  const file = formData.get("file");
+
+  if (!clientId || !assetType || !title) errorRedirect("Укажите клиента, тип и название материала.", "brand_assets");
+
+  const uploaded = file instanceof File && file.size > 0
+    ? await storeClientBrandAssetFile({ file, clientId, assetType })
+    : null;
+
+  if (file instanceof File && file.size > 0 && !uploaded) {
+    errorRedirect("Для загрузки файла подключите Vercel Blob. Пока можно добавить ссылку или текстовое описание.", "brand_assets");
+  }
+
+  await prisma.clientBrandAsset.create({
+    data: {
+      clientId,
+      assetType,
+      title,
+      description: formText(formData, "description") || null,
+      sourceUrl: formText(formData, "sourceUrl") || null,
+      textContent: formText(formData, "textContent") || null,
+      ...uploaded,
+    },
+  });
+
+  revalidatePath("/");
+  redirect(workspaceLocation("brand_assets", { clientId, notice: "Материал бренда добавлен." }));
+}
+
+export async function archiveClientBrandAsset(formData: FormData) {
+  const brandAssetId = formText(formData, "brandAssetId");
+  if (!brandAssetId) errorRedirect("Материал бренда не выбран.", "brand_assets");
+
+  const asset = await prisma.clientBrandAsset.findUnique({ where: { id: brandAssetId }, select: { id: true, clientId: true } });
+  if (!asset) errorRedirect("Материал бренда не найден.", "brand_assets");
+
+  await prisma.clientBrandAsset.update({ where: { id: asset.id }, data: { status: "archived" } });
+  revalidatePath("/");
+  redirect(workspaceLocation("brand_assets", { clientId: asset.clientId, notice: "Материал бренда скрыт." }));
+}
+
 export async function addClientBrief(formData: FormData) {
   const clientId = formText(formData, "clientId");
   const rawBrief = formText(formData, "rawBrief");
@@ -530,6 +598,7 @@ export async function generateBlueprint(formData: FormData) {
       website: brief.client.website,
       industry: brief.client.industry,
       rawBrief: brief.rawBrief,
+      brandContext: await getClientBrandContext(brief.clientId),
     });
 
     const blueprint = validateBlueprintForPersistence(generated);
@@ -692,6 +761,7 @@ export async function generateMonthlyPlan(formData: FormData) {
       month,
       allowedPlatformNames: recommendedPlatforms.map((platform) => platform.platformName),
       blueprint: blueprintPayload,
+      brandContext: await getClientBrandContext(blueprint.clientId),
     });
 
     const plan = validateMonthlyPlanForBlueprint(generated, {
@@ -888,6 +958,7 @@ async function generateContentTextForPlannedItem(
       format: item.format,
       topic: item.topic,
       goal: item.goal,
+      brandContext: await getClientBrandContext(plan.clientId),
     });
 
     const draft = validateContentDraftForPersistence(generated, {
@@ -1792,6 +1863,7 @@ export async function generateCreativeVisualVariantForAsset(formData: FormData) 
     const variant = await generateCreativeVisualVariant({
       clientName: asset.client.name,
       clientIndustry: asset.client.industry,
+      brandContext: await getClientBrandContext(asset.clientId),
       creativeAsset: {
         assetType: asset.assetType,
         title: asset.title,

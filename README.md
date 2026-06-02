@@ -320,6 +320,15 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - The report includes attention items and a client-friendly summary.
 - External analytics, social integrations, PDF export, and public report sharing are still not included.
 
+## Sprint Product-6A Brand Asset Library MVP
+
+- Brand Asset Library MVP was added.
+- Clients can have a brand profile with tone, messages, colors, restrictions, visual style, and legal notes.
+- Managers can upload and store brand assets using Vercel Blob.
+- AI generation now receives compact brand context when available.
+- Visual generation prompts use brand context and explicitly avoid fake logos.
+- Google Drive sync, OCR, document parsing, and automated brandbook extraction are still not included.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.
@@ -345,6 +354,8 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 The Prisma schema includes:
 
 - `Client`
+- `ClientBrandProfile`
+- `ClientBrandAsset`
 - `ClientBrief`
 - `ClientPresenceBlueprint`
 - `PresenceModule`

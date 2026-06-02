@@ -119,6 +119,7 @@ export async function generateClientPresenceBlueprint(input: {
   website?: string | null;
   industry?: string | null;
   rawBrief: string;
+  brandContext?: string;
 }) {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error("OPENAI_API_KEY is not configured.");
@@ -145,6 +146,8 @@ export async function generateClientPresenceBlueprint(input: {
           `Industry: ${input.industry || "Not provided"}`,
           "Raw brief:",
           input.rawBrief,
+          "Brand context / Контекст бренда клиента:",
+          input.brandContext || "Not provided",
         ].join("\n"),
       },
     ],
@@ -165,6 +168,7 @@ export async function generateMonthlyOperatingPlan(input: {
   month: string;
   allowedPlatformNames: string[];
   blueprint: unknown;
+  brandContext?: string;
 }) {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error("OPENAI_API_KEY is not configured.");
@@ -193,6 +197,8 @@ export async function generateMonthlyOperatingPlan(input: {
           "Use only the exact allowed platform names above for every plannedContentItem.platformName.",
           "Client Presence Blueprint JSON:",
           JSON.stringify(input.blueprint, null, 2),
+          "Brand context / Контекст бренда клиента:",
+          input.brandContext || "Not provided",
         ].join("\n"),
       },
     ],
@@ -219,6 +225,7 @@ export async function generateContentDraft(input: {
   format: string;
   topic: string;
   goal: string;
+  brandContext?: string;
 }) {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error("OPENAI_API_KEY is not configured.");
@@ -251,6 +258,8 @@ export async function generateContentDraft(input: {
           `Goal: ${input.goal}`,
           "Planned content item JSON:",
           JSON.stringify(input.plannedContentItem, null, 2),
+          "Brand context / Контекст бренда клиента:",
+          input.brandContext || "Not provided",
         ].join("\n"),
       },
     ],
@@ -278,6 +287,7 @@ export async function generateCreativeAssetBrief(input: {
   platformName: string;
   format: string;
   topic: string;
+  brandContext?: string;
 }) {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error("OPENAI_API_KEY is not configured.");
@@ -314,6 +324,8 @@ export async function generateCreativeAssetBrief(input: {
           JSON.stringify(input.plannedContentItem, null, 2),
           "Content draft JSON:",
           JSON.stringify(input.contentDraft, null, 2),
+          "Brand context / Контекст бренда клиента:",
+          input.brandContext || "Not provided",
         ].join("\n"),
       },
     ],
@@ -354,6 +366,7 @@ type CreativeVisualVariantInput = {
     riskLevel: string;
     approvalRequired: boolean;
   };
+  brandContext?: string;
 };
 
 function textRenderingInstruction(input: CreativeVisualVariantInput, mode: VisualTextMode) {
@@ -394,10 +407,12 @@ function premiumVisualPrompt(input: CreativeVisualVariantInput, textMode: Visual
     input.creativeAsset.notes
       ? `Brand and safety notes: ${input.creativeAsset.notes}`
       : null,
+    input.brandContext ? `Brand context / Контекст бренда клиента:\n${input.brandContext}` : null,
     `Draft title: ${input.contentDraft.draftTitle}.`,
     `Draft context: ${input.contentDraft.draftBody}`,
     "Produce a realistic premium advertising photograph or high-end editorial visual appropriate to the asset type. Use an intentional focal point, clean composition, restrained color discipline, thoughtful lighting, and platform-native framing.",
     "Avoid cheap stock-photo aesthetics, generic AI poster composition, decorative clutter, fake clinic or company names, fake logos, fake text, fake certificates, fake reviews, unsupported medical claims, guarantees, before-and-after comparisons, and unrealistic treatment or business results.",
+    "Do not invent a logo. If logo is needed, leave clean space for logo placement unless real logo integration is available.",
     "When people appear, render natural anatomy, credible hands, expressive but realistic faces, and professional context. Do not depict misleading procedures or outcomes.",
     textRenderingInstruction(input, textMode),
     input.contentDraft.riskLevel !== "low" || input.contentDraft.approvalRequired

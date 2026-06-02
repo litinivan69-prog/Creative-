@@ -2,6 +2,8 @@ import {
   addClientBrief,
   approveDraft,
   approveCreativeVariant,
+  archiveClientBrandAsset,
+  createClientBrandAsset,
   createClientPortalLink,
   createCreativeAssetBrief,
   createClient,
@@ -31,6 +33,7 @@ import {
   submitDraftForReview,
   unschedulePublication,
   updateClientBrief,
+  updateClientBrandProfile,
   updateCreativeAssetBrief,
   updateCreativeAssetStatus,
   updatePublicationText,
@@ -67,6 +70,7 @@ const workspaceViews = [
   "calendar",
   "drafts",
   "assets",
+  "brand_assets",
   "client_portal",
   "reports",
   "settings",
@@ -102,6 +106,7 @@ const viewTitles: Record<WorkspaceView, string> = {
   calendar: "Календарь",
   drafts: "Материалы",
   assets: "Креативы",
+  brand_assets: "Бренд",
   client_portal: "Клиентский календарь",
   reports: "Отчёты",
   settings: "Настройки",
@@ -116,6 +121,7 @@ const navigationGroups = [
       { label: "Настройка клиента", view: "client_setup" as const, glyph: "Н" },
       { label: "Календарь", view: "calendar" as const, glyph: "К" },
       { label: "Клиентский вид", view: "client_portal" as const, glyph: "В" },
+      { label: "Бренд", view: "brand_assets" as const, glyph: "Б" },
     ],
   },
   {
@@ -1891,6 +1897,100 @@ function MonthlyClientReport({
   );
 }
 
+const brandAssetTypes = [
+  ["logo", "Логотип"], ["photo", "Фото"], ["brandbook", "Брендбук"], ["old_post", "Старый пост"],
+  ["presentation", "Презентация"], ["product_photo", "Фото продукта"], ["team_photo", "Фото команды"],
+  ["reference", "Референс"], ["document", "Документ"], ["other", "Другое"],
+] as const;
+
+function formatBrandAssetType(type: string) {
+  return brandAssetTypes.find(([value]) => value === type)?.[1] ?? type;
+}
+
+function BrandAssetsView({ client }: { client: {
+  id: string;
+  name: string;
+  brandProfile: {
+    toneOfVoice: string | null; keyMessages: string | null; targetAudienceNotes: string | null; brandColors: string | null;
+    fonts: string | null; visualStyle: string | null; forbiddenTopics: string | null; requiredDisclaimers: string | null;
+    legalNotes: string | null; productServiceNotes: string | null;
+  } | null;
+  brandAssets: Array<{ id: string; assetType: string; title: string; description: string | null; fileUrl: string | null; sourceUrl: string | null; textContent: string | null; fileSize: number | null; createdAt: Date }>;
+} | null }) {
+  if (!client) {
+    return (
+      <section>
+        <WorkspaceViewHeader eyebrow="Контекст клиента" title="Библиотека бренда" description="Материалы, стиль и ограничения клиента, которые AI использует при подготовке текстов, ТЗ и визуалов." />
+        <div className="mt-5"><EmptyState>Выберите клиента, чтобы заполнить библиотеку бренда.</EmptyState></div>
+      </section>
+    );
+  }
+
+  const profile = client.brandProfile;
+  const fields = [
+    ["toneOfVoice", "Тональность"], ["keyMessages", "Ключевые сообщения"], ["targetAudienceNotes", "Целевая аудитория"],
+    ["brandColors", "Цвета бренда"], ["fonts", "Шрифты"], ["visualStyle", "Визуальный стиль"],
+    ["productServiceNotes", "Услуги / продукты"], ["forbiddenTopics", "Запрещённые темы и формулировки"],
+    ["requiredDisclaimers", "Обязательные дисклеймеры"], ["legalNotes", "Юридические ограничения"],
+  ] as const;
+
+  return (
+    <section>
+      <WorkspaceViewHeader eyebrow="Контекст клиента" title="Библиотека бренда" description="Материалы, стиль и ограничения клиента, которые AI использует при подготовке текстов, ТЗ и визуалов." />
+      <p className="mt-3 text-sm font-semibold text-stone-700">{client.name}</p>
+      <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <article className={`${panelClass} p-5`}>
+          <h2 className="text-lg font-semibold text-stone-950">Профиль бренда</h2>
+          <form action={updateClientBrandProfile} className="mt-4 grid gap-3 md:grid-cols-2">
+            <input type="hidden" name="clientId" value={client.id} />
+            {fields.map(([name, label]) => (
+              <label key={name} className="grid gap-1 text-xs font-bold text-stone-600">
+                {label}
+                <textarea name={name} defaultValue={profile?.[name] ?? ""} rows={3} className={inputClass} />
+              </label>
+            ))}
+            <PendingSubmitButton pendingLabel="Сохраняем..." className={`${primaryButtonClass} md:col-span-2`}>Сохранить профиль бренда</PendingSubmitButton>
+          </form>
+        </article>
+        <article className={`${panelClass} p-5`}>
+          <h2 className="text-lg font-semibold text-stone-950">Добавить материал</h2>
+          <form action={createClientBrandAsset} className="mt-4 grid gap-3">
+            <input type="hidden" name="clientId" value={client.id} />
+            <select name="assetType" className={inputClass}>{brandAssetTypes.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+            <input name="title" required className={inputClass} placeholder="Название материала" />
+            <textarea name="description" rows={2} className={inputClass} placeholder="Описание и заметки" />
+            <input name="sourceUrl" type="url" className={inputClass} placeholder="Ссылка на источник, если есть" />
+            <textarea name="textContent" rows={3} className={inputClass} placeholder="Текст или выдержка вручную" />
+            <input name="file" type="file" className={inputClass} />
+            <PendingSubmitButton pendingLabel="Добавляем..." className={primaryButtonClass}>Добавить материал</PendingSubmitButton>
+          </form>
+        </article>
+      </div>
+      <article className={`${panelClass} mt-5 p-5`}>
+        <h2 className="text-lg font-semibold text-stone-950">Материалы бренда</h2>
+        <p className="mt-2 text-xs leading-5 text-stone-500">На этом этапе файлы сохраняются как материалы бренда. Автоматическое извлечение текста из документов и синхронизация с Google Drive появятся позже.</p>
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          {client.brandAssets.map((asset) => (
+            <article key={asset.id} className="rounded-md border border-stone-200 bg-stone-50/60 p-3">
+              <div className="flex flex-wrap items-center gap-2"><StatusBadge tone="teal">{formatBrandAssetType(asset.assetType)}</StatusBadge><p className="font-semibold text-stone-900">{asset.title}</p></div>
+              {asset.description ? <p className="mt-2 text-xs leading-5 text-stone-500">{asset.description}</p> : null}
+              {asset.textContent ? <p className="mt-2 line-clamp-3 text-xs leading-5 text-stone-600">{asset.textContent}</p> : null}
+              <div className="mt-3 flex flex-wrap gap-3 text-xs font-bold text-teal-800">
+                {asset.fileUrl ? <a href={asset.fileUrl} target="_blank" rel="noreferrer">Открыть файл</a> : null}
+                {asset.sourceUrl ? <a href={asset.sourceUrl} target="_blank" rel="noreferrer">Открыть источник</a> : null}
+                {asset.fileSize ? <span className="text-stone-400">{formatGeneratedVisualFileSize(asset.fileSize)}</span> : null}
+              </div>
+              <p className="mt-2 text-[11px] text-stone-400">{asset.createdAt.toLocaleDateString("ru-RU")}</p>
+              <form action={archiveClientBrandAsset} className="mt-3"><input type="hidden" name="brandAssetId" value={asset.id} /><PendingSubmitButton pendingLabel="Скрываем..." className={secondaryButtonClass}>Скрыть</PendingSubmitButton></form>
+            </article>
+          ))}
+          {client.brandAssets.length === 0 ? <EmptyState>Материалов бренда пока нет.</EmptyState> : null}
+        </div>
+      </article>
+    </section>
+  );
+}
+
 function WorkspaceSwitcher({
   activeView,
   links,
@@ -1904,6 +2004,7 @@ function WorkspaceSwitcher({
     { label: "Календарь", view: "calendar" as const },
     { label: "Материалы", view: "drafts" as const },
     { label: "Креативы", view: "assets" as const },
+    { label: "Бренд", view: "brand_assets" as const },
     { label: "Клиентский вид", view: "client_portal" as const },
     { label: "Отчёт", view: "reports" as const },
   ];
@@ -2173,6 +2274,7 @@ function DraftsView({
   assetsHref,
   clientPortalHref,
   reportsHref,
+  brandProfileReady,
 }: {
   items: MaterialPlannedItem[];
   publications: ScheduledPublicationPreview[];
@@ -2184,6 +2286,7 @@ function DraftsView({
   assetsHref: string;
   clientPortalHref: string;
   reportsHref: string;
+  brandProfileReady: boolean;
 }) {
   const totalMaterialsCount = items.length;
   const textsCreatedCount = items.filter((item) => item.contentDraft).length;
@@ -2208,6 +2311,9 @@ function DraftsView({
         <a href={clientPortalHref} className={secondaryButtonClass}>Открыть клиентский вид</a>
         <a href={reportsHref} className={secondaryButtonClass}>Открыть отчёт</a>
       </div>
+      <p className={`mt-3 rounded-md border px-3 py-2 text-xs leading-5 ${brandProfileReady ? "border-teal-200 bg-teal-50 text-teal-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
+        {brandProfileReady ? "AI использует контекст бренда клиента." : "Заполните библиотеку бренда, чтобы тексты и визуалы были точнее."}
+      </p>
       <article className={`${panelClass} mt-5 overflow-hidden border-teal-200`}>
         <div className="grid gap-5 bg-teal-50/60 p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           <div>
@@ -3068,6 +3174,19 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
           },
         })
       : null);
+  const brandClientId = params.client ?? latestBlueprint?.clientId ?? clients[0]?.id;
+  const selectedBrandClient = !isProductionBuild && brandClientId
+    ? await prisma.client.findUnique({
+        where: { id: brandClientId },
+        include: {
+          brandProfile: true,
+          brandAssets: {
+            where: { status: "active" },
+            orderBy: { createdAt: "desc" },
+          },
+        },
+      })
+    : null;
 
   const currentMonthlyPlan =
     latestBlueprint?.monthlyPlans.find((plan) => plan.month === currentMonth()) ?? null;
@@ -3114,6 +3233,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
       publication.creativeAssets.length === 0 ||
       publication.creativeAssets.some((asset) => asset.generatedVariants.length === 0),
     ).length ?? 0;
+  const brandProfileReady = Boolean(selectedBrandClient?.brandProfile);
+  const brandAssetsCount = selectedBrandClient?.brandAssets.length ?? 0;
   const workspaceContext = {
     blueprint: latestBlueprint?.id ?? params.blueprint,
     plan: selectedMonthlyPlan?.id ?? params.plan,
@@ -3307,6 +3428,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                     <p className="mt-1 text-xs leading-5 text-stone-500">{selectedMonthlyPlan ? "Сводка по текстам, визуалам и согласованиям готова." : "Появится после генерации месячного плана."}</p>
                     {selectedMonthlyPlan ? <a href={workspaceLinks.reports} className="mt-2 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">Открыть отчёт</a> : null}
                   </div>
+                  <div className="rounded-md border border-stone-200 bg-stone-50 p-3">
+                    <p className="text-xs font-bold text-stone-700">Библиотека бренда</p>
+                    <p className="mt-1 text-xs leading-5 text-stone-500">{brandProfileReady ? "Профиль бренда заполнен" : "Профиль бренда не заполнен"} &middot; Материалов бренда: {brandAssetsCount}</p>
+                    <a href={workspaceLinks.brand_assets} className="mt-2 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">Открыть библиотеку бренда</a>
+                  </div>
                 </div>
                 <div className="mt-4 rounded-md border border-teal-200 bg-teal-50 p-3">
                   <p className="text-xs font-bold text-teal-900">Подсказка AI</p>
@@ -3472,6 +3598,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 assetsHref={workspaceLinks.assets}
                 clientPortalHref={workspaceLinks.client_portal}
                 reportsHref={workspaceLinks.reports}
+                brandProfileReady={brandProfileReady}
               />
             ) : null}
 
@@ -3493,6 +3620,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 />
               </>
             ) : null}
+
+            {activeView === "brand_assets" ? <BrandAssetsView client={selectedBrandClient} /> : null}
 
             {activeView === "clients" ? (
               <section>
@@ -4134,8 +4263,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                     <h3 className="mt-2 font-semibold text-stone-950">{process.env.BLOB_READ_WRITE_TOKEN ? "Vercel Blob подключён" : "Vercel Blob не подключён"}</h3>
                     <p className="mt-2 text-sm leading-6 text-stone-500">
                       {process.env.BLOB_READ_WRITE_TOKEN
-                        ? "Новые визуалы сохраняются во внешнем хранилище."
-                        : "Новые визуалы временно сохраняются в базе. Для продакшена подключите Vercel Blob."}
+                        ? "Новые визуалы и файлы библиотеки бренда сохраняются во внешнем хранилище."
+                        : "Новые визуалы временно сохраняются в базе. Загрузка файлов библиотеки бренда недоступна до подключения Vercel Blob."}
                     </p>
                   </article>
                   <article className={`${panelClass} p-4`}>
