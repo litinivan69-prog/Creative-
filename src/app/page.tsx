@@ -2643,6 +2643,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
   const isProductionBuild = process.env.NEXT_PHASE === "phase-production-build";
   const textModelSettings = getTextModelSettings();
   const autopilotTextBatchLimit = getAutopilotTextBatchLimit();
+  const publicAppUrl = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, "");
 
   const [clients, selectedBlueprint] = await Promise.all([
     isProductionBuild
@@ -3845,6 +3846,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                     <h3 className="mt-2 font-semibold text-stone-950">До {autopilotTextBatchLimit} текстов за запуск</h3>
                     <p className="mt-2 text-sm leading-6 text-stone-500">
                       Лимит автоподготовки месяца задаётся переменной AUTOPILOT_TEXT_BATCH_LIMIT. Если переменная не указана, используется значение 5.
+                    </p>
+                  </article>
+                  <article className={`${panelClass} p-4`}>
+                    <p className="text-xs font-bold uppercase tracking-[0.1em] text-stone-400">Public app URL</p>
+                    <h3 className="mt-2 break-all font-semibold text-stone-950">{publicAppUrl || "Не задан"}</h3>
+                    <p className="mt-2 text-sm leading-6 text-stone-500">
+                      {publicAppUrl
+                        ? "Клиентские ссылки используют стабильный публичный адрес приложения."
+                        : "Не задан. Клиентские ссылки могут использовать текущий Vercel host."}
                     </p>
                   </article>
                   <article className={`${panelClass} p-4`}>

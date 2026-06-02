@@ -75,10 +75,16 @@ function portalErrorRedirect(token: string, message: string): never {
 }
 
 async function absolutePortalUrl(token: string) {
+  const publicAppUrl = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, "");
+  const path = portalLocation(token);
+
+  if (publicAppUrl) {
+    return `${publicAppUrl}${path}`;
+  }
+
   const requestHeaders = await headers();
   const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
   const protocol = requestHeaders.get("x-forwarded-proto") ?? (host?.includes("localhost") || host?.startsWith("127.0.0.1") ? "http" : "https");
-  const path = portalLocation(token);
 
   return host ? `${protocol}://${host}${path}` : path;
 }
