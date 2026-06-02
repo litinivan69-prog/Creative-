@@ -1653,6 +1653,244 @@ function suggestsVisualAsset(format: string) {
   );
 }
 
+function MonthlyClientReport({
+  clientName,
+  month,
+  items,
+  publications,
+  assets,
+  jobs,
+  draftsHref,
+}: {
+  clientName?: string;
+  month?: string;
+  items: MaterialPlannedItem[];
+  publications: ScheduledPublicationPreview[];
+  assets: CreativeAssetPreview[];
+  jobs: GenerationJobPreview[];
+  draftsHref: string;
+}) {
+  if (!month) {
+    return (
+      <section>
+        <WorkspaceViewHeader
+          eyebrow="Отчётность"
+          title="Отчёт по подготовке материалов"
+          description="Сводка по текстам, визуалам, согласованиям и календарю публикаций."
+        />
+        <div className="mt-5"><EmptyState>Выберите месячный план, чтобы собрать отчёт.</EmptyState></div>
+      </section>
+    );
+  }
+
+  const materials = items.map((item) => {
+    const draft = item.contentDraft;
+    const publication = publications.find((candidate) => candidate.plannedContentItemId === item.id);
+    const asset = publication?.creativeAssets[0];
+    const variants = asset?.generatedVariants ?? [];
+    const visualRequired = suggestsVisualAsset(item.format) || publication?.status === "needs_assets";
+    const visualPrepared = variants.length > 0;
+    const visualQualityReady = variants.some((variant) => variant.qualityStatus === "passed");
+    const approved = Boolean(draft && ["approved", "ready_to_schedule"].includes(draft.status));
+    const needsChanges = Boolean(draft && ["client_changes_requested", "rejected"].includes(draft.status));
+    const scheduled = Boolean(publication);
+    const readyToPublish = approved && scheduled && (!visualRequired || visualPrepared) && (!visualRequired || visualQualityReady);
+    let nextAction = "Готово";
+
+    if (!draft) nextAction = "Подготовить текст";
+    else if (!approved) nextAction = "Проверить и согласовать";
+    else if (!publication) nextAction = "Запланировать";
+    else if (visualRequired && !asset) nextAction = "Сгенерировать ТЗ";
+    else if (visualRequired && !visualPrepared) nextAction = "Сгенерировать визуал";
+    else if (visualRequired && !visualQualityReady) nextAction = "Проверить визуал";
+
+    return {
+      item,
+      draft,
+      publication,
+      asset,
+      variants,
+      visualRequired,
+      visualPrepared,
+      visualQualityReady,
+      approved,
+      needsChanges,
+      scheduled,
+      readyToPublish,
+      nextAction,
+    };
+  });
+  const totalMaterials = materials.length;
+  const textsPrepared = materials.filter(({ draft }) => draft).length;
+  const visualsPrepared = materials.filter(({ visualPrepared }) => visualPrepared).length;
+  const approvedMaterials = materials.filter(({ approved }) => approved).length;
+  const changesNeeded = materials.filter(({ needsChanges }) => needsChanges).length;
+  const scheduledMaterials = materials.filter(({ scheduled }) => scheduled).length;
+  const readyToPublish = materials.filter(({ readyToPublish: ready }) => ready).length;
+  const inProgress = materials.filter(({ readyToPublish: ready }) => !ready).length;
+  const missingTexts = totalMaterials - textsPrepared;
+  const missingVisuals = materials.filter(({ visualRequired, visualPrepared }) => visualRequired && !visualPrepared).length;
+  const waitingForClient = materials.filter(({ draft }) => draft?.status === "sent_to_client").length;
+  const failedJobs = jobs.filter((job) => job.status === "failed");
+  const runningJobs = jobs.filter((job) => job.status === "running");
+  const generatedVariants = assets.flatMap((asset) => asset.generatedVariants);
+  const blobVisuals = generatedVariants.filter((variant) => variant.storageProvider === "vercel_blob").length;
+  const base64Visuals = generatedVariants.filter((variant) => variant.storageProvider !== "vercel_blob").length;
+  const attentionItems = [
+    ...materials
+      .filter(({ nextAction }) => nextAction !== "Готово")
+      .map(({ item, nextAction }) => ({
+        id: item.id,
+        topic: item.topic,
+        problem: nextAction === "Подготовить текст"
+          ? "Для материала ещё нет текста."
+          : nextAction === "Проверить и согласовать"
+            ? "Материал ждёт проверки или решения клиента."
+            : nextAction === "Запланировать"
+              ? "Согласованный материал ещё не добавлен в календарь."
+              : nextAction === "Сгенерировать ТЗ"
+                ? "Для запланированного материала нет ТЗ на визуал."
+                : nextAction === "Сгенерировать визуал"
+                  ? "ТЗ готово, но визуал ещё не создан."
+                  : "Визуал нужно проверить перед использованием.",
+        nextAction,
+      })),
+    ...failedJobs.map((job) => ({
+      id: `job-${job.id}`,
+      topic: job.title,
+      problem: job.errorMessage || "Производственная задача завершилась ошибкой.",
+      nextAction: "Повторить генерацию",
+    })),
+  ].slice(0, 10);
+  const clientNextStep = waitingForClient > 0
+    ? "Проверить материалы, которые ожидают согласования."
+    : changesNeeded > 0
+      ? "Команда внесёт правки и подготовит обновлённые материалы."
+      : "Команда продолжает подготовку материалов по календарю.";
+
+  return (
+    <section>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <WorkspaceViewHeader
+          eyebrow="Отчётность"
+          title="Отчёт по подготовке материалов"
+          description="Сводка по текстам, визуалам, согласованиям и календарю публикаций."
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge tone="teal">MVP-отчёт</StatusBadge>
+          <button type="button" disabled className={`${secondaryButtonClass} cursor-not-allowed opacity-60`}>Экспорт PDF позже</button>
+        </div>
+      </div>
+      <p className="mt-2 text-xs leading-5 text-stone-500">PDF-экспорт отчёта будет добавлен отдельным этапом.</p>
+
+      <article className={`${panelClass} mt-5 overflow-hidden`}>
+        <div className="border-b border-stone-200 bg-[#f8fbfa] p-5 sm:p-6">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">{clientName || "Клиент"}</p>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-2xl font-semibold text-stone-950">{month}</h2>
+            <StatusBadge tone="green">Сводка актуальна</StatusBadge>
+          </div>
+        </div>
+        <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+          <MetricCard label="Всего материалов" value={totalMaterials} detail="В плане" />
+          <MetricCard label="Тексты подготовлены" value={textsPrepared} detail="Есть текст" tone="teal" />
+          <MetricCard label="Визуалы подготовлены" value={visualsPrepared} detail="Есть вариант" tone="teal" />
+          <MetricCard label="Согласовано клиентом" value={approvedMaterials} detail="Можно двигать дальше" />
+          <MetricCard label="Нужны правки" value={changesNeeded} detail="Вернулись в работу" tone={changesNeeded > 0 ? "amber" : "stone"} />
+          <MetricCard label="Запланировано" value={scheduledMaterials} detail="Есть дата" tone="teal" />
+          <MetricCard label="В работе" value={inProgress} detail="Есть следующий шаг" tone={inProgress > 0 ? "amber" : "stone"} />
+          <MetricCard label="Готово к публикации" value={readyToPublish} detail="Проверено и запланировано" />
+        </div>
+      </article>
+
+      <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <article className={`${panelClass} p-5`}>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Краткий итог</p>
+          <p className="mt-3 text-sm leading-7 text-stone-700">
+            За месяц запланировано {totalMaterials} материалов. Тексты подготовлены для {textsPrepared}, визуалы готовы для {visualsPrepared}, согласовано {approvedMaterials}.
+          </p>
+          <p className="mt-2 text-sm leading-7 text-stone-700">
+            Основные зоны внимания: {missingTexts} материалов без текста, {missingVisuals} материалов без визуала, {changesNeeded} материалов ждут правок.
+          </p>
+        </article>
+        <article className={`${panelClass} p-5`}>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Клиентская сводка</p>
+          <div className="mt-3 grid gap-1.5 text-sm leading-6 text-stone-700">
+            <p>В этом месяце подготовлено: <span className="font-semibold">{textsPrepared} материалов.</span></p>
+            <p>Согласовано: <span className="font-semibold">{approvedMaterials}.</span></p>
+            <p>Ожидают вашего решения: <span className="font-semibold">{waitingForClient}.</span></p>
+            <p>В работе у команды: <span className="font-semibold">{inProgress}.</span></p>
+            <p className="mt-2 text-stone-500">Следующий шаг: {clientNextStep}</p>
+          </div>
+        </article>
+      </div>
+
+      <article className={`${panelClass} mt-5 overflow-hidden`}>
+        <div className={cardHeaderClass}>
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Материалы</p>
+            <h2 className="mt-1 text-xl font-semibold text-stone-950">Статус материалов</h2>
+          </div>
+        </div>
+        <div className="grid gap-2 p-4">
+          {materials.map(({ item, draft, publication, visualRequired, visualPrepared, approved, needsChanges, scheduled, nextAction }) => (
+            <article key={item.id} className="grid gap-3 rounded-md border border-stone-200 bg-stone-50/50 p-3 lg:grid-cols-[minmax(0,1.7fr)_repeat(4,minmax(110px,0.65fr))_minmax(150px,0.9fr)] lg:items-center">
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-teal-700">{publication?.scheduledDate || item.week || item.plannedDate} &middot; {item.platformName} &middot; {item.format}</p>
+                <p className="mt-1 line-clamp-2 text-sm font-semibold leading-6 text-stone-900">{item.topic}</p>
+              </div>
+              <StatusBadge tone={draft ? "teal" : "neutral"}>{draft ? "Текст готов" : "Нет текста"}</StatusBadge>
+              <StatusBadge tone={visualPrepared ? "green" : visualRequired ? "amber" : "neutral"}>
+                {visualPrepared ? "Визуал готов" : visualRequired ? "Нет визуала" : "Не требуется / не определено"}
+              </StatusBadge>
+              <StatusBadge tone={approved ? "green" : needsChanges ? "rose" : draft?.status === "sent_to_client" ? "amber" : "neutral"}>
+                {approved ? "Согласовано" : needsChanges ? "Нужны правки" : draft?.status === "sent_to_client" ? "Ждёт клиента" : "В работе"}
+              </StatusBadge>
+              <StatusBadge tone={scheduled ? "teal" : "neutral"}>{scheduled ? "Запланировано" : "Не запланировано"}</StatusBadge>
+              <p className="text-xs font-semibold leading-5 text-stone-600">{nextAction}</p>
+            </article>
+          ))}
+        </div>
+      </article>
+
+      <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <article className={`${panelClass} p-5`}>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-amber-700">Рабочая очередь</p>
+              <h2 className="mt-1 text-xl font-semibold text-stone-950">Требует внимания</h2>
+            </div>
+            <StatusBadge tone={attentionItems.length > 0 ? "amber" : "green"}>{attentionItems.length}</StatusBadge>
+          </div>
+          <div className="mt-4 grid gap-2">
+            {attentionItems.map((attention) => (
+              <div key={attention.id} className="rounded-md border border-stone-200 bg-stone-50/70 p-3">
+                <p className="text-sm font-semibold text-stone-900">{attention.topic}</p>
+                <p className="mt-1 text-xs leading-5 text-stone-500">{attention.problem}</p>
+                <p className="mt-2 text-xs font-bold text-teal-800">{attention.nextAction}</p>
+              </div>
+            ))}
+            {attentionItems.length === 0 ? <p className={mutedTextClass}>Сейчас нет материалов, требующих внимания.</p> : null}
+          </div>
+          <a href={draftsHref} className="mt-4 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">Открыть материалы</a>
+        </article>
+
+        <article className={`${panelClass} p-5`}>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-stone-400">Для менеджера</p>
+          <h2 className="mt-1 text-lg font-semibold text-stone-950">Операционная сводка</h2>
+          <div className="mt-4 grid gap-2 text-sm leading-6 text-stone-600">
+            <p>Производственных задач: <span className="font-semibold text-stone-900">{jobs.length}</span></p>
+            <p>Выполняются сейчас: <span className="font-semibold text-stone-900">{runningJobs.length}</span></p>
+            <p>Завершились ошибкой: <span className="font-semibold text-stone-900">{failedJobs.length}</span></p>
+            <p>Визуалы в Vercel Blob: <span className="font-semibold text-stone-900">{blobVisuals}</span></p>
+            <p>Визуалы в Base64 MVP: <span className="font-semibold text-stone-900">{base64Visuals}</span></p>
+          </div>
+        </article>
+      </div>
+    </section>
+  );
+}
+
 function WorkspaceSwitcher({
   activeView,
   links,
@@ -1667,6 +1905,7 @@ function WorkspaceSwitcher({
     { label: "Материалы", view: "drafts" as const },
     { label: "Креативы", view: "assets" as const },
     { label: "Клиентский вид", view: "client_portal" as const },
+    { label: "Отчёт", view: "reports" as const },
   ];
 
   return (
@@ -1933,6 +2172,7 @@ function DraftsView({
   calendarHref,
   assetsHref,
   clientPortalHref,
+  reportsHref,
 }: {
   items: MaterialPlannedItem[];
   publications: ScheduledPublicationPreview[];
@@ -1943,6 +2183,7 @@ function DraftsView({
   calendarHref: string;
   assetsHref: string;
   clientPortalHref: string;
+  reportsHref: string;
 }) {
   const totalMaterialsCount = items.length;
   const textsCreatedCount = items.filter((item) => item.contentDraft).length;
@@ -1963,8 +2204,9 @@ function DraftsView({
         title="Материалы публикаций"
         description="Каждая публикация собрана в одной рабочей карточке: текст, согласование, дата, ТЗ и визуал. Начните со следующего рекомендованного действия."
       />
-      <div className="mt-4">
+      <div className="mt-4 flex flex-wrap gap-2">
         <a href={clientPortalHref} className={secondaryButtonClass}>Открыть клиентский вид</a>
+        <a href={reportsHref} className={secondaryButtonClass}>Открыть отчёт</a>
       </div>
       <article className={`${panelClass} mt-5 overflow-hidden border-teal-200`}>
         <div className="grid gap-5 bg-teal-50/60 p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
@@ -2290,6 +2532,7 @@ function ClientPortalLinksPanel({
   monthlyPlanId,
   links,
   newPortalLink,
+  reportsHref,
 }: {
   blueprintId?: string;
   monthlyPlanId?: string;
@@ -2302,6 +2545,7 @@ function ClientPortalLinksPanel({
     lastOpenedAt: Date | null;
   }>;
   newPortalLink?: string;
+  reportsHref: string;
 }) {
   return (
     <section className="mb-5 rounded-lg border border-stone-200 bg-white p-4 shadow-[0_1px_2px_rgba(28,36,38,0.04)] sm:p-5">
@@ -2324,6 +2568,7 @@ function ClientPortalLinksPanel({
           <StatusBadge tone="amber">Выберите месячный план</StatusBadge>
         )}
       </div>
+      <a href={reportsHref} className="mt-4 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">Открыть отчёт</a>
 
       {newPortalLink ? (
         <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-3">
@@ -3057,6 +3302,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                     <p className="text-xs font-bold text-stone-700">Следующий рекомендуемый шаг</p>
                     <p className="mt-1 text-xs leading-5 text-stone-500">{latestBlueprint ? formatStatus(latestBlueprint.nextRecommendedAction) : "Создать бриф клиента"}</p>
                   </div>
+                  <div className="rounded-md border border-stone-200 bg-stone-50 p-3">
+                    <p className="text-xs font-bold text-stone-700">Отчёт по месяцу</p>
+                    <p className="mt-1 text-xs leading-5 text-stone-500">{selectedMonthlyPlan ? "Сводка по текстам, визуалам и согласованиям готова." : "Появится после генерации месячного плана."}</p>
+                    {selectedMonthlyPlan ? <a href={workspaceLinks.reports} className="mt-2 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">Открыть отчёт</a> : null}
+                  </div>
                 </div>
                 <div className="mt-4 rounded-md border border-teal-200 bg-teal-50 p-3">
                   <p className="text-xs font-bold text-teal-900">Подсказка AI</p>
@@ -3065,9 +3315,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   </p>
                 </div>
                 {selectedMonthlyPlan ? (
-                  <a href={workspaceLinks.client_portal} className="mt-4 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">
-                    Посмотреть клиентский календарь
-                  </a>
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <a href={workspaceLinks.client_portal} className="inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">
+                      Посмотреть клиентский календарь
+                    </a>
+                    <a href={workspaceLinks.reports} className="inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">
+                      Открыть отчёт по месяцу
+                    </a>
+                  </div>
                 ) : null}
               </article>
             </section>
@@ -3216,6 +3471,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 calendarHref={workspaceLinks.calendar}
                 assetsHref={workspaceLinks.assets}
                 clientPortalHref={workspaceLinks.client_portal}
+                reportsHref={workspaceLinks.reports}
               />
             ) : null}
 
@@ -3226,6 +3482,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   monthlyPlanId={selectedMonthlyPlan?.id}
                   links={selectedMonthlyPlan?.clientPortalLinks ?? []}
                   newPortalLink={params.portalLink}
+                  reportsHref={workspaceLinks.reports}
                 />
                 <ClientPortalView
                   clientName={latestBlueprint?.client.name}
@@ -3815,17 +4072,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
             ) : null}
 
             {activeView === "reports" ? (
-              <section>
-                <WorkspaceViewHeader
-                  eyebrow="Аналитика"
-                  title="Отчёты"
-                  description="Отчёты будут собраны из календаря, согласований и публикаций. Сейчас раздел показывает направление следующего операционного слоя."
-                />
-                <div className="mt-5 grid gap-4 lg:grid-cols-2">
-                  <PreviewCard title="Операционный отчёт" glyph="О" copy="Здесь появится сводка по плану, готовности материалов, согласованиям и выполненным публикациям." />
-                  <PreviewCard title="Лента событий" glyph="С" copy="Здесь появятся новые отзывы, комментарии, согласования клиента, результаты публикаций и предложенные AI действия." />
-                </div>
-              </section>
+              <MonthlyClientReport
+                clientName={latestBlueprint?.client.name}
+                month={selectedMonthlyPlan?.month}
+                items={selectedMonthlyPlan?.plannedContentItems ?? []}
+                publications={selectedMonthlyPlan?.scheduledPublications ?? []}
+                assets={creativeAssets}
+                jobs={generationJobs}
+                draftsHref={workspaceLinks.drafts}
+              />
             ) : null}
 
             {activeView === "settings" ? (

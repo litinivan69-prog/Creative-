@@ -312,6 +312,14 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - `imageBase64` is now a fallback instead of the desired production storage path.
 - New visual records store `imageUrl`, `storageKey`, `storageProvider`, and `fileSize` when possible.
 
+## Sprint Product-5A Monthly Client Report MVP
+
+- Monthly Client Report MVP was added.
+- The Reports view now summarizes production and approval status for the selected monthly plan.
+- Metrics include planned materials, prepared texts, visuals, approvals, changes, scheduled items, and ready-to-publish items.
+- The report includes attention items and a client-friendly summary.
+- External analytics, social integrations, PDF export, and public report sharing are still not included.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.
