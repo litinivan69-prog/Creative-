@@ -59,6 +59,7 @@ type SearchParams = Promise<{
   plan?: string;
   client?: string;
   setupStep?: string;
+  brandStep?: string;
   error?: string;
   notice?: string;
   portalLink?: string;
@@ -97,6 +98,15 @@ const setupStepLabels: Record<SetupStep, string> = {
   brand: "Бренд",
 };
 
+const brandSteps = ["profile", "materials", "review"] as const;
+type BrandStep = (typeof brandSteps)[number];
+
+const brandStepLabels: Record<BrandStep, string> = {
+  profile: "Профиль бренда",
+  materials: "Материалы",
+  review: "Проверка",
+};
+
 function getActiveView(params: { view?: string }): WorkspaceView {
   return workspaceViews.includes(params.view as WorkspaceView) ? (params.view as WorkspaceView) : "overview";
 }
@@ -113,6 +123,16 @@ function workspaceHref(view: WorkspaceView, context: WorkspaceContext = {}) {
 
 function clientSetupHref(step: SetupStep, context: WorkspaceContext = {}) {
   const searchParams = new URLSearchParams({ view: "client_setup", setupStep: step });
+
+  if (context.blueprint) searchParams.set("blueprint", context.blueprint);
+  if (context.plan) searchParams.set("plan", context.plan);
+  if (context.client) searchParams.set("client", context.client);
+
+  return `/?${searchParams.toString()}`;
+}
+
+function brandAssetsHref(step: BrandStep, context: WorkspaceContext = {}) {
+  const searchParams = new URLSearchParams({ view: "brand_assets", brandStep: step });
 
   if (context.blueprint) searchParams.set("blueprint", context.blueprint);
   if (context.plan) searchParams.set("plan", context.plan);
@@ -1912,7 +1932,7 @@ function formatBrandAssetType(type: string) {
   return brandAssetTypes.find(([value]) => value === type)?.[1] ?? type;
 }
 
-function BrandAssetsView({ client }: { client: {
+function BrandAssetsView({ client, requestedStep, workspaceContext }: { client: {
   id: string;
   name: string;
   brandProfile: {
@@ -1921,32 +1941,72 @@ function BrandAssetsView({ client }: { client: {
     legalNotes: string | null; productServiceNotes: string | null;
   } | null;
   brandAssets: Array<{ id: string; assetType: string; title: string; description: string | null; fileUrl: string | null; sourceUrl: string | null; textContent: string | null; fileSize: number | null; createdAt: Date }>;
-} | null }) {
+} | null; requestedStep?: string; workspaceContext: WorkspaceContext }) {
   if (!client) {
     return (
       <section>
         <WorkspaceViewHeader eyebrow="Контекст клиента" title="Библиотека бренда" description="Материалы, стиль и ограничения клиента, которые AI использует при подготовке текстов, ТЗ и визуалов." />
-        <div className="mt-5"><EmptyState>Библиотека бренда временно недоступна. Обновите страницу или проверьте миграции базы данных.</EmptyState></div>
+        <div className="mt-5"><EmptyState>Выберите клиента, чтобы заполнить библиотеку бренда.</EmptyState></div>
       </section>
     );
   }
 
   const profile = client.brandProfile;
+  const activeStep = brandSteps.includes(requestedStep as BrandStep)
+    ? requestedStep as BrandStep
+    : !profile
+      ? "profile"
+      : client.brandAssets.length === 0
+        ? "materials"
+        : "review";
+  const context = { ...workspaceContext, client: client.id };
   const fields = [
     ["toneOfVoice", "Тональность"], ["keyMessages", "Ключевые сообщения"], ["targetAudienceNotes", "Целевая аудитория"],
     ["brandColors", "Цвета бренда"], ["fonts", "Шрифты"], ["visualStyle", "Визуальный стиль"],
     ["productServiceNotes", "Услуги / продукты"], ["forbiddenTopics", "Запрещённые темы и формулировки"],
     ["requiredDisclaimers", "Обязательные дисклеймеры"], ["legalNotes", "Юридические ограничения"],
   ] as const;
+  const profileSummary = fields
+    .map(([name, label]) => ({ label, value: profile?.[name] ?? "" }))
+    .filter((item) => item.value.trim());
+  const assetCounts = Array.from(
+    client.brandAssets.reduce((counts, asset) => counts.set(asset.assetType, (counts.get(asset.assetType) ?? 0) + 1), new Map<string, number>()),
+    ([assetType, count]) => ({ assetType, count }),
+  );
 
   return (
-    <section>
+    <section className="mx-auto max-w-6xl">
       <WorkspaceViewHeader eyebrow="Контекст клиента" title="Библиотека бренда" description="Материалы, стиль и ограничения клиента, которые AI использует при подготовке текстов, ТЗ и визуалов." />
       <p className="mt-3 text-sm font-semibold text-stone-700">{client.name}</p>
-      <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <article className={`${panelClass} p-5`}>
-          <h2 className="text-lg font-semibold text-stone-950">Профиль бренда</h2>
-          <form action={updateClientBrandProfile} className="mt-4 grid gap-3 md:grid-cols-2">
+
+      <div className="mt-5 grid gap-3 md:grid-cols-3">
+        {brandSteps.map((step, index) => (
+          <a
+            key={step}
+            href={brandAssetsHref(step, context)}
+            className={`rounded-lg border p-3 transition hover:border-teal-300 hover:bg-teal-50/50 ${
+              step === activeStep ? "border-teal-300 bg-teal-50/70" : "border-stone-200 bg-white"
+            }`}
+          >
+            <p className="text-xs font-bold text-stone-400">{index + 1}</p>
+            <p className="mt-1 text-sm font-semibold text-stone-950">{brandStepLabels[step]}</p>
+            <div className="mt-2">
+              <StatusBadge tone={setupStepTone(step === "profile" ? "create_client" : step === "materials" ? "brief" : "blueprint", activeStep === "profile" ? "create_client" : activeStep === "materials" ? "brief" : "blueprint")}>
+                {setupStepState(step === "profile" ? "create_client" : step === "materials" ? "brief" : "blueprint", activeStep === "profile" ? "create_client" : activeStep === "materials" ? "brief" : "blueprint")}
+              </StatusBadge>
+            </div>
+          </a>
+        ))}
+      </div>
+
+      {activeStep === "profile" ? (
+        <article className={`${panelClass} mt-5 p-5 sm:p-6`}>
+          <SectionTitle
+            eyebrow="Шаг 1"
+            title="Профиль бренда"
+            description="Заполните базовый брендовый контекст. После сохранения можно будет добавить файлы и материалы."
+          />
+          <form action={updateClientBrandProfile} className="mt-5 grid gap-3 md:grid-cols-2">
             <input type="hidden" name="clientId" value={client.id} />
             {fields.map(([name, label]) => (
               <label key={name} className="grid gap-1 text-xs font-bold text-stone-600">
@@ -1957,41 +2017,114 @@ function BrandAssetsView({ client }: { client: {
             <PendingSubmitButton pendingLabel="Сохраняем..." className={`${primaryButtonClass} md:col-span-2`}>Сохранить профиль бренда</PendingSubmitButton>
           </form>
         </article>
-        <article className={`${panelClass} p-5`}>
-          <h2 className="text-lg font-semibold text-stone-950">Добавить материал</h2>
-          <form action={createClientBrandAsset} className="mt-4 grid gap-3">
+      ) : null}
+
+      {activeStep === "materials" ? (
+        <article className={`${panelClass} mt-5 p-5 sm:p-6`}>
+          <SectionTitle
+            eyebrow="Шаг 2"
+            title="Добавить материалы бренда"
+            description="Добавьте логотипы, брендбук, презентации, фото, старые посты и референсы. Можно добавить описание, ссылку или текст даже без файла."
+          />
+          <form action={createClientBrandAsset} className="mt-5 grid max-w-3xl gap-3">
             <input type="hidden" name="clientId" value={client.id} />
-            <select name="assetType" className={inputClass}>{brandAssetTypes.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-            <input name="title" required className={inputClass} placeholder="Название материала" />
-            <textarea name="description" rows={2} className={inputClass} placeholder="Описание и заметки" />
-            <input name="sourceUrl" type="url" className={inputClass} placeholder="Ссылка на источник, если есть" />
-            <textarea name="textContent" rows={3} className={inputClass} placeholder="Текст или выдержка вручную" />
-            <input name="file" type="file" className={inputClass} />
+            <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
+              Тип материала
+              <select name="assetType" className={inputClass}>{brandAssetTypes.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+            </label>
+            <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
+              Название
+              <input name="title" required className={inputClass} placeholder="Название материала" />
+            </label>
+            <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
+              Описание
+              <textarea name="description" rows={2} className={inputClass} placeholder="Описание и заметки" />
+            </label>
+            <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
+              Ссылка на источник
+              <input name="sourceUrl" type="url" className={inputClass} placeholder="Ссылка на источник, если есть" />
+            </label>
+            <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
+              Текст или выдержка
+              <textarea name="textContent" rows={4} className={inputClass} placeholder="Можно добавить вручную даже без файла" />
+            </label>
+            <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
+              Файл
+              <input name="file" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" className={inputClass} />
+              <span className="text-xs font-medium leading-5 text-stone-500">PDF, PNG, JPG, WEBP до 20 МБ. Описание, ссылка и текст могут быть добавлены без файла.</span>
+            </label>
             <PendingSubmitButton pendingLabel="Добавляем..." className={primaryButtonClass}>Добавить материал</PendingSubmitButton>
           </form>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <a href={brandAssetsHref("review", context)} className={secondaryButtonClass}>Перейти к проверке библиотеки</a>
+            <a href={brandAssetsHref("profile", context)} className="inline-flex items-center text-sm font-bold text-teal-800 transition hover:text-teal-950">Вернуться к профилю бренда</a>
+          </div>
         </article>
-      </div>
-      <article className={`${panelClass} mt-5 p-5`}>
-        <h2 className="text-lg font-semibold text-stone-950">Материалы бренда</h2>
-        <p className="mt-2 text-xs leading-5 text-stone-500">На этом этапе файлы сохраняются как материалы бренда. Автоматическое извлечение текста из документов и синхронизация с Google Drive появятся позже.</p>
-        <div className="mt-4 grid gap-3 lg:grid-cols-2">
-          {client.brandAssets.map((asset) => (
-            <article key={asset.id} className="rounded-md border border-stone-200 bg-stone-50/60 p-3">
-              <div className="flex flex-wrap items-center gap-2"><StatusBadge tone="teal">{formatBrandAssetType(asset.assetType)}</StatusBadge><p className="font-semibold text-stone-900">{asset.title}</p></div>
-              {asset.description ? <p className="mt-2 text-xs leading-5 text-stone-500">{asset.description}</p> : null}
-              {asset.textContent ? <p className="mt-2 line-clamp-3 text-xs leading-5 text-stone-600">{asset.textContent}</p> : null}
-              <div className="mt-3 flex flex-wrap gap-3 text-xs font-bold text-teal-800">
-                {asset.fileUrl ? <a href={asset.fileUrl} target="_blank" rel="noreferrer">Открыть файл</a> : null}
-                {asset.sourceUrl ? <a href={asset.sourceUrl} target="_blank" rel="noreferrer">Открыть источник</a> : null}
-                {asset.fileSize ? <span className="text-stone-400">{formatGeneratedVisualFileSize(asset.fileSize)}</span> : null}
+      ) : null}
+
+      {activeStep === "review" ? (
+        <section className="mt-5 grid gap-5">
+          <article className={`${panelClass} p-5 sm:p-6`}>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <SectionTitle
+                eyebrow="Шаг 3"
+                title="Проверка библиотеки"
+                description="Проверьте профиль бренда и активные материалы, которые будут использоваться как AI-контекст."
+              />
+              <div className="flex flex-wrap gap-2">
+                <a href={brandAssetsHref("materials", context)} className={primaryButtonClass}>Добавить ещё материалы</a>
+                <a href={brandAssetsHref("profile", context)} className={secondaryButtonClass}>Вернуться к профилю бренда</a>
               </div>
-              <p className="mt-2 text-[11px] text-stone-400">{asset.createdAt.toLocaleDateString("ru-RU")}</p>
-              <form action={archiveClientBrandAsset} className="mt-3"><input type="hidden" name="brandAssetId" value={asset.id} /><PendingSubmitButton pendingLabel="Скрываем..." className={secondaryButtonClass}>Скрыть</PendingSubmitButton></form>
-            </article>
-          ))}
-          {client.brandAssets.length === 0 ? <EmptyState>Материалов бренда пока нет.</EmptyState> : null}
-        </div>
-      </article>
+            </div>
+            <div className="mt-5 grid gap-3 lg:grid-cols-2">
+              <div className="rounded-lg border border-stone-200 bg-stone-50/70 p-4">
+                <h3 className="text-sm font-semibold text-stone-950">Профиль бренда</h3>
+                <div className="mt-3 grid gap-2 text-xs leading-5 text-stone-600">
+                  {profileSummary.map((item) => (
+                    <p key={item.label}><span className="font-bold text-stone-800">{item.label}:</span> {item.value}</p>
+                  ))}
+                  {profileSummary.length === 0 ? <p className="text-stone-500">Профиль бренда пока не заполнен.</p> : null}
+                </div>
+              </div>
+              <div className="rounded-lg border border-stone-200 bg-stone-50/70 p-4">
+                <h3 className="text-sm font-semibold text-stone-950">Материалы по типам</h3>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {assetCounts.map((item) => (
+                    <StatusBadge key={item.assetType} tone="teal">{formatBrandAssetType(item.assetType)}: {item.count}</StatusBadge>
+                  ))}
+                  {assetCounts.length === 0 ? <StatusBadge>Материалов нет</StatusBadge> : null}
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article className={`${panelClass} p-5 sm:p-6`}>
+            <h2 className="text-lg font-semibold text-stone-950">Активные материалы бренда</h2>
+            <p className="mt-2 text-xs leading-5 text-stone-500">На этом этапе файлы сохраняются как материалы бренда. Автоматическое извлечение текста из документов и синхронизация с Google Drive появятся позже.</p>
+            <div className="mt-4 grid gap-3 lg:grid-cols-2">
+              {client.brandAssets.map((asset) => (
+                <article key={asset.id} className="rounded-md border border-stone-200 bg-stone-50/60 p-3">
+                  <div className="flex flex-wrap items-center gap-2"><StatusBadge tone="teal">{formatBrandAssetType(asset.assetType)}</StatusBadge><p className="font-semibold text-stone-900">{asset.title}</p></div>
+                  {asset.description ? <p className="mt-2 text-xs leading-5 text-stone-500">{asset.description}</p> : null}
+                  {asset.textContent ? <p className="mt-2 line-clamp-3 text-xs leading-5 text-stone-600">{asset.textContent}</p> : null}
+                  <div className="mt-3 flex flex-wrap gap-3 text-xs font-bold text-teal-800">
+                    {asset.fileUrl ? <a href={asset.fileUrl} target="_blank" rel="noreferrer">Открыть файл</a> : null}
+                    {asset.sourceUrl ? <a href={asset.sourceUrl} target="_blank" rel="noreferrer">Открыть источник</a> : null}
+                    {asset.fileSize ? <span className="text-stone-400">{formatGeneratedVisualFileSize(asset.fileSize)}</span> : null}
+                  </div>
+                  <p className="mt-2 text-[11px] text-stone-400">{asset.createdAt.toLocaleDateString("ru-RU")}</p>
+                  <form action={archiveClientBrandAsset} className="mt-3">
+                    <input type="hidden" name="brandAssetId" value={asset.id} />
+                    <input type="hidden" name="brandStep" value="review" />
+                    <PendingSubmitButton pendingLabel="Скрываем..." className={secondaryButtonClass}>Скрыть</PendingSubmitButton>
+                  </form>
+                </article>
+              ))}
+              {client.brandAssets.length === 0 ? <EmptyState>Материалов бренда пока нет. Добавьте логотип, брендбук, PDF-гайд или референсы.</EmptyState> : null}
+            </div>
+          </article>
+        </section>
+      ) : null}
     </section>
   );
 }
@@ -4057,7 +4190,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
               </>
             ) : null}
 
-            {activeView === "brand_assets" ? <BrandAssetsView client={selectedBrandClient} /> : null}
+            {activeView === "brand_assets" ? (
+              <BrandAssetsView
+                client={selectedBrandClient}
+                requestedStep={params.brandStep}
+                workspaceContext={workspaceContext}
+              />
+            ) : null}
 
             {activeView === "clients" ? (
               <section>

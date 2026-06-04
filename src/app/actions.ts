@@ -48,6 +48,7 @@ function workspaceLocation(
     planId?: string;
     clientId?: string;
     setupStep?: string;
+    brandStep?: string;
     error?: string;
     notice?: string;
     portalLink?: string;
@@ -59,6 +60,7 @@ function workspaceLocation(
   if (options.planId) searchParams.set("plan", options.planId);
   if (options.clientId) searchParams.set("client", options.clientId);
   if (options.setupStep) searchParams.set("setupStep", options.setupStep);
+  if (options.brandStep) searchParams.set("brandStep", options.brandStep);
   if (options.error) searchParams.set("error", options.error);
   if (options.notice) searchParams.set("notice", options.notice);
   if (options.portalLink) searchParams.set("portalLink", options.portalLink);
@@ -121,6 +123,14 @@ type DraftWorkflowStatus =
   | "approved"
   | "rejected"
   | "ready_to_schedule";
+
+const MAX_BRAND_ASSET_FILE_SIZE = 20 * 1024 * 1024;
+const supportedBrandAssetMimeTypes = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "application/pdf",
+]);
 
 type DraftReviewAction =
   | "submitted_for_review"
@@ -478,7 +488,7 @@ export async function updateClientBrandProfile(formData: FormData) {
   });
 
   revalidatePath("/");
-  redirect(workspaceLocation("brand_assets", { clientId, notice: "Профиль бренда обновлён." }));
+  redirect(workspaceLocation("brand_assets", { clientId, brandStep: "materials", notice: "Профиль бренда обновлён." }));
 }
 
 export async function createClientBrandAsset(formData: FormData) {
@@ -489,12 +499,45 @@ export async function createClientBrandAsset(formData: FormData) {
 
   if (!clientId || !assetType || !title) errorRedirect("Укажите клиента, тип и название материала.", "brand_assets");
 
-  const uploaded = file instanceof File && file.size > 0
-    ? await storeClientBrandAssetFile({ file, clientId, assetType })
-    : null;
+  const hasFile = file instanceof File && file.size > 0;
 
-  if (file instanceof File && file.size > 0 && !uploaded) {
-    errorRedirect("Для загрузки файла подключите Vercel Blob. Пока можно добавить ссылку или текстовое описание.", "brand_assets");
+  if (hasFile && file.size > MAX_BRAND_ASSET_FILE_SIZE) {
+    redirect(workspaceLocation("brand_assets", {
+      clientId,
+      brandStep: "materials",
+      error: "Файл слишком большой. Максимальный размер для MVP — 20 МБ.",
+    }));
+  }
+
+  if (hasFile && !supportedBrandAssetMimeTypes.has(file.type)) {
+    redirect(workspaceLocation("brand_assets", {
+      clientId,
+      brandStep: "materials",
+      error: "Этот формат пока не поддерживается. Загрузите PDF, PNG, JPG или WEBP.",
+    }));
+  }
+
+  let uploaded: Awaited<ReturnType<typeof storeClientBrandAssetFile>> = null;
+
+  if (hasFile) {
+    try {
+      uploaded = await storeClientBrandAssetFile({ file, clientId, assetType });
+    } catch (error) {
+      console.error("Brand asset upload failed", error);
+      redirect(workspaceLocation("brand_assets", {
+        clientId,
+        brandStep: "materials",
+        error: "Не удалось загрузить файл. Попробуйте ещё раз или добавьте материал без файла.",
+      }));
+    }
+  }
+
+  if (hasFile && !uploaded) {
+    redirect(workspaceLocation("brand_assets", {
+      clientId,
+      brandStep: "materials",
+      error: "Для загрузки файла подключите Vercel Blob. Пока можно добавить ссылку или текстовое описание.",
+    }));
   }
 
   await prisma.clientBrandAsset.create({
@@ -510,11 +553,12 @@ export async function createClientBrandAsset(formData: FormData) {
   });
 
   revalidatePath("/");
-  redirect(workspaceLocation("brand_assets", { clientId, notice: "Материал бренда добавлен." }));
+  redirect(workspaceLocation("brand_assets", { clientId, brandStep: "materials", notice: "Материал бренда добавлен." }));
 }
 
 export async function archiveClientBrandAsset(formData: FormData) {
   const brandAssetId = formText(formData, "brandAssetId");
+  const brandStep = formText(formData, "brandStep") || "review";
   if (!brandAssetId) errorRedirect("Материал бренда не выбран.", "brand_assets");
 
   const asset = await prisma.clientBrandAsset.findUnique({ where: { id: brandAssetId }, select: { id: true, clientId: true } });
@@ -522,7 +566,7 @@ export async function archiveClientBrandAsset(formData: FormData) {
 
   await prisma.clientBrandAsset.update({ where: { id: asset.id }, data: { status: "archived" } });
   revalidatePath("/");
-  redirect(workspaceLocation("brand_assets", { clientId: asset.clientId, notice: "Материал бренда скрыт." }));
+  redirect(workspaceLocation("brand_assets", { clientId: asset.clientId, brandStep, notice: "Материал бренда скрыт." }));
 }
 
 export async function addClientBrief(formData: FormData) {
