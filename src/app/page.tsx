@@ -40,6 +40,7 @@ import {
   updatePublicationText,
   updateScheduledPublication,
 } from "@/app/actions";
+import { BrandAssetFileInput } from "@/app/brand-asset-file-input";
 import { ClientPortalView } from "@/app/client-portal-view";
 import { PendingSubmitButton } from "@/app/pending-submit-button";
 import { getAutopilotTextBatchLimit } from "@/lib/autopilot";
@@ -2048,11 +2049,7 @@ function BrandAssetsView({ client, requestedStep, workspaceContext }: { client: 
               Текст или выдержка
               <textarea name="textContent" rows={4} className={inputClass} placeholder="Можно добавить вручную даже без файла" />
             </label>
-            <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
-              Файл
-              <input name="file" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" className={inputClass} />
-              <span className="text-xs font-medium leading-5 text-stone-500">PDF, PNG, JPG, WEBP до 20 МБ. Описание, ссылка и текст могут быть добавлены без файла.</span>
-            </label>
+            <BrandAssetFileInput className={inputClass} />
             <PendingSubmitButton pendingLabel="Добавляем..." className={primaryButtonClass}>Добавить материал</PendingSubmitButton>
           </form>
           <div className="mt-5 flex flex-wrap gap-2">
