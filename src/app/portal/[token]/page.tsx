@@ -81,11 +81,15 @@ export default async function ClientPortalPage({
                   generatedVariants: {
                     orderBy: { createdAt: "desc" },
                     select: {
-                      status: true,
-                      imageBase64: true,
+                      id: true,
                       imageUrl: true,
                       mimeType: true,
+                      storageProvider: true,
+                      fileSize: true,
+                      status: true,
                       qualityStatus: true,
+                      variantTitle: true,
+                      createdAt: true,
                     },
                   },
                 },

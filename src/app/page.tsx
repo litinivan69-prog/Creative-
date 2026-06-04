@@ -3,6 +3,7 @@ import {
   approveDraft,
   approveCreativeVariant,
   archiveClientBrandAsset,
+  clearLegacyBase64ForBlobVariants,
   createClientBrandAsset,
   createClientPortalLink,
   createCreativeAssetBrief,
@@ -529,25 +530,26 @@ type MaterialPlannedItem = {
 type GeneratedCreativeVariantPreview = {
   id: string;
   variantTitle: string;
-  prompt: string;
-  revisedPrompt: string | null;
-  imageBase64: string | null;
   imageUrl: string | null;
-  storageKey: string | null;
   storageProvider: string;
   fileSize: number | null;
   mimeType: string;
   status: string;
-  source: string;
-  provider: string;
-  model: string | null;
-  quality: string | null;
-  size: string | null;
-  textMode: string | null;
   qualityStatus: string;
-  qualityNotes: string | null;
-  notes: string | null;
+  createdAt: Date;
 };
+
+const generatedCreativeVariantPreviewSelect = {
+  id: true,
+  imageUrl: true,
+  mimeType: true,
+  storageProvider: true,
+  fileSize: true,
+  status: true,
+  qualityStatus: true,
+  variantTitle: true,
+  createdAt: true,
+} as const;
 
 type CreativeAssetPreview = {
   id: string;
@@ -1310,6 +1312,10 @@ function GeneratedVisualImage({
 
   return imageSrc ? (
     <img src={imageSrc} alt={alt} className={className} />
+  ) : variant.storageProvider !== "vercel_blob" ? (
+    <div className={`flex items-center justify-center bg-amber-50 px-4 text-center text-xs font-semibold leading-5 text-amber-900 ${className}`}>
+      Старый визуал хранится в базе. Откройте полную карточку или сгенерируйте новый вариант.
+    </div>
   ) : (
     <div className={`flex items-center justify-center bg-stone-100 px-4 text-center text-xs font-semibold text-stone-400 ${className}`}>
       Изображение недоступно.
@@ -1548,32 +1554,9 @@ function CreativeAssetLayer({
                               {formatGeneratedVisualFileSize(variant.fileSize) ? <StatusBadge>{formatGeneratedVisualFileSize(variant.fileSize)}</StatusBadge> : null}
                             </div>
                             <p className="mt-3 text-sm font-semibold text-stone-900">{variant.variantTitle}</p>
-                            {variant.notes ? <p className="mt-2 text-xs leading-5 text-stone-500">{variant.notes}</p> : null}
-                            <details className="mt-3 rounded-md border border-stone-200 bg-white">
-                              <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-stone-600">Технически</summary>
-                              <p className="border-t border-stone-200 px-3 py-2 text-[11px] leading-5 text-stone-500">
-                                {formatStatus(variant.provider)}
-                                {variant.model ? ` · ${variant.model}` : ""}
-                                {variant.quality ? ` · ${variant.quality}` : ""}
-                                {variant.size ? ` · ${variant.size}` : ""}
-                                {variant.textMode ? ` · ${formatStatus(variant.textMode)}` : ""}
-                              </p>
-                            </details>
                             <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-900">
                               Перед отправкой клиенту проверьте текст, лица, руки, логотипы и медицинские утверждения.
                             </p>
-                            {variant.qualityNotes ? (
-                              <p className="mt-2 text-xs leading-5 text-stone-500"><span className="font-bold text-stone-700">Проверка качества:</span> {variant.qualityNotes}</p>
-                            ) : null}
-                            <details className="mt-3 rounded-md border border-stone-200 bg-white">
-                              <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-stone-700">Показать prompt</summary>
-                              <div className="grid gap-2 border-t border-stone-200 p-3 text-xs leading-5 text-stone-600">
-                                <p>{variant.prompt}</p>
-                                {variant.revisedPrompt ? (
-                                  <p><span className="font-bold text-stone-800">Уточнённый prompt:</span> {variant.revisedPrompt}</p>
-                                ) : null}
-                              </div>
-                            </details>
                             <div className="mt-3 flex flex-wrap gap-2">
                               {variant.status !== "needs_review" ? (
                                 <CreativeVariantAction action={markCreativeVariantNeedsReview} variantId={variant.id} tone="amber">
@@ -3103,6 +3086,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                     contentDraft: true,
                     generatedVariants: {
                       orderBy: { createdAt: "desc" },
+                      select: generatedCreativeVariantPreviewSelect,
                     },
                   },
                 },
@@ -3115,6 +3099,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                       include: {
                         generatedVariants: {
                           orderBy: { createdAt: "desc" },
+                          select: generatedCreativeVariantPreviewSelect,
                         },
                       },
                     },
@@ -3170,6 +3155,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                     contentDraft: true,
                     generatedVariants: {
                       orderBy: { createdAt: "desc" },
+                      select: generatedCreativeVariantPreviewSelect,
                     },
                   },
                 },
@@ -3182,6 +3168,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                       include: {
                         generatedVariants: {
                           orderBy: { createdAt: "desc" },
+                          select: generatedCreativeVariantPreviewSelect,
                         },
                       },
                     },
@@ -4275,6 +4262,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                         ? "Новые визуалы и файлы библиотеки бренда сохраняются во внешнем хранилище."
                         : "Новые визуалы временно сохраняются в базе. Загрузка файлов библиотеки бренда недоступна до подключения Vercel Blob."}
                     </p>
+                    <form action={clearLegacyBase64ForBlobVariants} className="mt-4 rounded-md border border-amber-200 bg-amber-50/70 p-3">
+                      <p className="text-xs font-bold text-amber-950">Legacy base64</p>
+                      <p className="mt-1 text-xs leading-5 text-amber-900">
+                        Удаляет base64-копии у визуалов, которые уже сохранены в Vercel Blob.
+                      </p>
+                      <PendingSubmitButton pendingLabel="Очищаем..." className={`${secondaryButtonClass} mt-3`}>
+                        Очистить legacy base64 у Blob-визуалов
+                      </PendingSubmitButton>
+                    </form>
                   </article>
                   <article className={`${panelClass} p-4`}>
                     <p className="text-xs font-bold uppercase tracking-[0.1em] text-stone-400">Production Autopilot</p>

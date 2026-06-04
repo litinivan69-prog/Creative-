@@ -39,7 +39,7 @@ function formText(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
 }
 
-type WorkspaceView = "overview" | "clients" | "client_setup" | "approvals" | "calendar" | "drafts" | "assets" | "brand_assets" | "client_portal";
+type WorkspaceView = "overview" | "clients" | "client_setup" | "approvals" | "calendar" | "drafts" | "assets" | "brand_assets" | "client_portal" | "settings";
 
 function workspaceLocation(
   view: WorkspaceView,
@@ -1097,6 +1097,27 @@ export async function regenerateContentDraftForItem(formData: FormData) {
   await generateContentTextForItem(formData, true);
 }
 
+export async function clearLegacyBase64ForBlobVariants() {
+  const result = await prisma.generatedCreativeVariant.updateMany({
+    where: {
+      imageUrl: {
+        not: null,
+      },
+      imageBase64: {
+        not: null,
+      },
+    },
+    data: {
+      imageBase64: null,
+    },
+  });
+
+  revalidatePath("/");
+  redirect(workspaceLocation("settings", {
+    notice: `Legacy base64 у Blob-визуалов очищен. Обновлено записей: ${result.count}.`,
+  }));
+}
+
 export async function prepareMonthAutopilot(formData: FormData) {
   const monthlyPlanId = formText(formData, "monthlyPlanId");
 
@@ -1118,7 +1139,11 @@ export async function prepareMonthAutopilot(formData: FormData) {
       scheduledPublications: true,
       creativeAssets: {
         include: {
-          generatedVariants: true,
+          generatedVariants: {
+            select: {
+              id: true,
+            },
+          },
         },
       },
     },
@@ -1838,7 +1863,11 @@ export async function generateCreativeVisualVariantForAsset(formData: FormData) 
       plannedContentItem: true,
       contentDraft: true,
       scheduledPublication: true,
-      generatedVariants: true,
+      generatedVariants: {
+        select: {
+          id: true,
+        },
+      },
     },
   });
 

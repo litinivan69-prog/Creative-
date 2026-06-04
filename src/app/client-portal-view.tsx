@@ -32,11 +32,15 @@ export type ClientPortalPublication = {
   notes: string | null;
   creativeAssets: Array<{
     generatedVariants: Array<{
-      status: string;
-      imageBase64: string | null;
+      id: string;
       imageUrl: string | null;
       mimeType: string;
+      storageProvider: string;
+      fileSize: number | null;
+      status: string;
       qualityStatus: string;
+      variantTitle: string;
+      createdAt: Date;
     }>;
   }>;
 };
@@ -291,6 +295,10 @@ export function ClientPortalView({
                       <article key={item.id} className="overflow-hidden rounded-lg border border-stone-200 bg-white">
                         {visual && getGeneratedVariantImageSrc(visual) ? (
                           <img src={getGeneratedVariantImageSrc(visual) ?? ""} alt={item.topic} className="aspect-[16/8] max-h-52 w-full bg-stone-100 object-contain" />
+                        ) : visual && visual.storageProvider !== "vercel_blob" ? (
+                          <div className="flex h-28 items-center justify-center border-b border-dashed border-amber-200 bg-amber-50 px-4 text-center text-xs font-semibold leading-5 text-amber-900">
+                            Старый визуал хранится в базе. Откройте полную карточку или сгенерируйте новый вариант.
+                          </div>
                         ) : (
                           <div className="flex h-28 items-center justify-center border-b border-dashed border-stone-200 bg-stone-50 px-4 text-center text-xs font-semibold text-stone-400">
                             Визуал ещё готовится.
