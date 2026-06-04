@@ -58,6 +58,7 @@ type SearchParams = Promise<{
   blueprint?: string;
   plan?: string;
   client?: string;
+  setupStep?: string;
   error?: string;
   notice?: string;
   portalLink?: string;
@@ -85,12 +86,33 @@ type WorkspaceContext = {
   client?: string;
 };
 
+const setupSteps = ["create_client", "brief", "blueprint", "monthly_plan", "brand"] as const;
+type SetupStep = (typeof setupSteps)[number];
+
+const setupStepLabels: Record<SetupStep, string> = {
+  create_client: "Клиент",
+  brief: "Бриф",
+  blueprint: "Blueprint",
+  monthly_plan: "Месячный план",
+  brand: "Бренд",
+};
+
 function getActiveView(params: { view?: string }): WorkspaceView {
   return workspaceViews.includes(params.view as WorkspaceView) ? (params.view as WorkspaceView) : "overview";
 }
 
 function workspaceHref(view: WorkspaceView, context: WorkspaceContext = {}) {
   const searchParams = new URLSearchParams({ view });
+
+  if (context.blueprint) searchParams.set("blueprint", context.blueprint);
+  if (context.plan) searchParams.set("plan", context.plan);
+  if (context.client) searchParams.set("client", context.client);
+
+  return `/?${searchParams.toString()}`;
+}
+
+function clientSetupHref(step: SetupStep, context: WorkspaceContext = {}) {
+  const searchParams = new URLSearchParams({ view: "client_setup", setupStep: step });
 
   if (context.blueprint) searchParams.set("blueprint", context.blueprint);
   if (context.plan) searchParams.set("plan", context.plan);
@@ -3000,6 +3022,412 @@ function ContentCalendar({
   );
 }
 
+type ClientSetupClient = {
+  id: string;
+  name: string;
+  website: string | null;
+  industry: string | null;
+  briefs: Array<{
+    id: string;
+    rawBrief: string;
+    createdAt: Date;
+    blueprint: { id: string } | null;
+  }>;
+  blueprints: Array<{ id: string }>;
+};
+
+type ClientSetupBlueprint = {
+  id: string;
+  clientId: string;
+  clientSummary: string;
+  confidenceScore: number;
+  totalContentUnitsMin: number;
+  totalContentUnitsMax: number;
+  nextRecommendedAction: string;
+  client: {
+    id: string;
+    name: string;
+    industry: string | null;
+  };
+  selectedModules: Array<{ id: string }>;
+  platformRecommendations: Array<{ id: string; recommendation: string }>;
+  monthlyPlans: Array<{
+    id: string;
+    month: string;
+    status: string;
+    totalPlannedUnits: number;
+    plannedContentItems: Array<{ id: string }>;
+    platforms: Array<{ id: string }>;
+    managerTasks: Array<{ id: string }>;
+  }>;
+};
+
+function inferClientSetupStep({
+  requestedStep,
+  clients,
+  selectedClient,
+  selectedBrief,
+  blueprint,
+  monthlyPlan,
+}: {
+  requestedStep?: string;
+  clients: ClientSetupClient[];
+  selectedClient: ClientSetupClient | null;
+  selectedBrief: ClientSetupClient["briefs"][number] | null;
+  blueprint: ClientSetupBlueprint | null;
+  monthlyPlan: ClientSetupBlueprint["monthlyPlans"][number] | null;
+}): SetupStep {
+  if (setupSteps.includes(requestedStep as SetupStep)) return requestedStep as SetupStep;
+  if (clients.length === 0) return "create_client";
+  if (!selectedClient) return "create_client";
+  if (!selectedBrief) return "brief";
+  if (!blueprint) return "blueprint";
+  if (!monthlyPlan) return "monthly_plan";
+  return "brand";
+}
+
+function setupStepState(step: SetupStep, activeStep: SetupStep) {
+  const stepIndex = setupSteps.indexOf(step);
+  const activeIndex = setupSteps.indexOf(activeStep);
+
+  if (stepIndex < activeIndex) return "Готово";
+  if (stepIndex === activeIndex) return "Текущий шаг";
+  return "Далее";
+}
+
+function setupStepTone(step: SetupStep, activeStep: SetupStep): "neutral" | "teal" | "green" {
+  const stepIndex = setupSteps.indexOf(step);
+  const activeIndex = setupSteps.indexOf(activeStep);
+
+  if (stepIndex < activeIndex) return "green";
+  if (stepIndex === activeIndex) return "teal";
+  return "neutral";
+}
+
+function ClientSetupWizard({
+  clients,
+  selectedClient,
+  selectedBrief,
+  blueprint,
+  monthlyPlan,
+  requestedStep,
+  workspaceContext,
+}: {
+  clients: ClientSetupClient[];
+  selectedClient: ClientSetupClient | null;
+  selectedBrief: ClientSetupClient["briefs"][number] | null;
+  blueprint: ClientSetupBlueprint | null;
+  monthlyPlan: ClientSetupBlueprint["monthlyPlans"][number] | null;
+  requestedStep?: string;
+  workspaceContext: WorkspaceContext;
+}) {
+  const activeStep = inferClientSetupStep({
+    requestedStep,
+    clients,
+    selectedClient,
+    selectedBrief,
+    blueprint,
+    monthlyPlan,
+  });
+  const context = {
+    ...workspaceContext,
+    client: selectedClient?.id ?? workspaceContext.client,
+    blueprint: blueprint?.id ?? workspaceContext.blueprint,
+    plan: monthlyPlan?.id ?? workspaceContext.plan,
+  };
+  const recommendedPlatformsCount =
+    blueprint?.platformRecommendations.filter((platform) => platform.recommendation === "recommended").length ?? 0;
+
+  return (
+    <section id="client-setup" className="mx-auto max-w-6xl scroll-mt-24">
+      <WorkspaceViewHeader
+        eyebrow="Настройка клиента"
+        title="Пошаговая конфигурация"
+        description="Создайте клиента, сохраните бриф, соберите Blueprint, месячный план и подключите брендовый контекст без длинной простыни настроек."
+      />
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        {setupSteps.map((step, index) => (
+          <a
+            key={step}
+            href={clientSetupHref(step, context)}
+            className={`rounded-lg border p-3 transition hover:border-teal-300 hover:bg-teal-50/50 ${
+              step === activeStep ? "border-teal-300 bg-teal-50/70" : "border-stone-200 bg-white"
+            }`}
+          >
+            <p className="text-xs font-bold text-stone-400">{index + 1}</p>
+            <p className="mt-1 text-sm font-semibold text-stone-950">{setupStepLabels[step]}</p>
+            <div className="mt-2">
+              <StatusBadge tone={setupStepTone(step, activeStep)}>{setupStepState(step, activeStep)}</StatusBadge>
+            </div>
+          </a>
+        ))}
+      </div>
+
+      <section className={`${panelClass} mt-5 p-4 sm:p-5`}>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-stone-400">Клиент в работе</p>
+            <h3 className="mt-1 font-semibold text-stone-950">{selectedClient?.name ?? "Клиент не выбран"}</h3>
+            <p className="mt-1 text-sm leading-6 text-stone-500">
+              {selectedClient ? selectedClient.industry || "Сфера бизнеса не указана" : "Сначала создайте клиента или выберите существующего."}
+            </p>
+          </div>
+          <a href={clientSetupHref("create_client", context)} className={secondaryButtonClass}>Создать нового клиента</a>
+        </div>
+        {clients.length > 0 ? (
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {clients.slice(0, 6).map((client) => {
+              const clientBrief = client.briefs[0] ?? null;
+              const clientBlueprint = client.blueprints[0] ?? clientBrief?.blueprint ?? null;
+
+              return (
+                <a
+                  key={client.id}
+                  href={clientSetupHref("brief", { client: client.id, blueprint: clientBlueprint?.id })}
+                  className={`rounded-lg border p-3 transition hover:border-teal-300 hover:bg-teal-50/60 ${
+                    selectedClient?.id === client.id ? "border-teal-300 bg-teal-50/60" : "border-stone-200 bg-stone-50/60"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="min-w-0 truncate text-sm font-semibold text-stone-950">{client.name}</p>
+                    <StatusBadge tone={clientBlueprint ? "green" : clientBrief ? "amber" : "neutral"}>
+                      {clientBlueprint ? "Blueprint" : clientBrief ? "Бриф" : "Новый"}
+                    </StatusBadge>
+                  </div>
+                  <p className="mt-1 line-clamp-1 text-xs text-stone-500">{client.website || client.industry || "Нет дополнительных данных"}</p>
+                </a>
+              );
+            })}
+          </div>
+        ) : null}
+      </section>
+
+      <div className="mt-5">
+        {activeStep === "create_client" ? (
+          <section className={`${panelClass} p-5 sm:p-6`}>
+            <SectionTitle
+              eyebrow="Шаг 1"
+              title="Создать клиента"
+              description="Добавьте базовые данные клиента. После создания вы перейдёте к брифу."
+            />
+            <form action={createClient} className="mt-5 grid max-w-2xl gap-3">
+              <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
+                Название
+                <input name="name" required className={inputClass} placeholder="Клиника Север" />
+              </label>
+              <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
+                Сайт
+                <input name="website" className={inputClass} placeholder="https://example.com" />
+              </label>
+              <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
+                Сфера бизнеса
+                <input name="industry" className={inputClass} placeholder="Медицина" />
+              </label>
+              <PendingSubmitButton pendingLabel="Создаём..." className={primaryButtonClass}>
+                Создать клиента
+              </PendingSubmitButton>
+            </form>
+            <p className="mt-4 text-xs leading-5 text-stone-500">После создания клиента вы перейдёте к брифу.</p>
+          </section>
+        ) : null}
+
+        {activeStep === "brief" ? (
+          <section className={`${panelClass} p-5 sm:p-6`}>
+            <SectionTitle
+              eyebrow="Шаг 2"
+              title="Добавить бриф"
+              description="Бриф даёт AI исходные данные для сборки Blueprint — стратегической конфигурации клиента."
+            />
+            {!selectedClient ? (
+              <div className="mt-5"><EmptyState>Сначала создайте клиента.</EmptyState></div>
+            ) : selectedBrief ? (
+              <div className="mt-5 grid gap-4">
+                <article className="rounded-lg border border-stone-200 bg-stone-50/70 p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-xs font-bold text-teal-700">{selectedClient.name}</p>
+                      <p className="mt-2 line-clamp-4 text-sm leading-6 text-stone-600">{selectedBrief.rawBrief}</p>
+                    </div>
+                    <StatusBadge tone="green">Бриф сохранён</StatusBadge>
+                  </div>
+                  <details className="mt-4 rounded-md border border-stone-200 bg-white">
+                    <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-stone-700">Редактировать бриф</summary>
+                    <form action={updateClientBrief} className="grid gap-3 border-t border-stone-200 p-3">
+                      <input type="hidden" name="briefId" value={selectedBrief.id} />
+                      <textarea name="rawBrief" required rows={7} defaultValue={selectedBrief.rawBrief} className={`${inputClass} resize-y`} />
+                      <p className="text-xs leading-5 text-stone-500">Если у брифа уже есть Blueprint, он будет удалён и его нужно будет сгенерировать заново.</p>
+                      <PendingSubmitButton pendingLabel="Сохраняем..." className={secondaryButtonClass}>
+                        Сохранить изменения
+                      </PendingSubmitButton>
+                    </form>
+                  </details>
+                </article>
+                <a href={clientSetupHref("blueprint", { client: selectedClient.id, blueprint: blueprint?.id ?? selectedBrief.blueprint?.id })} className={primaryButtonClass}>
+                  Перейти к Blueprint
+                </a>
+              </div>
+            ) : (
+              <form action={addClientBrief} className="mt-5 grid gap-3">
+                <input type="hidden" name="clientId" value={selectedClient.id} />
+                <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
+                  Бриф клиента
+                  <textarea
+                    name="rawBrief"
+                    required
+                    rows={9}
+                    className={`${inputClass} resize-y`}
+                    placeholder="Цели, аудитория, текущие площадки, ограничения, риски бренда, ресурсы команды..."
+                  />
+                </label>
+                <PendingSubmitButton pendingLabel="Сохраняем..." className={primaryButtonClass}>
+                  Сохранить бриф
+                </PendingSubmitButton>
+                <p className="text-xs leading-5 text-stone-500">Добавьте бриф, чтобы AI смог собрать Blueprint.</p>
+              </form>
+            )}
+          </section>
+        ) : null}
+
+        {activeStep === "blueprint" ? (
+          <section className={`${panelClass} p-5 sm:p-6`}>
+            <SectionTitle
+              eyebrow="Шаг 3"
+              title="Сгенерировать Blueprint"
+              description="Blueprint появится после генерации на основе брифа и станет исполнимой конфигурацией клиента."
+            />
+            {!selectedClient ? (
+              <div className="mt-5"><EmptyState>Сначала создайте клиента.</EmptyState></div>
+            ) : !selectedBrief ? (
+              <div className="mt-5"><EmptyState>Добавьте бриф, чтобы AI смог собрать Blueprint.</EmptyState></div>
+            ) : blueprint ? (
+              <div className="mt-5 grid gap-4">
+                <article className="rounded-lg border border-teal-200 bg-teal-50/70 p-4">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <StatusBadge tone="green">Blueprint готов</StatusBadge>
+                      <h3 className="mt-3 text-xl font-semibold leading-8 text-stone-950">{blueprint.clientSummary}</h3>
+                      <p className="mt-2 text-sm leading-6 text-stone-600">{blueprint.client.industry || selectedClient.industry || "Сфера бизнеса не указана"}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 sm:min-w-80">
+                      <MetricCard label="Уверенность" value={`${blueprint.confidenceScore}%`} tone="teal" />
+                      <MetricCard label="Материалов/мес" value={`${blueprint.totalContentUnitsMin}-${blueprint.totalContentUnitsMax}`} />
+                      <MetricCard label="Модулей" value={blueprint.selectedModules.length} />
+                      <MetricCard label="Площадок" value={recommendedPlatformsCount} tone="amber" />
+                    </div>
+                  </div>
+                </article>
+                <a href={clientSetupHref("monthly_plan", { client: selectedClient.id, blueprint: blueprint.id, plan: monthlyPlan?.id })} className={primaryButtonClass}>
+                  Перейти к месячному плану
+                </a>
+              </div>
+            ) : (
+              <div className="mt-5 grid gap-4">
+                <article className="rounded-lg border border-stone-200 bg-stone-50/70 p-4">
+                  <p className="text-sm font-semibold text-stone-950">{selectedClient.name}</p>
+                  <p className="mt-2 line-clamp-4 text-sm leading-6 text-stone-600">{selectedBrief.rawBrief}</p>
+                </article>
+                <form action={generateBlueprint}>
+                  <input type="hidden" name="briefId" value={selectedBrief.id} />
+                  <PendingSubmitButton pendingLabel="Генерируем Blueprint..." className={primaryButtonClass}>
+                    Сгенерировать Blueprint
+                  </PendingSubmitButton>
+                </form>
+                <p className="text-xs leading-5 text-stone-500">Blueprint появится после генерации на основе брифа.</p>
+              </div>
+            )}
+          </section>
+        ) : null}
+
+        {activeStep === "monthly_plan" ? (
+          <section className={`${panelClass} p-5 sm:p-6`}>
+            <SectionTitle
+              eyebrow="Шаг 4"
+              title="Сгенерировать месячный план"
+              description="Месячный план превращает Blueprint в календарь материалов, площадок, задач и правил согласования."
+            />
+            {!blueprint ? (
+              <div className="mt-5"><EmptyState>Blueprint появится после генерации на основе брифа.</EmptyState></div>
+            ) : monthlyPlan ? (
+              <div className="mt-5 grid gap-4">
+                <article className="rounded-lg border border-teal-200 bg-teal-50/70 p-4">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <StatusBadge tone="green">{formatStatus(monthlyPlan.status)}</StatusBadge>
+                      <h3 className="mt-3 text-xl font-semibold text-stone-950">{monthlyPlan.month}</h3>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 sm:min-w-80">
+                      <MetricCard label="Материалов" value={monthlyPlan.plannedContentItems.length} tone="teal" />
+                      <MetricCard label="Площадок" value={monthlyPlan.platforms.length} />
+                      <MetricCard label="Задач" value={monthlyPlan.managerTasks.length} tone="amber" />
+                      <MetricCard label="План всего" value={monthlyPlan.totalPlannedUnits} />
+                    </div>
+                  </div>
+                </article>
+                <a href={clientSetupHref("brand", { client: blueprint.clientId, blueprint: blueprint.id, plan: monthlyPlan.id })} className={primaryButtonClass}>
+                  Перейти к бренду
+                </a>
+              </div>
+            ) : (
+              <div className="mt-5 grid gap-4">
+                <article className="rounded-lg border border-stone-200 bg-stone-50/70 p-4">
+                  <p className="text-sm font-semibold text-stone-950">{blueprint.client.name}</p>
+                  <p className="mt-2 line-clamp-3 text-sm leading-6 text-stone-600">{blueprint.clientSummary}</p>
+                </article>
+                <form action={generateMonthlyPlan} className="grid max-w-sm gap-3">
+                  <input type="hidden" name="blueprintId" value={blueprint.id} />
+                  <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
+                    Месяц
+                    <input name="month" readOnly value={currentMonth()} className={inputClass} />
+                  </label>
+                  <PendingSubmitButton pendingLabel="Генерируем месячный план..." disabled={blueprint.nextRecommendedAction === "request_more_brief_data"} className={primaryButtonClass}>
+                    Сгенерировать месячный план
+                  </PendingSubmitButton>
+                </form>
+                {blueprint.nextRecommendedAction === "request_more_brief_data" ? (
+                  <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-900">
+                    Месячный план нельзя сгенерировать, пока не заполнены недостающие данные брифа.
+                  </p>
+                ) : (
+                  <p className="text-xs leading-5 text-stone-500">Месячный план появится после генерации Blueprint.</p>
+                )}
+              </div>
+            )}
+          </section>
+        ) : null}
+
+        {activeStep === "brand" ? (
+          <section className={`${panelClass} p-5 sm:p-6`}>
+            <SectionTitle
+              eyebrow="Шаг 5"
+              title="Библиотека бренда"
+              description="Заполните профиль бренда и загрузите материалы, чтобы AI точнее готовил тексты, ТЗ и визуалы."
+            />
+            {!selectedClient ? (
+              <div className="mt-5"><EmptyState>Сначала создайте клиента.</EmptyState></div>
+            ) : (
+              <div className="mt-5 grid gap-4">
+                <article className="rounded-lg border border-stone-200 bg-stone-50/70 p-4">
+                  <p className="font-semibold text-stone-950">{selectedClient.name}</p>
+                  <p className="mt-2 text-sm leading-6 text-stone-500">
+                    Библиотека бренда хранит тональность, ограничения, брендбук, старые посты, фото, презентации и другие материалы для AI-контекста.
+                  </p>
+                </article>
+                <a
+                  href={workspaceHref("brand_assets", { client: selectedClient.id, blueprint: blueprint?.id, plan: monthlyPlan?.id })}
+                  className={primaryButtonClass}
+                >
+                  Открыть библиотеку бренда
+                </a>
+              </div>
+            )}
+          </section>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 function currentMonth() {
   return new Date().toISOString().slice(0, 7);
 }
@@ -3112,11 +3540,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
       : null,
   ]);
 
+  const fallbackClient = params.client
+    ? clients.find((client) => client.id === params.client)
+    : clients[0];
   const latestBlueprint =
     selectedBlueprint ??
-    (clients[0]?.blueprints[0]
+    (fallbackClient?.blueprints[0]
       ? await prisma.clientPresenceBlueprint.findUnique({
-          where: { id: clients[0].blueprints[0].id },
+          where: { id: fallbackClient.blueprints[0].id },
           include: {
             client: true,
             brief: true,
@@ -3231,10 +3662,19 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
     ).length ?? 0;
   const brandProfileReady = Boolean(selectedBrandClient?.brandProfile);
   const brandAssetsCount = selectedBrandClient?.brandAssets.length ?? 0;
+  const selectedSetupClient =
+    clients.find((client) => client.id === (params.client ?? latestBlueprint?.clientId)) ??
+    (latestBlueprint ? clients.find((client) => client.id === latestBlueprint.clientId) : null) ??
+    clients[0] ??
+    null;
+  const selectedSetupBrief =
+    selectedSetupClient?.briefs.find((brief) => brief.id === latestBlueprint?.brief.id) ??
+    selectedSetupClient?.briefs[0] ??
+    null;
   const workspaceContext = {
     blueprint: latestBlueprint?.id ?? params.blueprint,
     plan: selectedMonthlyPlan?.id ?? params.plan,
-    client: params.client ?? latestBlueprint?.clientId,
+    client: params.client ?? latestBlueprint?.clientId ?? selectedSetupClient?.id,
   };
   const workspaceLinks = Object.fromEntries(
     workspaceViews.map((view) => [view, workspaceHref(view, workspaceContext)]),
@@ -3664,536 +4104,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
             ) : null}
 
             {activeView === "client_setup" ? (
-            <section id="clients" className="scroll-mt-24">
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Настройка клиента</p>
-                <h2 className="mt-1 text-2xl font-semibold text-stone-950">Операционная конфигурация клиента</h2>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
-                  Здесь находятся настройки подключения и подробные операционные данные. Ежедневная работа остаётся в командном центре и контент-календаре выше.
-                </p>
-              </div>
-              <div className="mt-5 grid items-start gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
-              <aside className="grid min-w-0 gap-5">
-                <div>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-stone-400">Подключение и бриф</p>
-                  <p className="mt-1 text-sm leading-6 text-stone-500">Дополнительные инструменты для добавления клиента и обновления брифа.</p>
-                </div>
-                <section className={`${panelClass} p-5`}>
-                  <SectionTitle eyebrow="Новый клиент" title="Создать клиента" />
-                  <form action={createClient} className="mt-5 grid gap-3">
-                    <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
-                      Название
-                      <input name="name" required className={inputClass} placeholder="Клиника Север" />
-                    </label>
-                    <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
-                      Сайт
-                      <input name="website" className={inputClass} placeholder="https://example.com" />
-                    </label>
-                    <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
-                      Сфера бизнеса
-                      <input name="industry" className={inputClass} placeholder="Медицина" />
-                    </label>
-                    <PendingSubmitButton pendingLabel="Создаём..." className={primaryButtonClass}>
-                      Создать клиента
-                    </PendingSubmitButton>
-                  </form>
-                </section>
-
-                <section className={`${panelClass} p-5`}>
-                  <SectionTitle eyebrow="Исходные данные" title="Добавить бриф" />
-                  {clients.length > 0 ? (
-                    <form action={addClientBrief} className="mt-5 grid gap-3">
-                      <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
-                        Клиент
-                        <select name="clientId" required className={inputClass}>
-                          {clients.map((client) => (
-                            <option key={client.id} value={client.id}>
-                              {client.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
-                        Бриф клиента
-                        <textarea
-                          name="rawBrief"
-                          required
-                          rows={7}
-                          className={`${inputClass} resize-y`}
-                          placeholder="Цели, аудитория, текущие площадки, ограничения, риски бренда, ресурсы команды..."
-                        />
-                      </label>
-                      <PendingSubmitButton pendingLabel="Сохраняем..." className="rounded-md bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:cursor-wait disabled:bg-teal-400">
-                        Сохранить бриф
-                      </PendingSubmitButton>
-                    </form>
-                  ) : (
-                    <div className="mt-5">
-                      <EmptyState>Сначала создайте клиента, затем добавьте бриф.</EmptyState>
-                    </div>
-                  )}
-                </section>
-
-                <section className={`${panelClass} p-5`}>
-                  <SectionTitle eyebrow="Очередь Blueprint" title="Сохранённые брифы" />
-                  <div className="mt-5 grid gap-3">
-                    {clients.flatMap((client) =>
-                      client.briefs.map((brief) => (
-                        <article key={brief.id} className="rounded-lg border border-stone-200 bg-stone-50/60 p-4">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="truncate font-semibold text-stone-950">{client.name}</p>
-                              <p className="mt-1 line-clamp-3 text-xs leading-5 text-stone-500">{brief.rawBrief}</p>
-                            </div>
-                            <StatusBadge tone={brief.blueprint ? "green" : "amber"}>
-                              {brief.blueprint ? "Сгенерирован" : "Готов"}
-                            </StatusBadge>
-                          </div>
-                          <details className="mt-3 border-t border-stone-200 pt-3">
-                            <summary className="cursor-pointer text-xs font-bold text-stone-600">Редактировать бриф</summary>
-                            <form action={updateClientBrief} className="mt-3 grid gap-3">
-                              <input type="hidden" name="briefId" value={brief.id} />
-                              <textarea name="rawBrief" required rows={6} defaultValue={brief.rawBrief} className={`${inputClass} resize-y text-xs`} />
-                              {brief.blueprint ? (
-                                <p className="text-xs leading-5 text-stone-500">
-                                  После сохранения текущий Blueprint будет удалён, чтобы его можно было сгенерировать заново из обновлённого брифа.
-                                </p>
-                              ) : null}
-                              <PendingSubmitButton pendingLabel="Сохраняем..." className={secondaryButtonClass}>
-                                Сохранить изменения
-                              </PendingSubmitButton>
-                            </form>
-                          </details>
-                          <form action={generateBlueprint} className="mt-3">
-                            <input type="hidden" name="briefId" value={brief.id} />
-                            <PendingSubmitButton
-                              pendingLabel={brief.blueprint ? "Открываем Blueprint..." : "Генерируем Blueprint..."}
-                              className="w-full rounded-md bg-amber-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-700 disabled:cursor-wait disabled:bg-amber-300"
-                            >
-                              {brief.blueprint ? "Открыть Blueprint" : "Сгенерировать Blueprint"}
-                            </PendingSubmitButton>
-                          </form>
-                        </article>
-                      )),
-                    )}
-                    {clients.every((client) => client.briefs.length === 0) ? (
-                      <EmptyState>Сохранённых брифов пока нет.</EmptyState>
-                    ) : null}
-                  </div>
-                </section>
-              </aside>
-
-              <div className="min-w-0 space-y-6">
-                <section id="blueprints" className={`${panelClass} scroll-mt-24 p-5 sm:p-6`}>
-                  <SectionTitle
-                    eyebrow="Blueprint клиента"
-                    title="Операционная система клиента"
-                    description="Blueprint — стратегическая конфигурация клиента, которая превращает исходные данные в исполнимую систему."
-                  />
-                  {latestBlueprint ? (
-                    <div className="mt-6 grid gap-6">
-                      <div className="grid gap-5 border-b border-stone-200 pb-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-                        <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <StatusBadge tone="green">Blueprint активен</StatusBadge>
-                            <StatusBadge>{latestBlueprint.client.industry || "Сфера бизнеса не указана"}</StatusBadge>
-                          </div>
-                          <p className="mt-5 text-sm font-semibold text-teal-700">{latestBlueprint.client.name}</p>
-                          <h3 className="mt-2 max-w-4xl text-2xl font-semibold leading-9 text-stone-950">
-                            {latestBlueprint.clientSummary}
-                          </h3>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <MetricCard label="Уверенность" value={`${latestBlueprint.confidenceScore}%`} tone="teal" />
-                          <MetricCard label="Материалов в месяц" value={`${latestBlueprint.totalContentUnitsMin}-${latestBlueprint.totalContentUnitsMax}`} />
-                          <MetricCard label="Согласование" value={latestBlueprint.approvalMode} />
-                          <MetricCard label="Внимание менеджера" value={latestBlueprint.managerAttentionLevel} tone="amber" />
-                        </div>
-                      </div>
-
-                      <div className="rounded-lg border border-teal-200 bg-teal-50/70 p-4">
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                          <div>
-                            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Следующий операционный слой</p>
-                            <h4 className="mt-1 font-semibold text-stone-950">Месячный операционный план</h4>
-                            <p className="mt-1 max-w-3xl text-sm leading-6 text-stone-600">
-                              Плановый слой для модулей, площадок, ритма публикаций, согласований, интеграций и задач. Это ещё не генерация финального контента.
-                            </p>
-                          </div>
-                          {currentMonthlyPlan ? (
-                            <a href={`/?blueprint=${latestBlueprint.id}&plan=${currentMonthlyPlan.id}#monthly-plan`} className={secondaryButtonClass}>
-                              Открыть текущий план
-                            </a>
-                          ) : (
-                            <form action={generateMonthlyPlan}>
-                              <input type="hidden" name="blueprintId" value={latestBlueprint.id} />
-                              <PendingSubmitButton pendingLabel="Генерируем месячный план..." disabled={latestBlueprint.nextRecommendedAction === "request_more_brief_data"} className={primaryButtonClass}>
-                                Сгенерировать месячный план
-                              </PendingSubmitButton>
-                            </form>
-                          )}
-                        </div>
-                        {currentMonthlyPlan ? (
-                          <p className="mt-3 text-xs font-semibold text-teal-800">
-                            Месячный операционный план за {currentMonthlyPlan.month} уже существует. Текущий план показан ниже.
-                          </p>
-                        ) : null}
-                        {latestBlueprint.nextRecommendedAction === "request_more_brief_data" ? (
-                          <p className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-900">
-                            Месячный план нельзя сгенерировать, пока не заполнены недостающие данные брифа.
-                          </p>
-                        ) : null}
-                      </div>
-
-                      <div className="grid gap-4 lg:grid-cols-3">
-                        <div className="lg:col-span-2">
-                          <h4 className="text-sm font-semibold text-stone-950">Бизнес-цели</h4>
-                          <div className="mt-3">
-                            <StringList items={latestBlueprint.businessGoals as string[]} emptyText="Бизнес-цели пока не указаны." />
-                          </div>
-                        </div>
-                        <div className="rounded-lg border border-stone-200 bg-stone-50 p-4">
-                          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-stone-500">Следующий шаг</p>
-                          <p className="mt-2 text-sm font-semibold leading-6 text-stone-900">{formatStatus(latestBlueprint.nextRecommendedAction)}</p>
-                        </div>
-                      </div>
-
-                      <div className="grid gap-4 lg:grid-cols-2">
-                        <div>
-                          <h4 className="text-sm font-semibold text-stone-950">Недостающие данные брифа</h4>
-                          <div className="mt-3">
-                            <StringList items={latestBlueprint.missingBriefFields as string[]} emptyText="В брифе достаточно данных." tone="rose" />
-                          </div>
-                        </div>
-                        <div>
-                          <h4 className="text-sm font-semibold text-stone-950">Допущения</h4>
-                          <div className="mt-3">
-                            <StringList items={latestBlueprint.assumptions as string[]} emptyText="Допущений нет." tone="amber" />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div>
-                        <h4 className="text-sm font-semibold text-stone-950">Рекомендации по площадкам</h4>
-                        <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                          {latestBlueprint.platformRecommendations.map((platform) => (
-                            <article key={platform.id} className="rounded-lg border border-stone-200 bg-white p-4">
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <h5 className="font-semibold text-stone-950">{platform.platformName}</h5>
-                                  <p className="mt-1 text-xs font-medium text-stone-500">{platform.suggestedFrequency}</p>
-                                </div>
-                                <StatusBadge tone={platform.recommendation === "recommended" ? "green" : "rose"}>
-                                  {platform.recommendation === "recommended" ? "Рекомендовано" : "Не рекомендовано"}
-                                </StatusBadge>
-                              </div>
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                <StatusBadge tone="teal">{platform.platformType}</StatusBadge>
-                                <StatusBadge tone="amber">{formatStatus(platform.priority)}</StatusBadge>
-                                <StatusBadge>{formatStatus(platform.automationStatus)}</StatusBadge>
-                              </div>
-                              <p className="mt-3 text-sm leading-6 text-stone-600">{platform.rationale}</p>
-                              <details className="mt-3 border-t border-stone-100 pt-3">
-                                <summary className="cursor-pointer text-xs font-bold text-stone-500">Доступы и форматы</summary>
-                                <div className="mt-2 grid gap-1 text-xs leading-5 text-stone-500">
-                                  <p><span className="font-semibold text-stone-700">Учётные данные:</span> {Array.isArray(platform.requiredCredentials) ? platform.requiredCredentials.join(", ") || "Не нужны" : "Не нужны"}</p>
-                                  <p><span className="font-semibold text-stone-700">Права доступа:</span> {Array.isArray(platform.permissionsNeeded) ? platform.permissionsNeeded.join(", ") || "Не нужны" : "Не нужны"}</p>
-                                  <p><span className="font-semibold text-stone-700">Форматы:</span> {Array.isArray(platform.contentFormats) ? platform.contentFormats.join(", ") || "Не указаны" : "Не указаны"}</p>
-                                </div>
-                              </details>
-                            </article>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <h4 className="text-sm font-semibold text-stone-950">Выбранные модули</h4>
-                        <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                          {latestBlueprint.selectedModules.map((module) => (
-                            <article key={module.id} className="rounded-lg border border-stone-200 bg-white p-4">
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <h5 className="font-semibold text-stone-950">{module.name}</h5>
-                                  <p className="mt-1 text-xs font-bold text-teal-700">{module.moduleType}</p>
-                                </div>
-                                <StatusBadge tone="amber">{formatStatus(module.priority)}</StatusBadge>
-                              </div>
-                              <p className="mt-3 text-sm leading-6 text-stone-600">{module.purpose}</p>
-                              <div className="mt-3">
-                                <JsonDetails title="Объём модуля" value={module.monthlyContentScope} />
-                              </div>
-                            </article>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="grid gap-4 lg:grid-cols-2">
-                        <div>
-                          <h4 className="text-sm font-semibold text-stone-950">План автоматизации</h4>
-                          <div className="mt-3 grid gap-3">
-                            {latestBlueprint.automationPlans.map((automation) => (
-                              <article key={automation.id} className="rounded-lg border border-stone-200 bg-white p-4 text-sm">
-                                <h5 className="font-semibold text-stone-950">{automation.name}</h5>
-                                <p className="mt-2 leading-6 text-stone-500">{automation.trigger}</p>
-                                <p className="mt-2 leading-6 text-stone-700">{automation.action}</p>
-                                <p className="mt-2 text-xs leading-5 text-stone-400">{automation.humanCheckpoint}</p>
-                              </article>
-                            ))}
-                          </div>
-                        </div>
-                        <div>
-                          <h4 className="text-sm font-semibold text-stone-950">Правила управления рисками</h4>
-                          <div className="mt-3 grid gap-3">
-                            {latestBlueprint.riskRules.map((rule) => (
-                              <article key={rule.id} className="rounded-lg border border-stone-200 bg-white p-4 text-sm">
-                                <div className="flex items-start justify-between gap-3">
-                                  <h5 className="font-semibold text-stone-950">{rule.ruleName}</h5>
-                                  <StatusBadge tone="rose">{formatStatus(rule.severity)}</StatusBadge>
-                                </div>
-                                <p className="mt-2 leading-6 text-stone-500">{rule.riskDescription}</p>
-                                <p className="mt-2 leading-6 text-stone-700">{rule.preventionAction}</p>
-                              </article>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="grid gap-3 lg:grid-cols-2">
-                        <JsonDetails title="Рекомендуемый объём контента на месяц" value={latestBlueprint.recommendedMonthlyContentScope} />
-                        <JsonDetails title="Частота публикаций" value={latestBlueprint.publishingFrequency} />
-                        <JsonDetails title="Требования к интеграциям" value={latestBlueprint.integrationRequirements} />
-                        <JsonDetails title="Политика проверки человеком" value={latestBlueprint.humanReviewPolicy} />
-                        <JsonDetails title="Нерекомендованные площадки" value={latestBlueprint.notRecommendedPlatforms} />
-                        <JsonDetails title="Исходный структурированный Blueprint" value={latestBlueprint.rawBlueprintJson} />
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="mt-5">
-                      <EmptyState>Сгенерируйте Blueprint из сохранённого брифа, чтобы открыть рабочее пространство.</EmptyState>
-                    </div>
-                  )}
-                </section>
-
-                {selectedMonthlyPlan ? (
-                  <section id="monthly-plan" className={`${panelClass} scroll-mt-24 p-5 sm:p-6`}>
-                    <div className="flex flex-col gap-4 border-b border-stone-200 pb-5 lg:flex-row lg:items-start lg:justify-between">
-                      <div>
-                        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Месячный операционный план</p>
-                        <h2 className="mt-1 text-2xl font-semibold text-stone-950">{selectedMonthlyPlan.month}</h2>
-                        <p className="mt-3 max-w-4xl text-sm leading-6 text-stone-500">{selectedMonthlyPlan.summary}</p>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <StatusBadge tone="green">{formatStatus(selectedMonthlyPlan.status)}</StatusBadge>
-                        <StatusBadge tone="teal">{selectedMonthlyPlan.totalPlannedUnits} материалов в плане</StatusBadge>
-                      </div>
-                    </div>
-
-                    <div className="mt-5 grid gap-3 lg:grid-cols-3">
-                      <div className="rounded-lg border border-stone-200 bg-stone-50 p-4">
-                        <p className="text-xs font-bold text-stone-700">Стратегия согласования</p>
-                        <p className="mt-2 text-sm leading-6 text-stone-500">{selectedMonthlyPlan.approvalStrategy}</p>
-                      </div>
-                      <div className="rounded-lg border border-stone-200 bg-stone-50 p-4">
-                        <p className="text-xs font-bold text-stone-700">Стратегия автопубликации</p>
-                        <p className="mt-2 text-sm leading-6 text-stone-500">{selectedMonthlyPlan.autopublishStrategy}</p>
-                      </div>
-                      <div className="rounded-lg border border-rose-200 bg-rose-50 p-4">
-                        <p className="text-xs font-bold text-rose-800">Сводка рисков</p>
-                        <p className="mt-2 text-sm leading-6 text-rose-700">{selectedMonthlyPlan.riskSummary}</p>
-                      </div>
-                    </div>
-
-                    <div className="mt-6 grid gap-4 lg:grid-cols-2">
-                      <div>
-                        <h3 className="text-sm font-semibold text-stone-950">Активные модули</h3>
-                        <div className="mt-3 grid gap-3">
-                          {selectedMonthlyPlan.modules.map((module) => (
-                            <article key={module.id} className="rounded-lg border border-stone-200 p-4 text-sm">
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <p className="font-semibold text-stone-950">{module.name}</p>
-                                  <p className="mt-1 text-xs font-bold text-teal-700">{module.moduleType}</p>
-                                </div>
-                                <StatusBadge tone="amber">{module.plannedUnitsMin}-{module.plannedUnitsMax} материалов</StatusBadge>
-                              </div>
-                              <p className="mt-2 leading-6 text-stone-500">{module.rationale}</p>
-                            </article>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <h3 className="text-sm font-semibold text-stone-950">Выбранные площадки</h3>
-                        <div className="mt-3 grid gap-3">
-                          {selectedMonthlyPlan.platforms.map((platform) => (
-                            <article key={platform.id} className="rounded-lg border border-stone-200 p-4 text-sm">
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <p className="font-semibold text-stone-950">{platform.platformName}</p>
-                                  <p className="mt-1 text-xs font-bold text-teal-700">{platform.platformType} &middot; {formatStatus(platform.automationStatus)}</p>
-                                </div>
-                                {platform.requiresIntegrationBeforeLaunch ? <StatusBadge tone="rose">Нужна интеграция</StatusBadge> : <StatusBadge tone="green">Готово</StatusBadge>}
-                              </div>
-                              <p className="mt-2 leading-6 text-stone-500">{platform.plannedCadence}</p>
-                              <p className="mt-2 text-xs text-stone-400">{Array.isArray(platform.contentFormats) ? platform.contentFormats.join(", ") : ""}</p>
-                            </article>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-7">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                        <div>
-                          <h3 className="text-sm font-semibold text-stone-950">Обзор кампании по неделям</h3>
-                          <p className="mt-1 text-sm leading-6 text-stone-500">
-                            Стратегическая последовательность календаря: темы, роли площадок и задача каждого материала.
-                          </p>
-                        </div>
-                        <StatusBadge tone="teal">{calendarGroups.length} групп в календаре</StatusBadge>
-                      </div>
-                      <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                        {calendarGroups.map((group) => (
-                          <article key={group.label} className="rounded-lg border border-stone-200 bg-stone-50/70 p-4">
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                              <div>
-                                <p className="font-semibold text-stone-950">{group.label}</p>
-                                <p className="mt-1 text-xs leading-5 text-stone-500">
-                                  {Array.from(new Set(group.items.map((item) => item.campaignTheme).filter(Boolean))).join(", ") || "Сквозная тема для нескольких площадок"}
-                                </p>
-                              </div>
-                              <StatusBadge>{group.items.length} материалов</StatusBadge>
-                            </div>
-                            <div className="mt-3 flex flex-wrap gap-1.5 border-y border-stone-200 py-2">
-                              {Array.from(new Set(group.items.map((item) => item.platformName))).map((platform) => (
-                                <StatusBadge key={platform} tone="teal">{platform}</StatusBadge>
-                              ))}
-                            </div>
-                            <div className="mt-3 grid gap-3">
-                              {group.items.map((item) => (
-                                <div key={item.id} className="rounded-md border border-stone-200 bg-white p-3">
-                                  <div className="flex flex-wrap gap-1.5">
-                                    <StatusBadge tone="teal">{item.platformName}</StatusBadge>
-                                    <StatusBadge>{item.format}</StatusBadge>
-                                    {item.campaignTheme ? <StatusBadge tone="amber">{item.campaignTheme}</StatusBadge> : null}
-                                  </div>
-                                  <p className="mt-2 text-sm font-semibold leading-5 text-stone-900">{item.topic}</p>
-                                  <div className="mt-2 grid gap-1 text-xs leading-5 text-stone-500">
-                                    {item.channelRole ? <p><span className="font-bold text-stone-700">Роль:</span> {item.channelRole}</p> : null}
-                                    {item.sequenceReason ? <p className="line-clamp-2"><span className="font-bold text-stone-700">Последовательность:</span> {item.sequenceReason}</p> : null}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </article>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="mt-7">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                        <div>
-                          <h3 className="text-sm font-semibold text-stone-950">Запланированные материалы</h3>
-                          <p className="mt-1 text-sm leading-6 text-stone-500">Материалы для разных площадок готовы к последовательной генерации текстов публикаций.</p>
-                        </div>
-                        <StatusBadge>{selectedMonthlyPlan.plannedContentItems.length} материалов</StatusBadge>
-                      </div>
-                      <div className="mt-3 overflow-x-auto rounded-lg border border-stone-200">
-                        <table className="min-w-[1180px] border-collapse text-left text-sm">
-                          <thead className="bg-stone-50 text-[10px] uppercase tracking-[0.1em] text-stone-500">
-                            <tr>
-                              <th className="px-3 py-3">Ритм</th>
-                              <th className="px-3 py-3">Площадка</th>
-                              <th className="px-3 py-3">Формат</th>
-                              <th className="px-3 py-3">Тема и материал</th>
-                              <th className="px-3 py-3">Роль площадки</th>
-                              <th className="px-3 py-3">Цель</th>
-                              <th className="px-3 py-3">Проверка</th>
-                              <th className="px-3 py-3">Текст публикации</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-stone-200 bg-white">
-                            {selectedMonthlyPlan.plannedContentItems.map((item) => (
-                              <tr key={item.id} className="align-top transition hover:bg-stone-50/70">
-                                <td className="px-3 py-3 text-stone-700">
-                                  <p className="font-semibold">{item.plannedDate}</p>
-                                  {item.week ? <p className="mt-1 text-xs text-stone-400">{item.week}</p> : null}
-                                </td>
-                                <td className="px-3 py-3">
-                                  <p className="font-semibold text-stone-900">{item.platformName}</p>
-                                  <p className="mt-1 text-xs text-stone-400">{item.moduleType}</p>
-                                </td>
-                                <td className="px-3 py-3 text-stone-600">{item.format}</td>
-                                <td className="max-w-72 px-3 py-3">
-                                  {item.campaignTheme ? <p className="text-xs font-bold text-teal-700">{item.campaignTheme}</p> : null}
-                                  <p className="mt-1 font-semibold text-stone-900">{item.topic}</p>
-                                  {item.sequenceReason ? <p className="mt-1 text-xs leading-5 text-stone-400">{item.sequenceReason}</p> : null}
-                                </td>
-                                <td className="max-w-52 px-3 py-3 text-stone-600">{item.channelRole || "-"}</td>
-                                <td className="max-w-52 px-3 py-3 text-stone-500">{item.goal}</td>
-                                <td className="px-3 py-3">
-                                  <div className="grid gap-1">
-                                    <StatusBadge tone={item.approvalRequired ? "amber" : "green"}>{item.approvalRequired ? "Нужно согласование" : "Без согласования"}</StatusBadge>
-                                    <StatusBadge tone={item.autopublishEligible ? "green" : "neutral"}>{item.autopublishEligible ? "Автопубликация" : "Вручную"}</StatusBadge>
-                                  </div>
-                                </td>
-                                <td className="px-3 py-3">
-                                  {item.contentDraft ? (
-                                    <div className="grid gap-2">
-                                      <StatusBadge tone={materialTextStatusTone(item.contentDraft)}>{formatMaterialTextStatus(item.contentDraft)}</StatusBadge>
-                                      <a href={workspaceLinks.drafts} className="inline-flex rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-900 transition hover:bg-teal-100">
-                                        Открыть материал
-                                      </a>
-                                      <form action={regenerateContentDraftForItem}>
-                                        <input type="hidden" name="plannedContentItemId" value={item.id} />
-                                        <PendingSubmitButton pendingLabel="Обновляем текст..." className="whitespace-nowrap text-xs font-bold text-stone-600 transition hover:text-stone-950">
-                                          Перегенерировать текст
-                                        </PendingSubmitButton>
-                                      </form>
-                                    </div>
-                                  ) : (
-                                    <form action={generateContentDraftForItem}>
-                                      <input type="hidden" name="plannedContentItemId" value={item.id} />
-                                      <PendingSubmitButton pendingLabel="Генерируем текст..." className="whitespace-nowrap rounded-md bg-stone-950 px-3 py-2 text-xs font-semibold text-white transition hover:bg-stone-800 disabled:cursor-wait disabled:bg-stone-400">
-                                        Сгенерировать текст
-                                      </PendingSubmitButton>
-                                    </form>
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-
-                    <div className="mt-7">
-                      <h3 className="text-sm font-semibold text-stone-950">Задачи менеджера</h3>
-                      <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                        {selectedMonthlyPlan.managerTasks.map((task) => (
-                          <article key={task.id} className="rounded-lg border border-stone-200 bg-white p-4 text-sm">
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <p className="font-semibold text-stone-950">{task.title}</p>
-                                <p className="mt-1 leading-6 text-stone-500">{task.description}</p>
-                              </div>
-                              <StatusBadge tone={task.priority === "high" ? "rose" : "neutral"}>{formatStatus(task.priority)}</StatusBadge>
-                            </div>
-                            <p className="mt-3 text-xs font-semibold text-stone-400">Срок: {task.dueDate} &middot; {formatStatus(task.status)}</p>
-                          </article>
-                        ))}
-                        {selectedMonthlyPlan.managerTasks.length === 0 ? <EmptyState>В этом месячном плане нет задач для менеджера.</EmptyState> : null}
-                      </div>
-                    </div>
-
-                    <div className="mt-6">
-                      <JsonDetails title="Исходный структурированный месячный план" value={selectedMonthlyPlan.rawPlanJson} />
-                    </div>
-                  </section>
-                ) : null}
-
-              </div>
-              </div>
-            </section>
+              <ClientSetupWizard
+                clients={clients}
+                selectedClient={selectedSetupClient}
+                selectedBrief={selectedSetupBrief}
+                blueprint={latestBlueprint}
+                monthlyPlan={selectedMonthlyPlan}
+                requestedStep={params.setupStep}
+                workspaceContext={workspaceContext}
+              />
             ) : null}
 
             {activeView === "reports" ? (

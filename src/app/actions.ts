@@ -47,6 +47,7 @@ function workspaceLocation(
     blueprintId?: string;
     planId?: string;
     clientId?: string;
+    setupStep?: string;
     error?: string;
     notice?: string;
     portalLink?: string;
@@ -57,6 +58,7 @@ function workspaceLocation(
   if (options.blueprintId) searchParams.set("blueprint", options.blueprintId);
   if (options.planId) searchParams.set("plan", options.planId);
   if (options.clientId) searchParams.set("client", options.clientId);
+  if (options.setupStep) searchParams.set("setupStep", options.setupStep);
   if (options.error) searchParams.set("error", options.error);
   if (options.notice) searchParams.set("notice", options.notice);
   if (options.portalLink) searchParams.set("portalLink", options.portalLink);
@@ -450,7 +452,7 @@ export async function createClient(formData: FormData) {
     throw new Error("Укажите название клиента.");
   }
 
-  await prisma.client.create({
+  const client = await prisma.client.create({
     data: {
       name,
       website: website || null,
@@ -459,6 +461,7 @@ export async function createClient(formData: FormData) {
   });
 
   revalidatePath("/");
+  redirect(workspaceLocation("client_setup", { clientId: client.id, setupStep: "brief", notice: "Клиент создан. Теперь добавьте бриф." }));
 }
 
 export async function updateClientBrandProfile(formData: FormData) {
@@ -530,7 +533,7 @@ export async function addClientBrief(formData: FormData) {
     throw new Error("Выберите клиента и добавьте бриф.");
   }
 
-  await prisma.clientBrief.create({
+  const brief = await prisma.clientBrief.create({
     data: {
       clientId,
       rawBrief,
@@ -538,6 +541,7 @@ export async function addClientBrief(formData: FormData) {
   });
 
   revalidatePath("/");
+  redirect(workspaceLocation("client_setup", { clientId: brief.clientId, setupStep: "blueprint", notice: "Бриф сохранён. Теперь можно сгенерировать Blueprint." }));
 }
 
 export async function updateClientBrief(formData: FormData) {
@@ -571,7 +575,7 @@ export async function updateClientBrief(formData: FormData) {
   });
 
   revalidatePath("/");
-  redirect(workspaceLocation("client_setup", { notice: "Бриф обновлён. Когда будете готовы, сгенерируйте новый Blueprint." }));
+  redirect(workspaceLocation("client_setup", { clientId: existingBrief.clientId, setupStep: "blueprint", notice: "Бриф обновлён. Когда будете готовы, сгенерируйте новый Blueprint." }));
 }
 
 export async function generateBlueprint(formData: FormData) {
@@ -587,7 +591,7 @@ export async function generateBlueprint(formData: FormData) {
   }
 
   if (brief.blueprint) {
-    redirect(workspaceLocation("client_setup", { blueprintId: brief.blueprint.id }));
+    redirect(workspaceLocation("client_setup", { blueprintId: brief.blueprint.id, clientId: brief.clientId, setupStep: "monthly_plan" }));
   }
 
   let createdId: string;
@@ -683,7 +687,7 @@ export async function generateBlueprint(formData: FormData) {
   }
 
   revalidatePath("/");
-  redirect(workspaceLocation("client_setup", { blueprintId: createdId }));
+  redirect(workspaceLocation("client_setup", { blueprintId: createdId, clientId: brief.clientId, setupStep: "monthly_plan", notice: "Blueprint сгенерирован. Следующий шаг — месячный план." }));
 }
 
 export async function generateMonthlyPlan(formData: FormData) {
@@ -717,7 +721,7 @@ export async function generateMonthlyPlan(formData: FormData) {
   const existingPlan = blueprint.monthlyPlans.find((plan) => plan.month === month);
 
   if (existingPlan) {
-    redirect(workspaceLocation("client_setup", { blueprintId: blueprint.id, planId: existingPlan.id, notice: "Месячный план за этот период уже существует." }));
+    redirect(workspaceLocation("client_setup", { blueprintId: blueprint.id, planId: existingPlan.id, clientId: blueprint.clientId, setupStep: "brand", notice: "Месячный план за этот период уже существует." }));
   }
 
   const recommendedPlatforms = blueprint.platformRecommendations.filter(
@@ -853,7 +857,7 @@ export async function generateMonthlyPlan(formData: FormData) {
   }
 
   revalidatePath("/");
-  redirect(workspaceLocation("client_setup", { blueprintId: blueprint.id, planId: createdId }));
+  redirect(workspaceLocation("client_setup", { blueprintId: blueprint.id, planId: createdId, clientId: blueprint.clientId, setupStep: "brand", notice: "Месячный план сгенерирован. Теперь заполните библиотеку бренда." }));
 }
 
 type ContentTextGenerationResult = {
