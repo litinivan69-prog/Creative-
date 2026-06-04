@@ -1,4 +1,3 @@
-import { put } from "@vercel/blob";
 import { randomUUID } from "node:crypto";
 
 function safeFilename(filename: string) {
@@ -8,6 +7,7 @@ function safeFilename(filename: string) {
 export async function storeClientBrandAssetFile(input: { file: File; clientId: string; assetType: string }) {
   if (!process.env.BLOB_READ_WRITE_TOKEN) return null;
 
+  const { put } = await import("@vercel/blob");
   const pathname = `brand-assets/${input.clientId}/${input.assetType}/${Date.now()}-${randomUUID()}-${safeFilename(input.file.name)}`;
   const blob = await put(pathname, Buffer.from(await input.file.arrayBuffer()), {
     access: "public",

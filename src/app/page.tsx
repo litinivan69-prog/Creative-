@@ -1921,7 +1921,7 @@ function BrandAssetsView({ client }: { client: {
     return (
       <section>
         <WorkspaceViewHeader eyebrow="Контекст клиента" title="Библиотека бренда" description="Материалы, стиль и ограничения клиента, которые AI использует при подготовке текстов, ТЗ и визуалов." />
-        <div className="mt-5"><EmptyState>Выберите клиента, чтобы заполнить библиотеку бренда.</EmptyState></div>
+        <div className="mt-5"><EmptyState>Библиотека бренда временно недоступна. Обновите страницу или проверьте миграции базы данных.</EmptyState></div>
       </section>
     );
   }
@@ -3021,6 +3021,24 @@ function currentMonth() {
   return new Date().toISOString().slice(0, 7);
 }
 
+async function safeLoadSelectedBrandClient(clientId: string) {
+  try {
+    return await prisma.client.findUnique({
+      where: { id: clientId },
+      include: {
+        brandProfile: true,
+        brandAssets: {
+          where: { status: "active" },
+          orderBy: { createdAt: "desc" },
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Failed to load brand assets", error);
+    return null;
+  }
+}
+
 export default async function Dashboard({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   const activeView = getActiveView(params);
@@ -3176,16 +3194,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
       : null);
   const brandClientId = params.client ?? latestBlueprint?.clientId ?? clients[0]?.id;
   const selectedBrandClient = !isProductionBuild && brandClientId
-    ? await prisma.client.findUnique({
-        where: { id: brandClientId },
-        include: {
-          brandProfile: true,
-          brandAssets: {
-            where: { status: "active" },
-            orderBy: { createdAt: "desc" },
-          },
-        },
-      })
+    ? await safeLoadSelectedBrandClient(brandClientId)
     : null;
 
   const currentMonthlyPlan =
