@@ -584,8 +584,8 @@ type MonthlyPlanRevisionProposalPreview = {
 
 type RevisionChangeSet = {
   removeItems: Array<{ plannedContentItemId: string; reason: string }>;
-  updateItems: Array<{ plannedContentItemId: string; platform: string; format: string; topic: string; angle?: string; reason: string }>;
-  addItems: Array<{ platform: string; format: string; topic: string; angle?: string; week: number; reason: string }>;
+  updateItems: Array<{ plannedContentItemId: string; platform: string; format: string; topic: string; angle: string; reason: string }>;
+  addItems: Array<{ platform: string; format: string; topic: string; angle: string; week: number; reason: string }>;
   protectedItems: Array<{ plannedContentItemId: string; reason: string }>;
 };
 
