@@ -337,6 +337,13 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - This helps managers correct channel scope, abstract topics, and real operational context before production continues.
 - This is not a general chat system, streaming assistant, auth layer, or publishing automation.
 
+### Product-7A Hotfix
+
+- The primary Copilot action now applies safe plan revisions directly from a manager instruction.
+- Safe changes update planned content items and linked draft/calendar metadata when the material is not protected.
+- Protected materials remain untouched and are counted in the manager notice.
+- The older proposal-only flow remains available as a secondary review mode.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.

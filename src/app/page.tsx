@@ -25,6 +25,7 @@ import {
   markScheduledPublicationSkipped,
   prepareMonthAutopilot,
   proposeMonthlyPlanRevision,
+  reviseMonthlyPlanWithCopilot,
   regenerateCreativeAssetBrief,
   rejectDraft,
   rejectCreativeVariant,
@@ -2436,6 +2437,23 @@ function MonthlyPlanRevisionCopilot({
   proposal?: MonthlyPlanRevisionProposalPreview;
 }) {
   const changes = proposal ? revisionChangeSet(proposal.proposedChanges) : null;
+  const proposalIsDraft = proposal?.status === "draft";
+  const proposalStatusLabel =
+    proposal?.status === "applied"
+      ? "Применено"
+      : proposal?.status === "rejected"
+        ? "Отклонено"
+        : proposal?.status === "applied_candidate"
+          ? "Применяется"
+          : "Ждёт подтверждения";
+  const proposalStatusTone =
+    proposal?.status === "applied"
+      ? "green"
+      : proposal?.status === "rejected"
+        ? "rose"
+        : proposal?.status === "applied_candidate"
+          ? "amber"
+          : "teal";
   const examples = [
     "Убери Ozon Seller: карточки товаров уже готовы.",
     "Замени сайт на статьи для Дзена.",
@@ -2451,9 +2469,9 @@ function MonthlyPlanRevisionCopilot({
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">AI-помощник</p>
           <h3 className="mt-1 text-lg font-semibold text-stone-950">AI-помощник по плану</h3>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">
-            Опишите, что нужно изменить в плане. AI предложит правки, но не применит их без подтверждения.
+            Опишите, что нужно изменить. AI внесёт безопасные правки в план и календарь, не трогая согласованные материалы.
           </p>
-          <form action={proposeMonthlyPlanRevision} className="mt-4 grid gap-3">
+          <form action={reviseMonthlyPlanWithCopilot} className="mt-4 grid gap-3">
             {monthlyPlanId ? <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} /> : null}
             <textarea
               name="instruction"
@@ -2463,10 +2481,27 @@ function MonthlyPlanRevisionCopilot({
               className={`${inputClass} resize-y`}
               placeholder="Например: убери Ozon Seller и сайт, карточки товаров уже готовы. Замени их на VK, Telegram и статьи про SPF, Cleanical и снежный лотос. Согласованные материалы не трогай."
             />
-            <PendingSubmitButton pendingLabel="Готовим правки..." disabled={!monthlyPlanId} className={primaryButtonClass}>
-              Предложить правки
+            <PendingSubmitButton pendingLabel="Исправляем план..." disabled={!monthlyPlanId} className={primaryButtonClass}>
+              Исправить план
             </PendingSubmitButton>
           </form>
+          <details className="mt-3 rounded-lg border border-stone-200 bg-stone-50/70 p-3">
+            <summary className="cursor-pointer text-xs font-semibold text-stone-600">Только предложить без применения</summary>
+            <form action={proposeMonthlyPlanRevision} className="mt-3 grid gap-3">
+              {monthlyPlanId ? <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} /> : null}
+              <textarea
+                name="instruction"
+                required
+                rows={3}
+                disabled={!monthlyPlanId}
+                className={`${inputClass} resize-y bg-white`}
+                placeholder="Опишите правку, которую нужно сначала посмотреть как предложение."
+              />
+              <PendingSubmitButton pendingLabel="Готовим предложение..." disabled={!monthlyPlanId} className={secondaryButtonClass}>
+                Подготовить предложение
+              </PendingSubmitButton>
+            </form>
+          </details>
         </div>
         <div className="rounded-lg border border-stone-200 bg-stone-50/70 p-4">
           <p className="text-xs font-bold text-stone-700">Примеры для менеджера</p>
@@ -2483,19 +2518,24 @@ function MonthlyPlanRevisionCopilot({
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Предложенные правки</p>
-              <h4 className="mt-1 font-semibold text-stone-950">{proposal.summary}</h4>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <h4 className="font-semibold text-stone-950">{proposal.summary}</h4>
+                <StatusBadge tone={proposalStatusTone}>{proposalStatusLabel}</StatusBadge>
+              </div>
               <p className="mt-2 text-xs leading-5 text-stone-500">Инструкция: {proposal.instruction}</p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <form action={applyMonthlyPlanRevisionProposal}>
-                <input type="hidden" name="proposalId" value={proposal.id} />
-                <PendingSubmitButton pendingLabel="Применяем..." className={primaryButtonClass}>Применить правки</PendingSubmitButton>
-              </form>
-              <form action={rejectMonthlyPlanRevisionProposal}>
-                <input type="hidden" name="proposalId" value={proposal.id} />
-                <PendingSubmitButton pendingLabel="Отклоняем..." className={secondaryButtonClass}>Отклонить</PendingSubmitButton>
-              </form>
-            </div>
+            {proposalIsDraft ? (
+              <div className="flex flex-wrap gap-2">
+                <form action={applyMonthlyPlanRevisionProposal}>
+                  <input type="hidden" name="proposalId" value={proposal.id} />
+                  <PendingSubmitButton pendingLabel="Применяем..." className={primaryButtonClass}>Применить правки</PendingSubmitButton>
+                </form>
+                <form action={rejectMonthlyPlanRevisionProposal}>
+                  <input type="hidden" name="proposalId" value={proposal.id} />
+                  <PendingSubmitButton pendingLabel="Отклоняем..." className={secondaryButtonClass}>Отклонить</PendingSubmitButton>
+                </form>
+              </div>
+            ) : null}
           </div>
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
             <div className="rounded-lg border border-rose-200 bg-white p-4">
@@ -3134,6 +3174,8 @@ function ContentCalendar({
     publications.map((publication) => [publication.plannedContentItemId, publication]),
   );
   const inspectorPublication = inspectorItem ? scheduledByItemId.get(inspectorItem.id) : null;
+  const unscheduledItems = items.filter((item) => !scheduledByItemId.has(item.id));
+  const unscheduledGroups = groupCalendarItems(unscheduledItems);
   const scheduledCount = publications.filter((publication) => publication.status === "scheduled").length;
   const needsAssetsCount = publications.filter((publication) => publication.status === "needs_assets").length;
   const readyCount = publications.filter((publication) => publication.status === "ready").length;
@@ -3166,7 +3208,42 @@ function ContentCalendar({
       </div>
 
       {publications.length > 0 ? (
-        <ScheduledPublicationCalendar publications={publications} />
+        <>
+          <ScheduledPublicationCalendar publications={publications} />
+          {unscheduledItems.length > 0 ? (
+            <div className="border-t border-stone-200 bg-white p-4 sm:p-5">
+              <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-amber-700">Ещё не запланировано</p>
+                  <h3 className="mt-1 text-lg font-semibold text-stone-950">Материалы без даты публикации</h3>
+                  <p className="mt-1 text-xs leading-5 text-stone-500">
+                    Эти пункты уже есть в месячном плане, но ещё не прошли путь до расписания.
+                  </p>
+                </div>
+                <StatusBadge tone="amber">{unscheduledItems.length} в плане</StatusBadge>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {unscheduledGroups.flatMap((group) => group.items).map((item) => (
+                  <article key={item.id} className="rounded-lg border border-stone-200 bg-stone-50/70 p-3">
+                    <div className="flex flex-wrap gap-1.5">
+                      <StatusBadge tone="teal">{item.platformName}</StatusBadge>
+                      <StatusBadge>{item.format}</StatusBadge>
+                    </div>
+                    <p className="mt-3 text-xs font-semibold text-stone-400">{item.week || item.plannedDate}</p>
+                    <h4 className="mt-1 text-sm font-semibold leading-5 text-stone-950">{item.topic}</h4>
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      <StatusBadge tone={item.status === "planned" ? "teal" : "amber"}>{formatStatus(item.status)}</StatusBadge>
+                      <StatusBadge tone={materialTextStatusTone(item.contentDraft)}>{formatMaterialTextStatus(item.contentDraft)}</StatusBadge>
+                    </div>
+                    <div className="mt-3 border-t border-stone-200 pt-3">
+                      <ContentItemAction item={item} draftsHref={draftsHref} />
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </>
       ) : groups.length > 0 ? (
         <div className="grid xl:grid-cols-[minmax(0,1fr)_320px]">
           <div className="overflow-x-auto bg-stone-50/50 p-4">
@@ -4327,7 +4404,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 clientPortalHref={workspaceLinks.client_portal}
                 reportsHref={workspaceLinks.reports}
                 brandProfileReady={brandProfileReady}
-                latestRevisionProposal={selectedMonthlyPlan?.revisionProposals.find((proposal) => proposal.status === "draft")}
+                latestRevisionProposal={selectedMonthlyPlan?.revisionProposals[0]}
               />
             ) : null}
 

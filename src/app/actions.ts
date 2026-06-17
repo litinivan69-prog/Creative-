@@ -908,27 +908,203 @@ export async function generateMonthlyPlan(formData: FormData) {
 
 function planItemProtectionReason(item: {
   contentDraft: { status: string } | null;
-  scheduledPublications: unknown[];
+  scheduledPublications: Array<{ status: string }>;
   creativeAssets: Array<{ generatedVariants: unknown[] }>;
   generatedCreativeVariants: unknown[];
 }) {
-  if (item.contentDraft && ["approved", "ready_to_schedule", "sent_to_client"].includes(item.contentDraft.status)) {
+  if (item.contentDraft && ["approved", "ready_to_schedule", "sent_to_client", "client_approved"].includes(item.contentDraft.status)) {
     return "Материал уже согласован или отправлен клиенту.";
   }
 
-  if (item.scheduledPublications.length > 0) {
-    return "Материал уже запланирован в календаре.";
-  }
-
-  if (item.creativeAssets.length > 0) {
-    return "Для материала уже есть ТЗ или креатив.";
+  if (item.scheduledPublications.some((publication) => publication.status === "published")) {
+    return "Публикация уже опубликована.";
   }
 
   if (item.generatedCreativeVariants.length > 0 || item.creativeAssets.some((asset) => asset.generatedVariants.length > 0)) {
     return "Для материала уже есть сгенерированный визуал.";
   }
 
+  if (item.creativeAssets.length > 0) {
+    return "Для материала уже есть ТЗ или креатив.";
+  }
+
   return null;
+}
+
+async function applyMonthlyPlanRevisionProposalById(proposalId: string) {
+  const proposal = await prisma.monthlyPlanRevisionProposal.findUnique({
+    where: { id: proposalId },
+    include: {
+      monthlyPlan: {
+        include: {
+          modules: true,
+          plannedContentItems: {
+            include: {
+              contentDraft: {
+                select: {
+                  id: true,
+                  status: true,
+                },
+              },
+              scheduledPublications: {
+                select: {
+                  id: true,
+                  status: true,
+                },
+              },
+              creativeAssets: {
+                include: {
+                  generatedVariants: {
+                    select: { id: true },
+                  },
+                },
+              },
+              generatedCreativeVariants: {
+                select: { id: true },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!proposal) {
+    throw new Error("Предложение правок не найдено.");
+  }
+
+  if (!["draft", "applied_candidate"].includes(proposal.status)) {
+    throw new Error("Это предложение уже обработано.");
+  }
+
+  const changes = MonthlyPlanRevisionProposalSchema.parse(proposal.proposedChanges);
+  const itemsById = new Map(proposal.monthlyPlan.plannedContentItems.map((item) => [item.id, item]));
+  const fallbackModule = proposal.monthlyPlan.modules[0];
+  let removed = 0;
+  let updated = 0;
+  let added = 0;
+  let skipped = 0;
+
+  await prisma.$transaction(async (tx) => {
+    for (const change of changes.removeItems) {
+      const item = itemsById.get(change.plannedContentItemId);
+      if (!item || planItemProtectionReason(item)) {
+        skipped += 1;
+        continue;
+      }
+
+      if (item.contentDraft) {
+        await tx.contentDraft.delete({ where: { id: item.contentDraft.id } });
+      }
+
+      await tx.scheduledPublication.deleteMany({
+        where: {
+          plannedContentItemId: item.id,
+          status: { not: "published" },
+        },
+      });
+      await tx.plannedContentItem.delete({ where: { id: item.id } });
+      removed += 1;
+    }
+
+    for (const change of changes.updateItems) {
+      const item = itemsById.get(change.plannedContentItemId);
+      if (!item || planItemProtectionReason(item)) {
+        skipped += 1;
+        continue;
+      }
+
+      const nextGoal = change.angle || item.goal;
+      await tx.plannedContentItem.update({
+        where: { id: item.id },
+        data: {
+          platformName: change.platform,
+          format: change.format,
+          topic: change.topic,
+          goal: nextGoal,
+          campaignTheme: change.angle || item.campaignTheme,
+          contentPillar: change.angle || item.contentPillar,
+          channelRole: change.angle || item.channelRole,
+          sequenceReason: change.reason,
+          status: "planned",
+        },
+      });
+
+      if (item.contentDraft) {
+        await tx.contentDraft.update({
+          where: { id: item.contentDraft.id },
+          data: {
+            platformName: change.platform,
+            format: change.format,
+            topic: change.topic,
+            goal: nextGoal,
+            status: "needs_review",
+          },
+        });
+      }
+
+      await tx.scheduledPublication.updateMany({
+        where: {
+          plannedContentItemId: item.id,
+          status: { not: "published" },
+        },
+        data: {
+          platformName: change.platform,
+          format: change.format,
+          topic: change.topic,
+          status: "scheduled",
+        },
+      });
+
+      updated += 1;
+    }
+
+    for (const change of changes.addItems) {
+      await tx.plannedContentItem.create({
+        data: {
+          monthlyPlanId: proposal.monthlyPlanId,
+          moduleType: fallbackModule?.moduleType ?? "custom",
+          platformName: change.platform,
+          format: change.format,
+          topic: change.topic,
+          goal: change.angle || change.reason,
+          plannedDate: `week ${change.week}`,
+          week: `week ${change.week}`,
+          campaignTheme: change.angle || null,
+          contentPillar: change.angle || null,
+          channelRole: change.angle || null,
+          sequenceReason: change.reason,
+          approvalRequired: true,
+          autopublishEligible: false,
+          requiredInputs: [],
+          status: "planned",
+        },
+      });
+      added += 1;
+    }
+
+    await tx.monthlyPlanRevisionProposal.update({
+      where: { id: proposal.id },
+      data: { status: "applied" },
+    });
+  });
+
+  const updatedItemCount = await prisma.plannedContentItem.count({
+    where: { monthlyPlanId: proposal.monthlyPlanId },
+  });
+  await prisma.monthlyOperatingPlan.update({
+    where: { id: proposal.monthlyPlanId },
+    data: { totalPlannedUnits: Math.max(proposal.monthlyPlan.totalPlannedUnits - removed + added, updatedItemCount) },
+  });
+
+  return {
+    blueprintId: proposal.monthlyPlan.blueprintId,
+    monthlyPlanId: proposal.monthlyPlanId,
+    added,
+    updated,
+    removed,
+    protectedCount: skipped + changes.protectedItems.length,
+  };
 }
 
 export async function proposeMonthlyPlanRevision(formData: FormData) {
@@ -1055,6 +1231,150 @@ export async function proposeMonthlyPlanRevision(formData: FormData) {
   redirect(redirectTarget);
 }
 
+export async function reviseMonthlyPlanWithCopilot(formData: FormData) {
+  const monthlyPlanId = formText(formData, "monthlyPlanId");
+  const instruction = formText(formData, "instruction");
+
+  if (!monthlyPlanId || !instruction) {
+    monthlyPlanErrorRedirect("", monthlyPlanId, "Опишите, что нужно изменить в месячном плане.", "drafts");
+  }
+
+  const plan = await prisma.monthlyOperatingPlan.findUnique({
+    where: { id: monthlyPlanId },
+    include: {
+      client: true,
+      blueprint: {
+        include: {
+          selectedModules: true,
+          platformRecommendations: true,
+          riskRules: true,
+        },
+      },
+      modules: true,
+      platforms: true,
+      plannedContentItems: {
+        include: {
+          contentDraft: {
+            select: {
+              id: true,
+              status: true,
+            },
+          },
+          scheduledPublications: {
+            select: {
+              id: true,
+              status: true,
+            },
+          },
+          creativeAssets: {
+            include: {
+              generatedVariants: {
+                select: { id: true },
+              },
+            },
+          },
+          generatedCreativeVariants: {
+            select: { id: true },
+          },
+        },
+      },
+      contentDrafts: true,
+      scheduledPublications: true,
+      creativeAssets: true,
+    },
+  });
+
+  if (!plan) {
+    errorRedirect("Месячный план не найден.", "drafts");
+  }
+
+  let redirectTarget = "";
+  let createdProposalId: string | null = null;
+
+  try {
+    const planContext = {
+      id: plan.id,
+      month: plan.month,
+      summary: plan.summary,
+      totalPlannedUnits: plan.totalPlannedUnits,
+      platforms: plan.platforms,
+      modules: plan.modules,
+      plannedContentItems: plan.plannedContentItems.map((item) => {
+        const protectionReason = planItemProtectionReason(item);
+
+        return {
+          id: item.id,
+          platformName: item.platformName,
+          format: item.format,
+          topic: item.topic,
+          goal: item.goal,
+          plannedDate: item.plannedDate,
+          week: item.week,
+          campaignTheme: item.campaignTheme,
+          contentPillar: item.contentPillar,
+          channelRole: item.channelRole,
+          sequenceReason: item.sequenceReason,
+          status: item.status,
+          contentDraftStatus: item.contentDraft?.status ?? null,
+          scheduledPublicationsCount: item.scheduledPublications.length,
+          creativeAssetsCount: item.creativeAssets.length,
+          generatedVisualsCount:
+            item.generatedCreativeVariants.length +
+            item.creativeAssets.reduce((count, asset) => count + asset.generatedVariants.length, 0),
+          protected: Boolean(protectionReason),
+          protectionReason,
+        };
+      }),
+    };
+    const blueprintContext = {
+      id: plan.blueprint.id,
+      clientSummary: plan.blueprint.clientSummary,
+      recommendedPlatforms: plan.blueprint.platformRecommendations.filter((platform) => platform.recommendation === "recommended"),
+      selectedModules: plan.blueprint.selectedModules,
+      riskRules: plan.blueprint.riskRules,
+    };
+    const generated = await generateMonthlyPlanRevisionProposal({
+      clientName: plan.client.name,
+      instruction,
+      monthlyPlan: planContext,
+      blueprint: blueprintContext,
+      brandContext: await getClientBrandContext(plan.clientId),
+    });
+    const generatedProposal = MonthlyPlanRevisionProposalSchema.parse(generated);
+
+    const proposal = await prisma.monthlyPlanRevisionProposal.create({
+      data: {
+        monthlyPlanId: plan.id,
+        instruction,
+        summary: generatedProposal.summary,
+        proposedChanges: generatedProposal as unknown as Prisma.InputJsonValue,
+        status: "applied_candidate",
+      },
+    });
+    createdProposalId = proposal.id;
+
+    const result = await applyMonthlyPlanRevisionProposalById(proposal.id);
+
+    revalidatePath("/");
+    redirectTarget = workspaceLocation("drafts", {
+      blueprintId: result.blueprintId,
+      planId: result.monthlyPlanId,
+      notice: `План обновлён: добавлено ${result.added}, обновлено ${result.updated}, удалено ${result.removed}, защищено и не тронуто ${result.protectedCount}.`,
+    });
+  } catch (error) {
+    if (createdProposalId) {
+      await prisma.monthlyPlanRevisionProposal.update({
+        where: { id: createdProposalId },
+        data: { status: "draft" },
+      });
+    }
+    const message = error instanceof Error ? error.message : "Не удалось обновить месячный план.";
+    monthlyPlanErrorRedirect(plan.blueprintId, plan.id, `Не удалось исправить план: ${message}`, "drafts");
+  }
+
+  redirect(redirectTarget);
+}
+
 export async function applyMonthlyPlanRevisionProposal(formData: FormData) {
   const proposalId = formText(formData, "proposalId");
 
@@ -1062,129 +1382,42 @@ export async function applyMonthlyPlanRevisionProposal(formData: FormData) {
     errorRedirect("Предложение правок не выбрано.", "drafts");
   }
 
-  const proposal = await prisma.monthlyPlanRevisionProposal.findUnique({
+  const proposalMeta = await prisma.monthlyPlanRevisionProposal.findUnique({
     where: { id: proposalId },
     include: {
       monthlyPlan: {
-        include: {
-          modules: true,
-          plannedContentItems: {
-            include: {
-              contentDraft: true,
-              scheduledPublications: true,
-              creativeAssets: {
-                include: {
-                  generatedVariants: {
-                    select: { id: true },
-                  },
-                },
-              },
-              generatedCreativeVariants: {
-                select: { id: true },
-              },
-            },
-          },
+        select: {
+          blueprintId: true,
         },
       },
     },
   });
 
-  if (!proposal) {
+  if (!proposalMeta) {
     errorRedirect("Предложение правок не найдено.", "drafts");
   }
 
-  if (proposal.status !== "draft") {
+  if (proposalMeta.status !== "draft") {
     redirect(workspaceLocation("drafts", {
-      blueprintId: proposal.monthlyPlan.blueprintId,
-      planId: proposal.monthlyPlanId,
+      blueprintId: proposalMeta.monthlyPlan.blueprintId,
+      planId: proposalMeta.monthlyPlanId,
       error: "Это предложение уже обработано.",
     }));
   }
 
-  const changes = MonthlyPlanRevisionProposalSchema.parse(proposal.proposedChanges);
-  const itemsById = new Map(proposal.monthlyPlan.plannedContentItems.map((item) => [item.id, item]));
-  const fallbackModule = proposal.monthlyPlan.modules[0];
-  let removed = 0;
-  let updated = 0;
-  let added = 0;
-  let skipped = 0;
-
-  await prisma.$transaction(async (tx) => {
-    for (const change of changes.removeItems) {
-      const item = itemsById.get(change.plannedContentItemId);
-      if (!item || planItemProtectionReason(item) || item.contentDraft) {
-        skipped += 1;
-        continue;
-      }
-
-      await tx.plannedContentItem.delete({ where: { id: item.id } });
-      removed += 1;
-    }
-
-    for (const change of changes.updateItems) {
-      const item = itemsById.get(change.plannedContentItemId);
-      if (!item || planItemProtectionReason(item)) {
-        skipped += 1;
-        continue;
-      }
-
-      await tx.plannedContentItem.update({
-        where: { id: item.id },
-        data: {
-          platformName: change.platform,
-          format: change.format,
-          topic: change.topic,
-          goal: change.angle || item.goal,
-          channelRole: change.angle || item.channelRole,
-          sequenceReason: change.reason,
-        },
-      });
-      updated += 1;
-    }
-
-    for (const change of changes.addItems) {
-      await tx.plannedContentItem.create({
-        data: {
-          monthlyPlanId: proposal.monthlyPlanId,
-          moduleType: fallbackModule?.moduleType ?? "custom",
-          platformName: change.platform,
-          format: change.format,
-          topic: change.topic,
-          goal: change.angle || change.reason,
-          plannedDate: `week ${change.week}`,
-          week: `week ${change.week}`,
-          campaignTheme: change.angle || null,
-          contentPillar: change.angle || null,
-          channelRole: change.angle || null,
-          sequenceReason: change.reason,
-          approvalRequired: true,
-          autopublishEligible: false,
-          requiredInputs: [],
-          status: "planned",
-        },
-      });
-      added += 1;
-    }
-
-    await tx.monthlyPlanRevisionProposal.update({
-      where: { id: proposal.id },
-      data: { status: "applied" },
-    });
-  });
-
-  const updatedItemCount = await prisma.plannedContentItem.count({
-    where: { monthlyPlanId: proposal.monthlyPlanId },
-  });
-  await prisma.monthlyOperatingPlan.update({
-    where: { id: proposal.monthlyPlanId },
-    data: { totalPlannedUnits: Math.max(proposal.monthlyPlan.totalPlannedUnits - removed + added, updatedItemCount) },
-  });
+  let result;
+  try {
+    result = await applyMonthlyPlanRevisionProposalById(proposalMeta.id);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Не удалось применить правки плана.";
+    monthlyPlanErrorRedirect(proposalMeta.monthlyPlan.blueprintId, proposalMeta.monthlyPlanId, `Не удалось применить правки плана: ${message}`, "drafts");
+  }
 
   revalidatePath("/");
   redirect(workspaceLocation("drafts", {
-    blueprintId: proposal.monthlyPlan.blueprintId,
-    planId: proposal.monthlyPlanId,
-    notice: `Правки плана применены. Добавлено: ${added}, обновлено: ${updated}, удалено: ${removed}, пропущено защищённых: ${skipped}.`,
+    blueprintId: result.blueprintId,
+    planId: result.monthlyPlanId,
+    notice: `Правки плана применены. Добавлено: ${result.added}, обновлено: ${result.updated}, удалено: ${result.removed}, защищено и не тронуто: ${result.protectedCount}.`,
   }));
 }
 
