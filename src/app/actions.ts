@@ -978,6 +978,8 @@ export async function proposeMonthlyPlanRevision(formData: FormData) {
     errorRedirect("Месячный план не найден.", "drafts");
   }
 
+  let redirectTarget = "";
+
   try {
     const planContext = {
       id: plan.id,
@@ -1040,15 +1042,17 @@ export async function proposeMonthlyPlanRevision(formData: FormData) {
     });
 
     revalidatePath("/");
-    redirect(workspaceLocation("drafts", {
+    redirectTarget = workspaceLocation("drafts", {
       blueprintId: plan.blueprintId,
       planId: plan.id,
       notice: "AI предложил правки плана. Проверьте их перед применением.",
-    }));
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Не удалось подготовить предложение по правкам.";
     monthlyPlanErrorRedirect(plan.blueprintId, plan.id, `Не удалось предложить правки плана: ${message}`, "drafts");
   }
+
+  redirect(redirectTarget);
 }
 
 export async function applyMonthlyPlanRevisionProposal(formData: FormData) {
