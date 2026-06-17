@@ -145,10 +145,26 @@ model MonthlyOperatingPlan {
   generatedCreativeVariants GeneratedCreativeVariant[]
   generationJobs            GenerationJob[]
   clientPortalLinks          ClientPortalLink[]
+  revisionProposals          MonthlyPlanRevisionProposal[]
 
   @@index([clientId])
   @@index([blueprintId])
   @@unique([blueprintId, month])
+}
+
+model MonthlyPlanRevisionProposal {
+  id              String               @id @default(cuid())
+  monthlyPlanId   String
+  instruction     String
+  summary         String
+  proposedChanges Json
+  status          String               @default("draft")
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  monthlyPlan     MonthlyOperatingPlan @relation(fields: [monthlyPlanId], references: [id], onDelete: Cascade)
+
+  @@index([monthlyPlanId])
+  @@index([status])
 }
 
 model MonthlyPlanModule {

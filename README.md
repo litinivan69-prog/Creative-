@@ -329,6 +329,14 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Visual generation prompts use brand context and explicitly avoid fake logos.
 - Google Drive sync, OCR, document parsing, and automated brandbook extraction are still not included.
 
+## Sprint Product-7A Manager AI Copilot for Monthly Plan Revision
+
+- Manager AI Copilot can propose monthly plan revisions from natural language instructions.
+- Proposals are shown before applying, with remove, update, add, and protected item groups.
+- Approved, scheduled, and visualized items are protected by default.
+- This helps managers correct channel scope, abstract topics, and real operational context before production continues.
+- This is not a general chat system, streaming assistant, auth layer, or publishing automation.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.
@@ -363,6 +371,7 @@ The Prisma schema includes:
 - `AutomationPlan`
 - `RiskRule`
 - `MonthlyOperatingPlan`
+- `MonthlyPlanRevisionProposal`
 - `MonthlyPlanModule`
 - `MonthlyPlanPlatform`
 - `PlannedContentItem`

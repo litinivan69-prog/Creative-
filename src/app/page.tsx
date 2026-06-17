@@ -24,15 +24,18 @@ import {
   markScheduledPublicationScheduled,
   markScheduledPublicationSkipped,
   prepareMonthAutopilot,
+  proposeMonthlyPlanRevision,
   regenerateCreativeAssetBrief,
   rejectDraft,
   rejectCreativeVariant,
+  rejectMonthlyPlanRevisionProposal,
   requestDraftChanges,
   revokeClientPortalLink,
   scheduleContentDraft,
   sendDraftToClient,
   submitDraftForReview,
   unschedulePublication,
+  applyMonthlyPlanRevisionProposal,
   updateClientBrief,
   updateClientBrandProfile,
   updateCreativeAssetBrief,
@@ -569,6 +572,33 @@ type MaterialPlannedItem = {
   goal: string;
   contentDraft: DraftQueueItem | null;
 };
+
+type MonthlyPlanRevisionProposalPreview = {
+  id: string;
+  instruction: string;
+  summary: string;
+  status: string;
+  proposedChanges: unknown;
+  createdAt: Date;
+};
+
+type RevisionChangeSet = {
+  removeItems: Array<{ plannedContentItemId: string; reason: string }>;
+  updateItems: Array<{ plannedContentItemId: string; platform: string; format: string; topic: string; angle?: string; reason: string }>;
+  addItems: Array<{ platform: string; format: string; topic: string; angle?: string; week: number; reason: string }>;
+  protectedItems: Array<{ plannedContentItemId: string; reason: string }>;
+};
+
+function revisionChangeSet(value: unknown): RevisionChangeSet {
+  const object = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+
+  return {
+    removeItems: Array.isArray(object.removeItems) ? object.removeItems as RevisionChangeSet["removeItems"] : [],
+    updateItems: Array.isArray(object.updateItems) ? object.updateItems as RevisionChangeSet["updateItems"] : [],
+    addItems: Array.isArray(object.addItems) ? object.addItems as RevisionChangeSet["addItems"] : [],
+    protectedItems: Array.isArray(object.protectedItems) ? object.protectedItems as RevisionChangeSet["protectedItems"] : [],
+  };
+}
 
 type GeneratedCreativeVariantPreview = {
   id: string;
@@ -2398,6 +2428,129 @@ function MaterialPrimaryAction({
   return <a href={assetsHref} className={primaryButtonClass}>Открыть проверку визуала</a>;
 }
 
+function MonthlyPlanRevisionCopilot({
+  monthlyPlanId,
+  proposal,
+}: {
+  monthlyPlanId?: string;
+  proposal?: MonthlyPlanRevisionProposalPreview;
+}) {
+  const changes = proposal ? revisionChangeSet(proposal.proposedChanges) : null;
+  const examples = [
+    "Убери Ozon Seller: карточки товаров уже готовы.",
+    "Замени сайт на статьи для Дзена.",
+    "Добавь больше материалов про SPF.",
+    "Сделай темы менее абстрактными.",
+    "Не трогай согласованные материалы.",
+  ];
+
+  return (
+    <article className={`${panelClass} mt-5 overflow-hidden border-teal-200`}>
+      <div className="grid gap-5 bg-white p-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">AI-помощник</p>
+          <h3 className="mt-1 text-lg font-semibold text-stone-950">AI-помощник по плану</h3>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">
+            Опишите, что нужно изменить в плане. AI предложит правки, но не применит их без подтверждения.
+          </p>
+          <form action={proposeMonthlyPlanRevision} className="mt-4 grid gap-3">
+            {monthlyPlanId ? <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} /> : null}
+            <textarea
+              name="instruction"
+              required
+              rows={5}
+              disabled={!monthlyPlanId}
+              className={`${inputClass} resize-y`}
+              placeholder="Например: убери Ozon Seller и сайт, карточки товаров уже готовы. Замени их на VK, Telegram и статьи про SPF, Cleanical и снежный лотос. Согласованные материалы не трогай."
+            />
+            <PendingSubmitButton pendingLabel="Готовим правки..." disabled={!monthlyPlanId} className={primaryButtonClass}>
+              Предложить правки
+            </PendingSubmitButton>
+          </form>
+        </div>
+        <div className="rounded-lg border border-stone-200 bg-stone-50/70 p-4">
+          <p className="text-xs font-bold text-stone-700">Примеры для менеджера</p>
+          <ul className="mt-3 grid gap-2 text-xs leading-5 text-stone-500">
+            {examples.map((example) => (
+              <li key={example} className="rounded-md border border-stone-200 bg-white px-3 py-2">{example}</li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      {proposal && changes ? (
+        <div className="border-t border-teal-100 bg-teal-50/50 p-5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Предложенные правки</p>
+              <h4 className="mt-1 font-semibold text-stone-950">{proposal.summary}</h4>
+              <p className="mt-2 text-xs leading-5 text-stone-500">Инструкция: {proposal.instruction}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <form action={applyMonthlyPlanRevisionProposal}>
+                <input type="hidden" name="proposalId" value={proposal.id} />
+                <PendingSubmitButton pendingLabel="Применяем..." className={primaryButtonClass}>Применить правки</PendingSubmitButton>
+              </form>
+              <form action={rejectMonthlyPlanRevisionProposal}>
+                <input type="hidden" name="proposalId" value={proposal.id} />
+                <PendingSubmitButton pendingLabel="Отклоняем..." className={secondaryButtonClass}>Отклонить</PendingSubmitButton>
+              </form>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            <div className="rounded-lg border border-rose-200 bg-white p-4">
+              <p className="text-sm font-semibold text-rose-900">Удалить</p>
+              <div className="mt-3 grid gap-2">
+                {changes.removeItems.map((item) => (
+                  <p key={item.plannedContentItemId} className="text-xs leading-5 text-stone-600"><span className="font-bold">{item.plannedContentItemId}:</span> {item.reason}</p>
+                ))}
+                {changes.removeItems.length === 0 ? <p className="text-xs text-stone-400">Нет удалений.</p> : null}
+              </div>
+            </div>
+            <div className="rounded-lg border border-amber-200 bg-white p-4">
+              <p className="text-sm font-semibold text-amber-900">Обновить</p>
+              <div className="mt-3 grid gap-2">
+                {changes.updateItems.map((item) => (
+                  <div key={item.plannedContentItemId} className="text-xs leading-5 text-stone-600">
+                    <p className="font-bold text-stone-800">{item.platform} · {item.format}</p>
+                    <p>{item.topic}</p>
+                    {item.angle ? <p className="text-stone-500">Угол: {item.angle}</p> : null}
+                    <p className="text-stone-400">{item.reason}</p>
+                  </div>
+                ))}
+                {changes.updateItems.length === 0 ? <p className="text-xs text-stone-400">Нет обновлений.</p> : null}
+              </div>
+            </div>
+            <div className="rounded-lg border border-teal-200 bg-white p-4">
+              <p className="text-sm font-semibold text-teal-900">Добавить</p>
+              <div className="mt-3 grid gap-2">
+                {changes.addItems.map((item) => (
+                  <div key={`${item.platform}-${item.topic}`} className="text-xs leading-5 text-stone-600">
+                    <p className="font-bold text-stone-800">Неделя {item.week}: {item.platform} · {item.format}</p>
+                    <p>{item.topic}</p>
+                    {item.angle ? <p className="text-stone-500">Угол: {item.angle}</p> : null}
+                    <p className="text-stone-400">{item.reason}</p>
+                  </div>
+                ))}
+                {changes.addItems.length === 0 ? <p className="text-xs text-stone-400">Нет новых материалов.</p> : null}
+              </div>
+            </div>
+            <div className="rounded-lg border border-stone-200 bg-white p-4">
+              <p className="text-sm font-semibold text-stone-900">Не трогать</p>
+              <div className="mt-3 grid gap-2">
+                {changes.protectedItems.map((item) => (
+                  <p key={item.plannedContentItemId} className="text-xs leading-5 text-stone-600"><span className="font-bold">{item.plannedContentItemId}:</span> {item.reason}</p>
+                ))}
+                {changes.protectedItems.length === 0 ? <p className="text-xs text-stone-400">Защищённые материалы не указаны.</p> : null}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
 function DraftsView({
   items,
   publications,
@@ -2410,6 +2563,7 @@ function DraftsView({
   clientPortalHref,
   reportsHref,
   brandProfileReady,
+  latestRevisionProposal,
 }: {
   items: MaterialPlannedItem[];
   publications: ScheduledPublicationPreview[];
@@ -2422,6 +2576,7 @@ function DraftsView({
   clientPortalHref: string;
   reportsHref: string;
   brandProfileReady: boolean;
+  latestRevisionProposal?: MonthlyPlanRevisionProposalPreview;
 }) {
   const totalMaterialsCount = items.length;
   const textsCreatedCount = items.filter((item) => item.contentDraft).length;
@@ -2474,6 +2629,7 @@ function DraftsView({
           )}
         </div>
       </article>
+      <MonthlyPlanRevisionCopilot monthlyPlanId={monthlyPlanId} proposal={latestRevisionProposal} />
       <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         <MetricCard label="Всего материалов" value={totalMaterialsCount} detail="В текущем плане" />
         <MetricCard label="Тексты созданы" value={textsCreatedCount} detail="Можно проверять" tone="teal" />
@@ -3633,6 +3789,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 clientPortalLinks: {
                   orderBy: { createdAt: "desc" },
                 },
+                revisionProposals: {
+                  orderBy: { createdAt: "desc" },
+                },
                 generationJobs: {
                   orderBy: { createdAt: "desc" },
                   take: 30,
@@ -3703,6 +3862,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 },
                 managerTasks: true,
                 clientPortalLinks: {
+                  orderBy: { createdAt: "desc" },
+                },
+                revisionProposals: {
                   orderBy: { createdAt: "desc" },
                 },
                 generationJobs: {
@@ -4165,6 +4327,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 clientPortalHref={workspaceLinks.client_portal}
                 reportsHref={workspaceLinks.reports}
                 brandProfileReady={brandProfileReady}
+                latestRevisionProposal={selectedMonthlyPlan?.revisionProposals.find((proposal) => proposal.status === "draft")}
               />
             ) : null}
 

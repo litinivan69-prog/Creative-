@@ -7,6 +7,7 @@ import {
 import { ContentDraftSchema } from "@/lib/content-draft-schema";
 import { CreativeAssetBriefSchema } from "@/lib/creative-asset-schema";
 import { MonthlyOperatingPlanSchema } from "@/lib/monthly-plan-schema";
+import { MonthlyPlanRevisionProposalSchema } from "@/lib/monthly-plan-revision-schema";
 
 const legacyModel = process.env.OPENAI_MODEL;
 
@@ -185,7 +186,7 @@ export async function generateMonthlyOperatingPlan(input: {
       {
         role: "system",
         content:
-          'You convert an approved Client Presence Blueprint into a concrete Monthly Operating Plan. This is not content generation: do not write full posts, articles, emails, captions, or final copy. Generate only structured operational planning data: modules, platforms, themes, formats, planned content items, cadence, approval needs, autopublish eligibility, integrations, manager tasks, and risks. Do not hardcode fixed deliverables or fixed platforms. Use the Blueprint monthly scope, selected modules, recommended platforms, humanReviewPolicy, integrationRequirements, riskRules, confidenceScore, and nextRecommendedAction. plannedContentItems may ONLY use platformName values that exist in Blueprint recommendedPlatforms and the explicit Allowed platform names list. Every plannedContentItem.platformName must exactly match one of the allowed names. Do not introduce Website, Blog, YouTube, Maps, Telegram, VK, or any other platform unless it is present in Blueprint recommendedPlatforms. Platform role guidance is explanatory only and does not authorize adding new platforms. If a useful platform is missing from Blueprint recommendedPlatforms, do not use it in plannedContentItems; mention it only as a managerTask recommendation if relevant. If any Blueprint integrationRequirements item has required=true and the platform is used in selectedPlatforms or plannedContentItems, create a managerTask for that platform. The task title and description must include the exact platformName and words such as integration, connect, access, credentials, and permissions. Do not block planning because integrations are missing; create manager tasks instead. Build the month as a cross-channel calendar using only allowed platforms. Do not group all plannedContentItems by platform. Spread allowed platforms across the month. For each week, combine several relevant allowed platforms when available and give the week a communication theme. Each platform should play a different role. Avoid publishing the same idea in the same wording everywhere. Adapt one strategic theme into platform-native formats. Planned content items should feel like an orchestrated marketing system, not a list of deliverables. Unless the Blueprint strongly requires otherwise, avoid more than 2 consecutive plannedContentItems with the same platformName. plannedDate should preferably use week-based cadence markers: "week 1", "week 2", "week 3", or "week 4". For every plannedContentItem, explain why the item exists in the sequence using sequenceReason. Populate week, campaignTheme, contentPillar, channelRole, and sequenceReason when useful. Platform role guidance: VK is for broader explanation, community, educational content, and social proof. Telegram is for short alive trust-building notes, behind-the-scenes, founder or expert voice, and quick practical insights. Yandex Maps, maps, and directory platforms are for reputation, reviews, local trust, FAQ, and service clarity. Website and blog are for deeper expertise, search-oriented explanation, and long-form trust. Video and social short-form are for attention, simple explanation, and emotional hooks. plannedDate and dueDate must be either YYYY-MM-DD or simple English cadence markers such as "week 1", "week 2", "early month", "before launch", or "after approval". totalPlannedUnits means the total planned monthly content units. plannedContentItems contains the concrete planned items actually listed. Prefer generating a complete list when possible. totalPlannedUnits must never be lower than plannedContentItems.length. Never set autopublishEligible=true for healthcare, medical, legal, financial, regulated, reputation-sensitive, or safety-related content unless the Blueprint explicitly allows it. If unsure, set autopublishEligible=false and approvalRequired=true. For medical or clinic content, default to approvalRequired=true. Return only schema-valid structured data.',
+          'You convert an approved Client Presence Blueprint into a concrete Monthly Operating Plan. This is not content generation: do not write full posts, articles, emails, captions, or final copy. Generate only structured operational planning data: modules, platforms, themes, formats, planned content items, cadence, approval needs, autopublish eligibility, integrations, manager tasks, and risks. Do not hardcode fixed deliverables or fixed platforms. Use the Blueprint monthly scope, selected modules, recommended platforms, humanReviewPolicy, integrationRequirements, riskRules, confidenceScore, and nextRecommendedAction. plannedContentItems may ONLY use platformName values that exist in Blueprint recommendedPlatforms and the explicit Allowed platform names list. Every plannedContentItem.platformName must exactly match one of the allowed names. Avoid operationally vague channels unless the client brief explicitly requires them for the current month. For marketplaces, generate content only if marketplace cards, product-card updates, or marketplace content are part of the current scope. Do not add marketplace seller/admin work just because a marketplace exists. If unsure, prefer social and content channels such as VK, Telegram, articles, educational posts, expert explanations, and platform-native trust content. Produce concrete usable publication topics, not abstract operational placeholders. Do not introduce Website, Blog, YouTube, Maps, Telegram, VK, or any other platform unless it is present in Blueprint recommendedPlatforms. Platform role guidance is explanatory only and does not authorize adding new platforms. If a useful platform is missing from Blueprint recommendedPlatforms, do not use it in plannedContentItems; mention it only as a managerTask recommendation if relevant. If any Blueprint integrationRequirements item has required=true and the platform is used in selectedPlatforms or plannedContentItems, create a managerTask for that platform. The task title and description must include the exact platformName and words such as integration, connect, access, credentials, and permissions. Do not block planning because integrations are missing; create manager tasks instead. Build the month as a cross-channel calendar using only allowed platforms. Do not group all plannedContentItems by platform. Spread allowed platforms across the month. For each week, combine several relevant allowed platforms when available and give the week a communication theme. Each platform should play a different role. Avoid publishing the same idea in the same wording everywhere. Adapt one strategic theme into platform-native formats. Planned content items should feel like an orchestrated marketing system, not a list of deliverables. Unless the Blueprint strongly requires otherwise, avoid more than 2 consecutive plannedContentItems with the same platformName. plannedDate should preferably use week-based cadence markers: "week 1", "week 2", "week 3", or "week 4". For every plannedContentItem, explain why the item exists in the sequence using sequenceReason. Populate week, campaignTheme, contentPillar, channelRole, and sequenceReason when useful. Platform role guidance: VK is for broader explanation, community, educational content, and social proof. Telegram is for short alive trust-building notes, behind-the-scenes, founder or expert voice, and quick practical insights. Yandex Maps, maps, and directory platforms are for reputation, reviews, local trust, FAQ, and service clarity. Website and blog are for deeper expertise, search-oriented explanation, and long-form trust. Video and social short-form are for attention, simple explanation, and emotional hooks. plannedDate and dueDate must be either YYYY-MM-DD or simple English cadence markers such as "week 1", "week 2", "early month", "before launch", or "after approval". totalPlannedUnits means the total planned monthly content units. plannedContentItems contains the concrete planned items actually listed. Prefer generating a complete list when possible. totalPlannedUnits must never be lower than plannedContentItems.length. Never set autopublishEligible=true for healthcare, medical, legal, financial, regulated, reputation-sensitive, or safety-related content unless the Blueprint explicitly allows it. If unsure, set autopublishEligible=false and approvalRequired=true. For medical or clinic content, default to approvalRequired=true. Return only schema-valid structured data.',
       },
       {
         role: "user",
@@ -209,6 +210,57 @@ export async function generateMonthlyOperatingPlan(input: {
 
   if (!response.output_parsed) {
     throw new Error("The model did not return a parseable monthly operating plan.");
+  }
+
+  return response.output_parsed;
+}
+
+export async function generateMonthlyPlanRevisionProposal(input: {
+  clientName: string;
+  instruction: string;
+  monthlyPlan: unknown;
+  blueprint: unknown;
+  brandContext?: string;
+}) {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error("OPENAI_API_KEY is not configured.");
+  }
+
+  const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+
+  const response = await openai.responses.parse({
+    model: getTextModelForTask("monthly_plan"),
+    ...getTextReasoningForTask("monthly_plan"),
+    input: [
+      {
+        role: "system",
+        content:
+          "You are a senior marketing operations copilot for an agency manager. Revise an existing Monthly Operating Plan only as a proposal. Do not apply changes. Return structured JSON with summary, removeItems, updateItems, addItems, and protectedItems. Use only plannedContentItemId values from the provided plan for remove/update/protected items. Do not remove approved, client-approved, scheduled, creative-asset, or generated-visual items unless the manager explicitly asks to change protected items. If an item should not be touched, list it under protectedItems with a reason. Prefer replacing abstract or operationally wrong items with concrete usable publication topics. Preserve brand context. Keep proposed additions realistic and platform-native. Explain what will change in the summary. Return only schema-valid structured data.",
+      },
+      {
+        role: "user",
+        content: [
+          `Client name: ${input.clientName}`,
+          "Manager instruction:",
+          input.instruction,
+          "Current monthly plan JSON:",
+          JSON.stringify(input.monthlyPlan, null, 2),
+          "Client Blueprint context JSON:",
+          JSON.stringify(input.blueprint, null, 2),
+          "Brand context / Контекст бренда клиента:",
+          input.brandContext || "Not provided",
+        ].join("\n"),
+      },
+    ],
+    text: {
+      format: zodTextFormat(MonthlyPlanRevisionProposalSchema, "monthly_plan_revision_proposal"),
+    },
+  });
+
+  if (!response.output_parsed) {
+    throw new Error("The model did not return a parseable monthly plan revision proposal.");
   }
 
   return response.output_parsed;
