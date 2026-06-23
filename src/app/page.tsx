@@ -173,15 +173,6 @@ const navigationGroups = [
     items: [
       { label: "Обзор", view: "overview" as const, glyph: "О" },
       { label: "Клиенты", view: "clients" as const, glyph: "Кл" },
-      { label: "Календарь", view: "calendar" as const, glyph: "Кд" },
-    ],
-  },
-  {
-    label: "Работа",
-    items: [
-      { label: "Материалы", view: "drafts" as const, glyph: "М" },
-      { label: "Креативы", view: "assets" as const, glyph: "Кр" },
-      { label: "Настройки", view: "settings" as const, glyph: "Н" },
     ],
   },
 ];
@@ -2595,14 +2586,16 @@ function WorkspaceSwitcher({
   ];
 
   return (
-    <nav aria-label="Рабочие зоны" className="mb-4 overflow-x-auto rounded-[18px] border border-slate-200/80 bg-white/80 p-1 shadow-[0_10px_30px_rgba(88,75,135,0.05)]">
+    <nav aria-label="Рабочие зоны" className="mb-4 overflow-x-auto border-b border-slate-200/80">
       <div className="flex min-w-max gap-1">
         {items.map((item) => (
           <a
             key={item.view}
             href={links[item.view]}
-            className={`rounded-[14px] px-3 py-2 text-xs font-semibold transition ${
-              item.view === activeView ? "bg-violet-50 text-violet-700" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+            className={`border-b-2 px-3 py-2 text-xs font-semibold transition ${
+              item.view === activeView
+                ? "border-violet-500 text-violet-700"
+                : "border-transparent text-slate-500 hover:text-slate-900"
             }`}
           >
             {item.label}
@@ -3895,10 +3888,6 @@ function ContentCalendar({
 }) {
   const items = groups.flatMap((group) => group.items);
   const publicationByItemId = new Map(publications.map((publication) => [publication.plannedContentItemId, publication]));
-  const scheduledCount = publications.filter((publication) => publication.status === "scheduled").length;
-  const needsAssetsCount = publications.filter((publication) => publication.status === "needs_assets").length;
-  const readyCount = publications.filter((publication) => publication.status === "ready").length;
-  const skippedCount = publications.filter((publication) => publication.status === "skipped").length;
   const filters = [
     { id: "all", label: "Все" },
     { id: "missing_text", label: "Без текста" },
@@ -4035,14 +4024,7 @@ function ContentCalendar({
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <MetricCard label="Запланировано" value={scheduledCount} detail="Публикации с датой" />
-          <MetricCard label="Нужны материалы" value={needsAssetsCount} detail="Нужно подготовить визуал" tone={needsAssetsCount > 0 ? "amber" : "stone"} />
-          <MetricCard label="Готово" value={readyCount} detail="Можно размещать вручную" />
-          <MetricCard label="Пропущено" value={skippedCount} detail="Снято с работы" />
-        </div>
-        <div className="flex flex-wrap gap-1.5">
+      <div className="mt-4 flex flex-wrap justify-end gap-1.5">
           {filters.map((filter) => (
             <a
               key={filter.id}
@@ -4054,7 +4036,6 @@ function ContentCalendar({
               {filter.label}
             </a>
           ))}
-        </div>
       </div>
 
       {items.length > 0 ? (
@@ -4884,7 +4865,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
         </div>
 
         <nav className="flex-1 px-3 py-3">
-          <div className="grid gap-4">
+          <div className="grid gap-2">
             {navigationGroups.map((group) => (
               <div key={group.label}>
                 <p className="sr-only">{group.label}</p>
@@ -4910,8 +4891,18 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
           </div>
         </nav>
 
-        <div id="settings" className="flex justify-center border-t border-slate-100 px-3 py-4">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-50 text-xs font-bold text-violet-700" title="Профиль менеджера">
+        <div id="settings" className="grid gap-2 border-t border-slate-100 px-3 py-4">
+          <a
+            href={workspaceLinks.settings}
+            title="Настройки"
+            aria-label="Настройки"
+            className={`flex h-11 w-11 items-center justify-center rounded-2xl text-[11px] font-bold transition ${
+              activeView === "settings" ? "bg-violet-50 text-violet-700" : "text-slate-500 hover:bg-slate-50 hover:text-slate-950"
+            }`}
+          >
+            Н
+          </a>
+          <div className="flex h-9 w-9 items-center justify-center justify-self-center rounded-full bg-violet-50 text-xs font-bold text-violet-700" title="Профиль менеджера">
             M
           </div>
         </div>

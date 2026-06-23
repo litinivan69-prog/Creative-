@@ -393,6 +393,12 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - The sidebar was reduced to a compact global icon rail so Calendar has more horizontal room.
 - Materials no longer exposes calendar-like local navigation; production jobs and autopilot are tucked into advanced tasks.
 
+## UI-11A Global Navigation Simplification
+
+- The left sidebar is now a compact global rail for Overview, Clients, Settings, and manager profile only.
+- Workspace tabs remain in the main content area for client-specific sections such as Calendar, Materials, Creative, Brand, Client View, and Reports.
+- Calendar keeps the full visual workspace with compact controls and no KPI widgets above the grid.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.
