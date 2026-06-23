@@ -19,6 +19,7 @@ import {
   validateContentDraftForPersistence,
 } from "@/lib/content-draft-schema";
 import { CreativeAssetBriefSchema } from "@/lib/creative-asset-schema";
+import { normalizeMonthlyPlanDates, parseExactPlanDate } from "@/lib/monthly-plan-dates";
 import { validateMonthlyPlanForBlueprint } from "@/lib/monthly-plan-schema";
 import { MonthlyPlanRevisionProposalSchema } from "@/lib/monthly-plan-revision-schema";
 import { getAutopilotTextBatchLimit } from "@/lib/autopilot";
@@ -51,7 +52,10 @@ function workspaceLocation(
     clientId?: string;
     setupStep?: string;
     brandStep?: string;
+    calendarDate?: string;
+    calendarView?: string;
     error?: string;
+    filter?: string;
     notice?: string;
     portalLink?: string;
   } = {},
@@ -63,6 +67,9 @@ function workspaceLocation(
   if (options.clientId) searchParams.set("client", options.clientId);
   if (options.setupStep) searchParams.set("setupStep", options.setupStep);
   if (options.brandStep) searchParams.set("brandStep", options.brandStep);
+  if (options.calendarView && options.calendarView !== "month") searchParams.set("calendarView", options.calendarView);
+  if (options.calendarDate) searchParams.set("calendarDate", options.calendarDate);
+  if (options.filter && options.filter !== "all") searchParams.set("filter", options.filter);
   if (options.error) searchParams.set("error", options.error);
   if (options.notice) searchParams.set("notice", options.notice);
   if (options.portalLink) searchParams.set("portalLink", options.portalLink);
@@ -828,6 +835,7 @@ export async function generateMonthlyPlan(formData: FormData) {
         approvalRequired: rule.approvalRequired,
       })),
     });
+    normalizeMonthlyPlanDates(plan.plannedContentItems, plan.month);
 
     const created = await prisma.monthlyOperatingPlan.create({
       data: {
@@ -904,6 +912,104 @@ export async function generateMonthlyPlan(formData: FormData) {
 
   revalidatePath("/");
   redirect(workspaceLocation("client_setup", { blueprintId: blueprint.id, planId: createdId, clientId: blueprint.clientId, setupStep: "brand", notice: "Месячный план сгенерирован. Теперь заполните библиотеку бренда." }));
+}
+
+export async function autoScheduleMonthlyPlanDates(formData: FormData) {
+  const monthlyPlanId = formText(formData, "monthlyPlanId");
+  const calendarView = formText(formData, "calendarView");
+  const calendarDate = formText(formData, "calendarDate");
+  const filter = formText(formData, "filter");
+
+  if (!monthlyPlanId) {
+    errorRedirect("Месячный план не выбран.", "calendar");
+  }
+
+  const monthlyPlan = await prisma.monthlyOperatingPlan.findUnique({
+    where: { id: monthlyPlanId },
+    select: {
+      id: true,
+      month: true,
+      blueprintId: true,
+      clientId: true,
+      plannedContentItems: {
+        orderBy: { id: "asc" },
+        select: {
+          id: true,
+          plannedDate: true,
+          week: true,
+          platformName: true,
+          format: true,
+          scheduledPublications: {
+            where: {
+              status: { not: "published" },
+            },
+            orderBy: { createdAt: "desc" },
+            select: {
+              scheduledDate: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!monthlyPlan) {
+    errorRedirect("Месячный план не найден.", "calendar");
+  }
+
+  const items = monthlyPlan.plannedContentItems.map((item) => {
+    const existingScheduledDate = item.scheduledPublications
+      .map((publication) => parseExactPlanDate(publication.scheduledDate))
+      .find((date): date is string => Boolean(date));
+
+    return {
+      id: item.id,
+      plannedDate: parseExactPlanDate(item.plannedDate) ? item.plannedDate : existingScheduledDate ?? item.plannedDate,
+      week: item.week,
+      platformName: item.platformName,
+      format: item.format,
+    };
+  });
+  const datesBefore = new Map(monthlyPlan.plannedContentItems.map((item) => [item.id, item.plannedDate]));
+  normalizeMonthlyPlanDates(items, monthlyPlan.month);
+  const changedItems = items.filter((item) => datesBefore.get(item.id) !== item.plannedDate);
+
+  if (changedItems.length > 0) {
+    await prisma.$transaction(async (tx) => {
+      for (const item of changedItems) {
+        await tx.plannedContentItem.update({
+          where: { id: item.id },
+          data: {
+            plannedDate: item.plannedDate,
+            week: item.week,
+          },
+        });
+
+        await tx.scheduledPublication.updateMany({
+          where: {
+            plannedContentItemId: item.id,
+            status: { not: "published" },
+          },
+          data: {
+            scheduledDate: item.plannedDate,
+          },
+        });
+      }
+    });
+  }
+
+  revalidatePath("/");
+  redirect(workspaceLocation("calendar", {
+    blueprintId: monthlyPlan.blueprintId,
+    planId: monthlyPlan.id,
+    clientId: monthlyPlan.clientId,
+    calendarDate: calendarDate || undefined,
+    calendarView: calendarView || undefined,
+    filter: filter || undefined,
+    notice: changedItems.length > 0
+      ? `Даты расставлены: ${changedItems.length} материалов добавлено в календарь.`
+      : "Все материалы уже стоят на точных датах.",
+  }));
 }
 
 function planItemProtectionReason(item: {

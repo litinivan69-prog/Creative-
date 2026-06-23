@@ -399,6 +399,14 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Workspace tabs remain in the main content area for client-specific sections such as Calendar, Materials, Creative, Brand, Client View, and Reports.
 - Calendar keeps the full visual workspace with compact controls and no KPI widgets above the grid.
 
+## Core/UI-11B Calendar Navigation And Exact Planning Dates
+
+- Calendar navigation now persists `calendarView` and `calendarDate` in the URL for Month, Week, 3-day, and Day modes.
+- The Calendar workspace uses real previous, today, and next period links instead of decorative controls.
+- Monthly plan generation now asks AI for exact `YYYY-MM-DD` planned dates, while a deterministic fallback normalizes vague legacy dates before saving.
+- Existing month plans with week-only items can be repaired from Calendar with the “Расставить даты” action.
+- The sidebar uses real SVG navigation icons and keeps only global destinations.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.

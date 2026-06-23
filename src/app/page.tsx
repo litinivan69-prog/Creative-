@@ -3,6 +3,7 @@ import {
   approveDraft,
   approveCreativeVariant,
   archiveClientBrandAsset,
+  autoScheduleMonthlyPlanDates,
   clearLegacyBase64ForBlobVariants,
   createClientBrandAsset,
   createClientPortalLink,
@@ -68,6 +69,7 @@ type SearchParams = Promise<{
   plan?: string;
   client?: string;
   calendarView?: string;
+  calendarDate?: string;
   setupStep?: string;
   brandStep?: string;
   error?: string;
@@ -171,11 +173,63 @@ const navigationGroups = [
   {
     label: "Главное",
     items: [
-      { label: "Обзор", view: "overview" as const, glyph: "О" },
-      { label: "Клиенты", view: "clients" as const, glyph: "Кл" },
+      { label: "Обзор", view: "overview" as const, icon: "overview" as const },
+      { label: "Клиенты", view: "clients" as const, icon: "clients" as const },
     ],
   },
 ];
+
+type SidebarIconName = "overview" | "clients" | "settings" | "profile";
+
+function SidebarIcon({ name, className = "h-4 w-4" }: { name: SidebarIconName; className?: string }) {
+  const commonProps = {
+    className,
+    fill: "none",
+    stroke: "currentColor",
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    strokeWidth: 1.8,
+    viewBox: "0 0 24 24",
+  };
+
+  if (name === "overview") {
+    return (
+      <svg aria-hidden="true" {...commonProps}>
+        <path d="M4 13h6V4H4v9Z" />
+        <path d="M14 20h6v-9h-6v9Z" />
+        <path d="M4 20h6v-3H4v3Z" />
+        <path d="M14 7h6V4h-6v3Z" />
+      </svg>
+    );
+  }
+
+  if (name === "clients") {
+    return (
+      <svg aria-hidden="true" {...commonProps}>
+        <path d="M16 19c0-2.2-1.8-4-4-4H7c-2.2 0-4 1.8-4 4" />
+        <path d="M9.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
+        <path d="M21 18c0-1.9-1.3-3.5-3.1-3.9" />
+        <path d="M16.5 4.4a3.2 3.2 0 0 1 0 6.2" />
+      </svg>
+    );
+  }
+
+  if (name === "settings") {
+    return (
+      <svg aria-hidden="true" {...commonProps}>
+        <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
+        <path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.04.04a2.1 2.1 0 0 1-2.98 2.98l-.04-.04a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.1 1.66V21.3a2.1 2.1 0 0 1-4.2 0v-.04A1.8 1.8 0 0 0 8.4 19.6a1.8 1.8 0 0 0-1.98.36l-.04.04a2.1 2.1 0 0 1-2.98-2.98l.04-.04A1.8 1.8 0 0 0 3.8 15a1.8 1.8 0 0 0-1.66-1.1H2.1a2.1 2.1 0 0 1 0-4.2h.04A1.8 1.8 0 0 0 3.8 8.6a1.8 1.8 0 0 0-.36-1.98l-.04-.04A2.1 2.1 0 0 1 6.38 3.6l.04.04a1.8 1.8 0 0 0 1.98.36A1.8 1.8 0 0 0 9.5 2.34V2.3a2.1 2.1 0 0 1 4.2 0v.04A1.8 1.8 0 0 0 14.8 4a1.8 1.8 0 0 0 1.98-.36l.04-.04a2.1 2.1 0 0 1 2.98 2.98l-.04.04A1.8 1.8 0 0 0 19.4 8.6a1.8 1.8 0 0 0 1.66 1.1h.04a2.1 2.1 0 0 1 0 4.2h-.04A1.8 1.8 0 0 0 19.4 15Z" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg aria-hidden="true" {...commonProps}>
+      <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
+      <path d="M4 20c0-3.1 2.7-5.5 6-5.5h4c3.3 0 6 2.4 6 5.5" />
+    </svg>
+  );
+}
 
 const pageBackgroundClass = "min-h-screen bg-[#f7f5fb] text-stone-900";
 const panelClass = "rounded-lg border border-stone-200 bg-white shadow-[0_1px_2px_rgba(28,36,38,0.04)]";
@@ -836,7 +890,7 @@ function materialWorkspaceHref(draftsHref: string, itemId: string) {
 }
 
 function parseExactDate(value: string) {
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})(?:$|[T\s])/);
   if (!match) return null;
   const year = Number(match[1]);
   const monthIndex = Number(match[2]) - 1;
@@ -848,6 +902,27 @@ function parseExactDate(value: string) {
 
 function dateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function addCalendarDays(date: Date, amount: number) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + amount);
+}
+
+function addCalendarMonths(date: Date, amount: number) {
+  const targetMonthStart = new Date(date.getFullYear(), date.getMonth() + amount, 1);
+  const targetMonthLastDay = new Date(targetMonthStart.getFullYear(), targetMonthStart.getMonth() + 1, 0).getDate();
+  return new Date(
+    targetMonthStart.getFullYear(),
+    targetMonthStart.getMonth(),
+    Math.min(date.getDate(), targetMonthLastDay),
+  );
+}
+
+function shiftCalendarDate(date: Date, viewMode: string, direction: -1 | 1) {
+  if (viewMode === "month") return addCalendarMonths(date, direction);
+  if (viewMode === "week") return addCalendarDays(date, direction * 7);
+  if (viewMode === "threeDays") return addCalendarDays(date, direction * 3);
+  return addCalendarDays(date, direction);
 }
 
 function shortPlatformName(platform: string) {
@@ -3873,6 +3948,7 @@ function ContentCalendar({
   clientSetupHref,
   activeFilter,
   activeCalendarView,
+  activeCalendarDate,
 }: {
   groups: Array<{ label: string; items: MaterialPlannedItem[] }>;
   publications: ScheduledPublicationPreview[];
@@ -3885,6 +3961,7 @@ function ContentCalendar({
   clientSetupHref: string;
   activeFilter?: string;
   activeCalendarView?: string;
+  activeCalendarDate?: string;
 }) {
   const items = groups.flatMap((group) => group.items);
   const publicationByItemId = new Map(publications.map((publication) => [publication.plannedContentItemId, publication]));
@@ -3905,14 +3982,20 @@ function ContentCalendar({
     { id: "day", label: "День" },
   ];
   const currentCalendarView = calendarViews.some((view) => view.id === activeCalendarView) ? activeCalendarView! : "month";
-  const calendarHref = (filter = currentFilter, viewMode = currentCalendarView) => {
+  const planMonthDate = parseExactDate(`${month}-01`) ?? new Date();
+  const selectedDay = parseExactDate(activeCalendarDate ?? "") ?? planMonthDate;
+  const calendarHref = (filter = currentFilter, viewMode = currentCalendarView, targetDate = selectedDay) => {
     const searchParams = new URLSearchParams({ view: "calendar" });
     if (blueprintId) searchParams.set("blueprint", blueprintId);
     if (monthlyPlanId) searchParams.set("plan", monthlyPlanId);
     if (filter !== "all") searchParams.set("filter", filter);
     if (viewMode !== "month") searchParams.set("calendarView", viewMode);
+    searchParams.set("calendarDate", dateKey(targetDate));
     return `/?${searchParams.toString()}`;
   };
+  const previousPeriodHref = calendarHref(currentFilter, currentCalendarView, shiftCalendarDate(selectedDay, currentCalendarView, -1));
+  const nextPeriodHref = calendarHref(currentFilter, currentCalendarView, shiftCalendarDate(selectedDay, currentCalendarView, 1));
+  const todayHref = calendarHref(currentFilter, currentCalendarView, new Date());
   const itemMatchesFilter = (item: MaterialPlannedItem) => {
     const publication = publicationByItemId.get(item.id);
     const asset = publication?.creativeAssets[0];
@@ -3927,15 +4010,9 @@ function ContentCalendar({
     return true;
   };
   const visibleItems = items.filter(itemMatchesFilter);
-  const firstExactDate =
-    visibleItems
-      .map((item) => parseExactDate(publicationByItemId.get(item.id)?.scheduledDate ?? item.plannedDate))
-      .find((date): date is Date => Boolean(date)) ??
-    parseExactDate(`${month}-01`) ??
-    new Date();
-  const calendarYear = firstExactDate.getFullYear();
-  const calendarMonth = firstExactDate.getMonth();
-  const calendarMonthLabel = firstExactDate.toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
+  const calendarYear = selectedDay.getFullYear();
+  const calendarMonth = selectedDay.getMonth();
+  const calendarMonthLabel = selectedDay.toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
   const monthStart = new Date(calendarYear, calendarMonth, 1);
   const monthEnd = new Date(calendarYear, calendarMonth + 1, 0);
   const leadingDays = (monthStart.getDay() + 6) % 7;
@@ -3944,14 +4021,16 @@ function ContentCalendar({
   ));
   const exactDateItems = visibleItems.filter((item) => parseExactDate(publicationByItemId.get(item.id)?.scheduledDate ?? item.plannedDate));
   const floatingItems = visibleItems.filter((item) => !parseExactDate(publicationByItemId.get(item.id)?.scheduledDate ?? item.plannedDate));
+  const hasVaguePlanDates = items.some((item) => !parseExactDate(item.plannedDate));
   const itemsByDate = new Map<string, MaterialPlannedItem[]>();
   for (const item of exactDateItems) {
-    const key = publicationByItemId.get(item.id)?.scheduledDate ?? item.plannedDate;
+    const exactDate = parseExactDate(publicationByItemId.get(item.id)?.scheduledDate ?? item.plannedDate);
+    if (!exactDate) continue;
+    const key = dateKey(exactDate);
     itemsByDate.set(key, [...(itemsByDate.get(key) ?? []), item]);
   }
   const floatingGroups = groupCalendarItems(floatingItems);
   const calendarWeekdays = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
-  const selectedDay = firstExactDate;
   const selectedWeekStart = new Date(selectedDay);
   selectedWeekStart.setDate(selectedDay.getDate() - ((selectedDay.getDay() + 6) % 7));
   const weekDays = Array.from({ length: 7 }, (_, index) => new Date(selectedWeekStart.getFullYear(), selectedWeekStart.getMonth(), selectedWeekStart.getDate() + index));
@@ -4005,6 +4084,17 @@ function ContentCalendar({
           <p className="mt-1 text-sm text-slate-500">{clientName ?? "Клиент не выбран"} · {calendarMonthLabel}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {monthlyPlanId && hasVaguePlanDates ? (
+            <form action={autoScheduleMonthlyPlanDates}>
+              <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} />
+              <input type="hidden" name="calendarView" value={currentCalendarView} />
+              <input type="hidden" name="calendarDate" value={dateKey(selectedDay)} />
+              <input type="hidden" name="filter" value={currentFilter} />
+              <PendingSubmitButton pendingLabel="Расставляем даты..." className="rounded-full bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:bg-slate-300">
+                Расставить даты
+              </PendingSubmitButton>
+            </form>
+          ) : null}
           <div className="flex rounded-full bg-white p-1 shadow-sm">
             {calendarViews.map((viewMode) => (
               <a
@@ -4018,9 +4108,13 @@ function ContentCalendar({
               </a>
             ))}
           </div>
-          <span className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-400">←</span>
-          <a href={calendarHref(currentFilter, "month")} className="rounded-full bg-violet-50 px-4 py-2 text-sm font-semibold text-violet-700">Сегодня</a>
-          <span className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-400">→</span>
+          <a href={previousPeriodHref} aria-label="Предыдущий период" className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-violet-200 hover:text-violet-700">
+            ←
+          </a>
+          <a href={todayHref} className="rounded-full bg-violet-50 px-4 py-2 text-sm font-semibold text-violet-700 transition hover:bg-violet-100">Сегодня</a>
+          <a href={nextPeriodHref} aria-label="Следующий период" className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-violet-200 hover:text-violet-700">
+            →
+          </a>
         </div>
       </div>
 
@@ -4882,7 +4976,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                           : "text-slate-500 hover:bg-slate-50 hover:text-slate-950"
                       }`}
                     >
-                      <span className="text-[11px] font-bold">{item.glyph}</span>
+                      <SidebarIcon name={item.icon} />
                     </a>
                   ))}
                 </div>
@@ -4896,14 +4990,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
             href={workspaceLinks.settings}
             title="Настройки"
             aria-label="Настройки"
-            className={`flex h-11 w-11 items-center justify-center rounded-2xl text-[11px] font-bold transition ${
+            className={`flex h-11 w-11 items-center justify-center rounded-2xl transition ${
               activeView === "settings" ? "bg-violet-50 text-violet-700" : "text-slate-500 hover:bg-slate-50 hover:text-slate-950"
             }`}
           >
-            Н
+            <SidebarIcon name="settings" />
           </a>
-          <div className="flex h-9 w-9 items-center justify-center justify-self-center rounded-full bg-violet-50 text-xs font-bold text-violet-700" title="Профиль менеджера">
-            M
+          <div className="flex h-9 w-9 items-center justify-center justify-self-center rounded-full bg-violet-50 text-violet-700" title="Профиль менеджера">
+            <SidebarIcon name="profile" className="h-3.5 w-3.5" />
           </div>
         </div>
       </aside>
@@ -5012,15 +5106,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   clientSetupHref={workspaceLinks.client_setup}
                   activeFilter={params.filter}
                   activeCalendarView={params.calendarView}
+                  activeCalendarDate={params.calendarDate}
                 />
-                <div className="mt-7">
-                  <SchedulingLayer
-                    drafts={contentDrafts}
-                    publications={selectedMonthlyPlan?.scheduledPublications ?? []}
-                    assetsHref={workspaceLinks.assets}
-                    draftsHref={workspaceLinks.drafts}
-                  />
-                </div>
               </>
             ) : null}
 
