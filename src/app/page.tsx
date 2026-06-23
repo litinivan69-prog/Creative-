@@ -3388,20 +3388,20 @@ function DraftsView({
           В плане пока нет материалов. Добавьте первый материал или сгенерируйте месячный план.
         </div>
       ) : (
-        <div className="mt-4 grid min-h-[620px] gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
-          <div className="rounded-[24px] border border-slate-200/80 bg-white p-4 shadow-[0_10px_28px_rgba(88,75,135,0.055)]">
-            <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-4 grid gap-4">
+          <div className="rounded-[26px] border border-slate-200/80 bg-white p-4 shadow-[0_10px_28px_rgba(88,75,135,0.055)]">
+            <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               <MetricCard label="Материалов" value={totalMaterialsCount} detail="В плане" />
               <MetricCard label="Без текста" value={missingTextsCount} detail="Ждут подготовки" />
               <MetricCard label="Согласованы" value={approvedTextsCount} detail="Можно планировать" />
               <MetricCard label="Запланированы" value={scheduledCount} detail="Есть дата" />
             </div>
 
-            <div className="max-h-[calc(100vh-320px)] min-h-[420px] overflow-auto pr-1">
-              <div className="rounded-[22px] border border-slate-200 bg-slate-50/70 p-3">
+            <div className="overflow-x-auto pb-2">
+              <div className="min-w-[1120px] rounded-[24px] border border-slate-200 bg-slate-50/70 p-3">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h3 className="text-base font-semibold capitalize text-slate-950">{calendarMonthLabel}</h3>
+                    <h3 className="text-xl font-semibold capitalize text-slate-950">{calendarMonthLabel}</h3>
                     <p className="text-xs font-semibold text-slate-400">{visibleItems.length} материалов в текущем фильтре</p>
                   </div>
                   <div className="flex items-center gap-1 rounded-full bg-white p-1 text-xs font-semibold text-slate-400">
@@ -3422,7 +3422,7 @@ function DraftsView({
                     const inMonth = date.getMonth() === calendarMonth;
 
                     return (
-                      <div key={key} className={`min-h-[138px] bg-white p-2 ${inMonth ? "" : "opacity-45"}`}>
+                      <div key={key} className={`min-h-[178px] bg-white p-2.5 ${inMonth ? "" : "opacity-45"}`}>
                         <div className="mb-2 flex items-center justify-between">
                           <span className={`text-xs font-semibold ${inMonth ? "text-slate-700" : "text-slate-400"}`}>{date.getDate()}</span>
                           {dayItems.length > 0 ? <span className="text-[10px] font-semibold text-violet-500">{dayItems.length}</span> : null}
@@ -3469,7 +3469,7 @@ function DraftsView({
             </div>
           </div>
 
-          <aside className="rounded-[24px] border border-slate-200/80 bg-white p-4 shadow-[0_10px_28px_rgba(88,75,135,0.055)] xl:sticky xl:top-24 xl:max-h-[calc(100vh-132px)] xl:overflow-auto">
+          <article className="rounded-[24px] border border-slate-200/80 bg-white p-4 shadow-[0_10px_28px_rgba(88,75,135,0.055)]">
             {!selectedItem ? (
               <p className="text-sm leading-6 text-slate-500">Выберите материал в календаре, чтобы открыть текст, ТЗ и визуал.</p>
             ) : (
@@ -3491,7 +3491,7 @@ function DraftsView({
                   </div>
                 </div>
 
-                <div className="mt-4 grid gap-3">
+                <div className="mt-4 grid gap-3 lg:grid-cols-2 2xl:grid-cols-4">
                   <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
                     <div className="flex items-center justify-between gap-2">
                       <h4 className="text-sm font-semibold text-slate-950">Текст публикации</h4>
@@ -3624,7 +3624,7 @@ function DraftsView({
                 </div>
               </div>
             )}
-          </aside>
+          </article>
         </div>
       )}
 

@@ -378,6 +378,7 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Materials now uses a real month-style calendar surface with weekday columns and dated material chips.
 - Week-only items stay in a compact “Без точной даты” area grouped by week.
 - Material cards now show one clear next-action chip instead of several noisy technical badges.
+- The calendar is now the primary full-width workspace, with material details moved below so the month grid is not squeezed.
 - The material inspector was cleaned up around text, creative brief, visual, approval, and manual plan actions without changing product logic.
 
 ## Automation Sprint 0
