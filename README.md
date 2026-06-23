@@ -344,6 +344,14 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Protected materials remain untouched and are counted in the manager notice.
 - The older proposal-only flow remains available as a secondary review mode.
 
+## Core-8A Manual Monthly Plan Editor
+
+- Manual monthly plan editing was added for managers.
+- Managers can add, edit, duplicate, and safely delete planned content items before production starts.
+- Protected materials are not deleted or overwritten when they are approved, sent to client, published, visualized, or already have creative assets.
+- Manual updates synchronize linked draft and non-published calendar metadata so the calendar reflects changed platform, topic, and date after refresh.
+- This gives managers reliable control over AI-generated plans without requiring AI Copilot.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.

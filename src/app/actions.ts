@@ -907,11 +907,16 @@ export async function generateMonthlyPlan(formData: FormData) {
 }
 
 function planItemProtectionReason(item: {
+  status?: string;
   contentDraft: { status: string } | null;
   scheduledPublications: Array<{ status: string }>;
   creativeAssets: Array<{ generatedVariants: unknown[] }>;
   generatedCreativeVariants: unknown[];
 }) {
+  if (item.status && ["approved", "agreed", "client_approved", "ready_to_schedule"].includes(item.status)) {
+    return "Материал уже согласован.";
+  }
+
   if (item.contentDraft && ["approved", "ready_to_schedule", "sent_to_client", "client_approved"].includes(item.contentDraft.status)) {
     return "Материал уже согласован или отправлен клиенту.";
   }
@@ -929,6 +934,288 @@ function planItemProtectionReason(item: {
   }
 
   return null;
+}
+
+const manualPlanProtectedMessage = "Материал уже находится в работе или согласован. Сначала снимите его с согласования или создайте новую версию.";
+
+function optionalPlanText(formData: FormData, key: string) {
+  const value = formText(formData, key);
+  return value || null;
+}
+
+async function loadPlannedContentItemForManualEdit(plannedContentItemId: string) {
+  return prisma.plannedContentItem.findUnique({
+    where: { id: plannedContentItemId },
+    include: {
+      monthlyPlan: {
+        select: {
+          id: true,
+          blueprintId: true,
+          totalPlannedUnits: true,
+          modules: {
+            take: 1,
+            orderBy: { id: "asc" },
+          },
+        },
+      },
+      contentDraft: {
+        select: {
+          id: true,
+          status: true,
+        },
+      },
+      scheduledPublications: {
+        select: {
+          id: true,
+          status: true,
+        },
+      },
+      creativeAssets: {
+        include: {
+          generatedVariants: {
+            select: { id: true },
+          },
+        },
+      },
+      generatedCreativeVariants: {
+        select: { id: true },
+      },
+    },
+  });
+}
+
+export async function createPlannedContentItemManual(formData: FormData) {
+  const monthlyPlanId = formText(formData, "monthlyPlanId");
+  const platformName = formText(formData, "platformName");
+  const format = formText(formData, "format");
+  const topic = formText(formData, "topic");
+  const goal = formText(formData, "goal");
+  const week = optionalPlanText(formData, "week");
+  const plannedDate = formText(formData, "plannedDate") || week || "week 1";
+
+  if (!monthlyPlanId || !platformName || !format || !topic || !goal) {
+    monthlyPlanErrorRedirect("", monthlyPlanId, "Заполните площадку, формат, тему и цель материала.", "drafts");
+  }
+
+  const monthlyPlan = await prisma.monthlyOperatingPlan.findUnique({
+    where: { id: monthlyPlanId },
+    include: {
+      modules: {
+        take: 1,
+        orderBy: { id: "asc" },
+      },
+    },
+  });
+
+  if (!monthlyPlan) {
+    errorRedirect("Месячный план не найден.", "drafts");
+  }
+
+  await prisma.plannedContentItem.create({
+    data: {
+      monthlyPlanId: monthlyPlan.id,
+      moduleType: monthlyPlan.modules[0]?.moduleType ?? "custom",
+      platformName,
+      format,
+      topic,
+      goal,
+      week,
+      plannedDate,
+      campaignTheme: optionalPlanText(formData, "campaignTheme"),
+      contentPillar: optionalPlanText(formData, "contentPillar"),
+      channelRole: optionalPlanText(formData, "channelRole"),
+      sequenceReason: optionalPlanText(formData, "sequenceReason"),
+      approvalRequired: true,
+      autopublishEligible: false,
+      requiredInputs: [],
+      status: "planned",
+    },
+  });
+
+  const updatedItemCount = await prisma.plannedContentItem.count({ where: { monthlyPlanId: monthlyPlan.id } });
+  await prisma.monthlyOperatingPlan.update({
+    where: { id: monthlyPlan.id },
+    data: { totalPlannedUnits: Math.max(monthlyPlan.totalPlannedUnits, updatedItemCount) },
+  });
+
+  revalidatePath("/");
+  redirect(workspaceLocation("drafts", {
+    blueprintId: monthlyPlan.blueprintId,
+    planId: monthlyPlan.id,
+    notice: "Материал добавлен в месячный план.",
+  }));
+}
+
+export async function updatePlannedContentItemManual(formData: FormData) {
+  const plannedContentItemId = formText(formData, "plannedContentItemId");
+  const platformName = formText(formData, "platformName");
+  const format = formText(formData, "format");
+  const topic = formText(formData, "topic");
+  const goal = formText(formData, "goal");
+  const week = optionalPlanText(formData, "week");
+  const plannedDate = formText(formData, "plannedDate") || week || "week 1";
+
+  if (!plannedContentItemId || !platformName || !format || !topic || !goal) {
+    errorRedirect("Заполните площадку, формат, тему и цель материала.", "drafts");
+  }
+
+  const item = await loadPlannedContentItemForManualEdit(plannedContentItemId);
+
+  if (!item) {
+    errorRedirect("Материал месячного плана не найден.", "drafts");
+  }
+
+  const protectionReason = planItemProtectionReason(item);
+  if (protectionReason) {
+    monthlyPlanErrorRedirect(item.monthlyPlan.blueprintId, item.monthlyPlanId, manualPlanProtectedMessage, "drafts");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.plannedContentItem.update({
+      where: { id: item.id },
+      data: {
+        platformName,
+        format,
+        topic,
+        goal,
+        week,
+        plannedDate,
+        campaignTheme: optionalPlanText(formData, "campaignTheme"),
+        contentPillar: optionalPlanText(formData, "contentPillar"),
+        channelRole: optionalPlanText(formData, "channelRole"),
+        sequenceReason: optionalPlanText(formData, "sequenceReason"),
+        status: "planned",
+      },
+    });
+
+    if (item.contentDraft) {
+      await tx.contentDraft.update({
+        where: { id: item.contentDraft.id },
+        data: {
+          platformName,
+          format,
+          topic,
+          goal,
+          status: "needs_review",
+        },
+      });
+    }
+
+    await tx.scheduledPublication.updateMany({
+      where: {
+        plannedContentItemId: item.id,
+        status: { not: "published" },
+      },
+      data: {
+        platformName,
+        format,
+        topic,
+        scheduledDate: plannedDate,
+        status: "scheduled",
+      },
+    });
+  });
+
+  revalidatePath("/");
+  redirect(workspaceLocation("drafts", {
+    blueprintId: item.monthlyPlan.blueprintId,
+    planId: item.monthlyPlanId,
+    notice: "Изменения материала сохранены. Календарь обновится после перезагрузки.",
+  }));
+}
+
+export async function deletePlannedContentItemManual(formData: FormData) {
+  const plannedContentItemId = formText(formData, "plannedContentItemId");
+
+  if (!plannedContentItemId) {
+    errorRedirect("Материал месячного плана не выбран.", "drafts");
+  }
+
+  const item = await loadPlannedContentItemForManualEdit(plannedContentItemId);
+
+  if (!item) {
+    errorRedirect("Материал месячного плана не найден.", "drafts");
+  }
+
+  const protectionReason = planItemProtectionReason(item);
+  if (protectionReason) {
+    monthlyPlanErrorRedirect(item.monthlyPlan.blueprintId, item.monthlyPlanId, manualPlanProtectedMessage, "drafts");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    if (item.contentDraft) {
+      await tx.contentDraft.delete({ where: { id: item.contentDraft.id } });
+    }
+
+    await tx.scheduledPublication.deleteMany({
+      where: {
+        plannedContentItemId: item.id,
+        status: { not: "published" },
+      },
+    });
+    await tx.plannedContentItem.delete({ where: { id: item.id } });
+  });
+
+  const updatedItemCount = await prisma.plannedContentItem.count({ where: { monthlyPlanId: item.monthlyPlanId } });
+  await prisma.monthlyOperatingPlan.update({
+    where: { id: item.monthlyPlanId },
+    data: { totalPlannedUnits: updatedItemCount },
+  });
+
+  revalidatePath("/");
+  redirect(workspaceLocation("drafts", {
+    blueprintId: item.monthlyPlan.blueprintId,
+    planId: item.monthlyPlanId,
+    notice: "Материал удалён из месячного плана.",
+  }));
+}
+
+export async function duplicatePlannedContentItemManual(formData: FormData) {
+  const plannedContentItemId = formText(formData, "plannedContentItemId");
+
+  if (!plannedContentItemId) {
+    errorRedirect("Материал месячного плана не выбран.", "drafts");
+  }
+
+  const item = await loadPlannedContentItemForManualEdit(plannedContentItemId);
+
+  if (!item) {
+    errorRedirect("Материал месячного плана не найден.", "drafts");
+  }
+
+  await prisma.plannedContentItem.create({
+    data: {
+      monthlyPlanId: item.monthlyPlanId,
+      moduleType: item.moduleType,
+      platformName: item.platformName,
+      format: item.format,
+      topic: `${item.topic} копия`,
+      goal: item.goal,
+      plannedDate: item.plannedDate,
+      week: item.week,
+      campaignTheme: item.campaignTheme,
+      contentPillar: item.contentPillar,
+      channelRole: item.channelRole,
+      sequenceReason: item.sequenceReason,
+      approvalRequired: true,
+      autopublishEligible: false,
+      requiredInputs: [],
+      status: "planned",
+    },
+  });
+
+  const updatedItemCount = await prisma.plannedContentItem.count({ where: { monthlyPlanId: item.monthlyPlanId } });
+  await prisma.monthlyOperatingPlan.update({
+    where: { id: item.monthlyPlanId },
+    data: { totalPlannedUnits: Math.max(item.monthlyPlan.totalPlannedUnits, updatedItemCount) },
+  });
+
+  revalidatePath("/");
+  redirect(workspaceLocation("drafts", {
+    blueprintId: item.monthlyPlan.blueprintId,
+    planId: item.monthlyPlanId,
+    notice: "Материал продублирован в месячном плане.",
+  }));
 }
 
 async function applyMonthlyPlanRevisionProposalById(proposalId: string) {

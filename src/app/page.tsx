@@ -8,7 +8,10 @@ import {
   createClientPortalLink,
   createCreativeAssetBrief,
   createClient,
+  createPlannedContentItemManual,
   deleteCreativeVariant,
+  deletePlannedContentItemManual,
+  duplicatePlannedContentItemManual,
   generateBlueprint,
   generateContentDraftForItem,
   regenerateContentDraftForItem,
@@ -41,6 +44,7 @@ import {
   updateClientBrandProfile,
   updateCreativeAssetBrief,
   updateCreativeAssetStatus,
+  updatePlannedContentItemManual,
   updatePublicationText,
   updateScheduledPublication,
 } from "@/app/actions";
@@ -571,7 +575,18 @@ type MaterialPlannedItem = {
   format: string;
   topic: string;
   goal: string;
+  status: string;
+  approvalRequired: boolean;
+  campaignTheme: string | null;
+  contentPillar: string | null;
+  channelRole: string | null;
+  sequenceReason: string | null;
   contentDraft: DraftQueueItem | null;
+  creativeAssets: Array<{
+    id: string;
+    generatedVariants: GeneratedCreativeVariantPreview[];
+  }>;
+  generatedCreativeVariants: GeneratedCreativeVariantPreview[];
 };
 
 type MonthlyPlanRevisionProposalPreview = {
@@ -2591,6 +2606,174 @@ function MonthlyPlanRevisionCopilot({
   );
 }
 
+function manualPlanProtectionLabels(item: MaterialPlannedItem, publication?: ScheduledPublicationPreview) {
+  const labels: Array<{ label: string; tone: "neutral" | "teal" | "amber" | "rose" | "green" }> = [];
+  const draftStatus = item.contentDraft?.status;
+  const hasGeneratedVisual =
+    item.generatedCreativeVariants.length > 0 ||
+    item.creativeAssets.some((asset) => asset.generatedVariants.length > 0);
+
+  if (draftStatus && ["approved", "ready_to_schedule", "sent_to_client", "client_approved"].includes(draftStatus)) {
+    labels.push({ label: "Согласовано", tone: "green" });
+  } else if (draftStatus) {
+    labels.push({ label: "В работе", tone: "amber" });
+  }
+
+  if (publication) {
+    labels.push({ label: publication.status === "published" ? "Опубликовано" : "Запланировано", tone: publication.status === "published" ? "green" : "teal" });
+  }
+
+  if (hasGeneratedVisual) {
+    labels.push({ label: "Есть визуал", tone: "teal" });
+  } else if (item.creativeAssets.length > 0) {
+    labels.push({ label: "Есть ТЗ", tone: "amber" });
+  }
+
+  if (labels.length === 0) {
+    labels.push({ label: "Можно редактировать", tone: "green" });
+  }
+
+  return labels;
+}
+
+function ManualPlanFields({ item }: { item?: MaterialPlannedItem }) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      <label className="grid gap-1 text-xs font-bold text-stone-600">
+        Площадка
+        <input name="platformName" required defaultValue={item?.platformName ?? ""} className={inputClass} placeholder="VK, Telegram, Дзен..." />
+      </label>
+      <label className="grid gap-1 text-xs font-bold text-stone-600">
+        Формат
+        <input name="format" required defaultValue={item?.format ?? ""} className={inputClass} placeholder="пост, статья, карточка..." />
+      </label>
+      <label className="grid gap-1 text-xs font-bold text-stone-600 sm:col-span-2">
+        Тема
+        <input name="topic" required defaultValue={item?.topic ?? ""} className={inputClass} />
+      </label>
+      <label className="grid gap-1 text-xs font-bold text-stone-600 sm:col-span-2">
+        Цель
+        <textarea name="goal" required rows={3} defaultValue={item?.goal ?? ""} className={inputClass} />
+      </label>
+      <label className="grid gap-1 text-xs font-bold text-stone-600">
+        Неделя
+        <input name="week" defaultValue={item?.week ?? ""} className={inputClass} placeholder="week 1" />
+      </label>
+      <label className="grid gap-1 text-xs font-bold text-stone-600">
+        Дата
+        <input name="plannedDate" defaultValue={item?.plannedDate ?? ""} className={inputClass} placeholder="week 1 или YYYY-MM-DD" />
+      </label>
+      <label className="grid gap-1 text-xs font-bold text-stone-600">
+        Кампания
+        <input name="campaignTheme" defaultValue={item?.campaignTheme ?? ""} className={inputClass} />
+      </label>
+      <label className="grid gap-1 text-xs font-bold text-stone-600">
+        Контентный столп
+        <input name="contentPillar" defaultValue={item?.contentPillar ?? ""} className={inputClass} />
+      </label>
+      <label className="grid gap-1 text-xs font-bold text-stone-600">
+        Роль канала
+        <input name="channelRole" defaultValue={item?.channelRole ?? ""} className={inputClass} />
+      </label>
+      <label className="grid gap-1 text-xs font-bold text-stone-600">
+        Причина
+        <input name="sequenceReason" defaultValue={item?.sequenceReason ?? ""} className={inputClass} />
+      </label>
+    </div>
+  );
+}
+
+function ManualMonthlyPlanEditor({
+  monthlyPlanId,
+  items,
+  publications,
+}: {
+  monthlyPlanId?: string;
+  items: MaterialPlannedItem[];
+  publications: ScheduledPublicationPreview[];
+}) {
+  return (
+    <article className={`${panelClass} mt-5 overflow-hidden border-teal-200`}>
+      <div className="grid gap-5 bg-white p-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Ручное управление планом</p>
+          <h3 className="mt-1 text-lg font-semibold text-stone-950">Редактор месячного плана</h3>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">
+            Исправьте площадки, темы и недели до запуска производства. Календарь и связанные рабочие записи обновятся после сохранения.
+          </p>
+        </div>
+        <details className="rounded-lg border border-teal-200 bg-teal-50/70 p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-teal-950">Добавить материал в план</summary>
+          <form action={createPlannedContentItemManual} className="mt-4 grid gap-3">
+            {monthlyPlanId ? <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} /> : null}
+            <ManualPlanFields />
+            <PendingSubmitButton pendingLabel="Добавляем..." disabled={!monthlyPlanId} className={primaryButtonClass}>
+              Добавить материал в план
+            </PendingSubmitButton>
+          </form>
+        </details>
+      </div>
+
+      <div className="border-t border-stone-200 bg-stone-50/60 p-4 sm:p-5">
+        <div className="grid gap-3">
+          {items.map((item) => {
+            const publication = publications.find((candidate) => candidate.plannedContentItemId === item.id);
+            const labels = manualPlanProtectionLabels(item, publication);
+
+            return (
+              <article key={item.id} className="rounded-lg border border-stone-200 bg-white p-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap gap-1.5">
+                      <StatusBadge tone="teal">{item.platformName}</StatusBadge>
+                      <StatusBadge>{item.format}</StatusBadge>
+                      <StatusBadge>{item.week || item.plannedDate}</StatusBadge>
+                    </div>
+                    <h4 className="mt-2 font-semibold leading-6 text-stone-950">{item.topic}</h4>
+                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-stone-500">{item.goal}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {labels.map((label) => (
+                      <StatusBadge key={label.label} tone={label.tone}>{label.label}</StatusBadge>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <details className="w-full rounded-md border border-stone-200 bg-stone-50/80 lg:w-auto lg:min-w-[520px]">
+                    <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-stone-700">Изменить</summary>
+                    <form action={updatePlannedContentItemManual} className="grid gap-3 border-t border-stone-200 p-3">
+                      <input type="hidden" name="plannedContentItemId" value={item.id} />
+                      <ManualPlanFields item={item} />
+                      <div className="flex flex-wrap gap-2">
+                        <PendingSubmitButton pendingLabel="Сохраняем..." className={primaryButtonClass}>
+                          Сохранить изменения
+                        </PendingSubmitButton>
+                        <span className="inline-flex items-center text-xs font-semibold text-stone-400">Отмена: закройте блок “Изменить”</span>
+                      </div>
+                    </form>
+                  </details>
+
+                  <form action={duplicatePlannedContentItemManual}>
+                    <input type="hidden" name="plannedContentItemId" value={item.id} />
+                    <PendingSubmitButton pendingLabel="Дублируем..." className={secondaryButtonClass}>Дублировать</PendingSubmitButton>
+                  </form>
+
+                  <form action={deletePlannedContentItemManual}>
+                    <input type="hidden" name="plannedContentItemId" value={item.id} />
+                    <PendingSubmitButton pendingLabel="Удаляем..." className={destructiveButtonClass}>Удалить</PendingSubmitButton>
+                  </form>
+                </div>
+              </article>
+            );
+          })}
+          {items.length === 0 ? <EmptyState>В месячном плане пока нет материалов. Добавьте первый материал вручную.</EmptyState> : null}
+        </div>
+      </div>
+    </article>
+  );
+}
+
 function DraftsView({
   items,
   publications,
@@ -2644,6 +2827,7 @@ function DraftsView({
       <p className={`mt-3 rounded-md border px-3 py-2 text-xs leading-5 ${brandProfileReady ? "border-teal-200 bg-teal-50 text-teal-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
         {brandProfileReady ? "AI использует контекст бренда клиента." : "Заполните библиотеку бренда, чтобы тексты и визуалы были точнее."}
       </p>
+      <ManualMonthlyPlanEditor monthlyPlanId={monthlyPlanId} items={items} publications={publications} />
       <article className={`${panelClass} mt-5 overflow-hidden border-teal-200`}>
         <div className="grid gap-5 bg-teal-50/60 p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           <div>
@@ -2669,7 +2853,6 @@ function DraftsView({
           )}
         </div>
       </article>
-      <MonthlyPlanRevisionCopilot monthlyPlanId={monthlyPlanId} proposal={latestRevisionProposal} />
       <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         <MetricCard label="Всего материалов" value={totalMaterialsCount} detail="В текущем плане" />
         <MetricCard label="Тексты созданы" value={textsCreatedCount} detail="Можно проверять" tone="teal" />
@@ -2894,6 +3077,10 @@ function DraftsView({
           );
         })}
         {items.length === 0 ? <EmptyState>Сгенерируйте месячный план, чтобы публикационные материалы появились в этом разделе.</EmptyState> : null}
+      </div>
+      <div className="mt-5">
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-stone-400">Экспериментально</p>
+        <MonthlyPlanRevisionCopilot monthlyPlanId={monthlyPlanId} proposal={latestRevisionProposal} />
       </div>
     </section>
   );
@@ -3860,6 +4047,18 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                         },
                       },
                     },
+                    creativeAssets: {
+                      include: {
+                        generatedVariants: {
+                          orderBy: { createdAt: "desc" },
+                          select: generatedCreativeVariantPreviewSelect,
+                        },
+                      },
+                    },
+                    generatedCreativeVariants: {
+                      orderBy: { createdAt: "desc" },
+                      select: generatedCreativeVariantPreviewSelect,
+                    },
                   },
                 },
                 managerTasks: true,
@@ -3934,6 +4133,18 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                           orderBy: { createdAt: "asc" },
                         },
                       },
+                    },
+                    creativeAssets: {
+                      include: {
+                        generatedVariants: {
+                          orderBy: { createdAt: "desc" },
+                          select: generatedCreativeVariantPreviewSelect,
+                        },
+                      },
+                    },
+                    generatedCreativeVariants: {
+                      orderBy: { createdAt: "desc" },
+                      select: generatedCreativeVariantPreviewSelect,
                     },
                   },
                 },
