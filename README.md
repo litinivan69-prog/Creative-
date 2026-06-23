@@ -359,6 +359,13 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Key counters, monthly readiness, active client context, queue, activity, and next actions are visible above the fold on desktop.
 - Sidebar and workspace tabs were lightly cleaned up without changing product logic or other workflows.
 
+## UI-9B Overview Noise Cleanup
+
+- Overview empty states and lower cards were tightened to reduce visual noise.
+- Decorative placeholders and repeated activity icons were removed.
+- The lower Overview area now focuses on one action card, queue counts, and three recent activity items.
+- The lavender SaaS direction remains, with fewer competing colors and less explanatory copy.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.

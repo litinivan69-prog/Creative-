@@ -293,7 +293,7 @@ function MetricCard({
   );
 }
 
-const overviewCardClass = "rounded-[22px] border border-slate-200/80 bg-white shadow-[0_16px_40px_rgba(88,75,135,0.07)]";
+const overviewCardClass = "rounded-[22px] border border-slate-200/80 bg-white shadow-[0_10px_28px_rgba(88,75,135,0.055)]";
 const overviewAccentTextClass = "text-violet-700";
 const overviewAccentBgClass = "bg-violet-50 text-violet-700";
 
@@ -311,14 +311,14 @@ function OverviewMetricCard({
   glyph: string;
 }) {
   return (
-    <a href={href} className={`${overviewCardClass} group min-w-0 p-4 transition hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(88,75,135,0.11)]`}>
-      <div className="flex items-start justify-between gap-3">
-        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${overviewAccentBgClass} text-xs font-bold`}>
+    <a href={href} className={`${overviewCardClass} group min-w-0 p-3.5 transition hover:-translate-y-0.5 hover:shadow-[0_16px_34px_rgba(88,75,135,0.1)]`}>
+      <div className="flex items-center justify-between gap-3">
+        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl ${overviewAccentBgClass} text-[11px] font-bold`}>
           {glyph}
         </span>
-        <span className="text-lg text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-violet-400">›</span>
+        <span className="text-base text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-violet-400">›</span>
       </div>
-      <p className="mt-4 text-3xl font-semibold tracking-tight text-slate-950">{value}</p>
+      <p className="mt-2.5 text-2xl font-semibold tracking-tight text-slate-950">{value}</p>
       <p className="mt-1 text-sm font-semibold text-slate-800">{label}</p>
       <p className="mt-1 truncate text-xs text-slate-400">{detail}</p>
     </a>
@@ -350,11 +350,11 @@ function OverviewProgressCard({
   ];
 
   return (
-    <article className={`${overviewCardClass} p-5 lg:col-span-7 xl:col-span-7`}>
+    <article className={`${overviewCardClass} p-4 lg:col-span-7 xl:col-span-7`}>
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-slate-950">Состояние работы на месяц</h2>
-          <p className="mt-1 text-xs text-slate-400">{plannedContentCount} материалов · {draftCount} текстов готово</p>
+          <p className="mt-1 text-xs text-slate-400">Готовность производства за текущий цикл.</p>
         </div>
         {integrationTaskCount > 0 ? (
           <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">Настроить доступы</span>
@@ -362,32 +362,32 @@ function OverviewProgressCard({
           <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">Онлайн</span>
         )}
       </div>
-      <div className="mt-5 grid gap-5 md:grid-cols-[156px_minmax(0,1fr)] md:items-center">
-        <div className="relative flex h-32 w-32 items-center justify-center justify-self-center rounded-full bg-violet-50">
+      <div className="mt-4 grid gap-4 md:grid-cols-[128px_minmax(0,1fr)] md:items-center">
+        <div className="relative flex h-28 w-28 items-center justify-center justify-self-center rounded-full bg-violet-50">
           <div
             className="absolute inset-0 rounded-full"
             style={{
               background: `conic-gradient(#7c3aed ${Math.max(progress, 2)}%, #ede9fe 0)`,
             }}
           />
-          <div className="relative flex h-24 w-24 flex-col items-center justify-center rounded-full bg-white shadow-inner">
-            <span className="text-3xl font-semibold tracking-tight text-slate-950">{progress}%</span>
+          <div className="relative flex h-20 w-20 flex-col items-center justify-center rounded-full bg-white shadow-inner">
+            <span className="text-2xl font-semibold tracking-tight text-slate-950">{progress}%</span>
             <span className="text-[11px] font-semibold text-slate-400">готовность</span>
           </div>
         </div>
         <div>
           <div className="grid grid-cols-4 gap-2">
             {steps.map((step) => (
-              <div key={step.label} className={`rounded-2xl border px-3 py-3 text-center ${step.active ? "border-violet-200 bg-violet-50 text-violet-800" : "border-slate-200 bg-slate-50 text-slate-400"}`}>
+              <div key={step.label} className={`rounded-2xl border px-2 py-2 text-center ${step.active ? "border-violet-200 bg-violet-50 text-violet-800" : "border-slate-200 bg-slate-50 text-slate-400"}`}>
                 <p className="text-xs font-semibold">{step.label}</p>
               </div>
             ))}
           </div>
-          <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
             <div className="h-full rounded-full bg-violet-600" style={{ width: `${progress}%` }} />
           </div>
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-slate-500">План → Тексты → Проверка → Готово</p>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-slate-500">{plannedContentCount} материалов · {draftCount} текстов</p>
             <a href={draftsHref} className="rounded-full bg-violet-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-violet-700">Открыть материалы</a>
           </div>
         </div>
@@ -416,7 +416,7 @@ function OverviewClientCard({
   blueprintHref: string;
 }) {
   return (
-    <article className={`${overviewCardClass} p-5 lg:col-span-5 xl:col-span-5`}>
+    <article className={`${overviewCardClass} p-4 lg:col-span-5 xl:col-span-5`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold text-slate-400">Клиент в работе</p>
@@ -425,21 +425,21 @@ function OverviewClientCard({
         </div>
         <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">active</span>
       </div>
-      <div className="mt-5 grid grid-cols-3 gap-2">
-        <div className="rounded-2xl bg-slate-50 p-3">
-          <p className="text-[11px] font-semibold text-slate-400">Blueprint</p>
-          <p className="mt-1 text-lg font-semibold text-slate-950">{confidenceScore ?? 0}%</p>
+      <div className="mt-4 grid gap-2 text-xs">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+          <span className="text-slate-400">Blueprint confidence</span>
+          <span className="font-semibold text-slate-950">{confidenceScore ?? 0}%</span>
         </div>
-        <div className="rounded-2xl bg-slate-50 p-3">
-          <p className="text-[11px] font-semibold text-slate-400">План</p>
-          <p className="mt-1 text-lg font-semibold text-slate-950">{plannedContentCount}</p>
+        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+          <span className="text-slate-400">Материалы в плане</span>
+          <span className="font-semibold text-slate-950">{plannedContentCount}</span>
         </div>
-        <div className="rounded-2xl bg-slate-50 p-3">
-          <p className="text-[11px] font-semibold text-slate-400">Бренд</p>
-          <p className="mt-1 text-lg font-semibold text-slate-950">{brandProfileReady ? "OK" : brandAssetsCount}</p>
+        <div className="flex items-center justify-between">
+          <span className="text-slate-400">Бренд</span>
+          <span className="font-semibold text-slate-950">{brandProfileReady ? "готов" : `${brandAssetsCount} файлов`}</span>
         </div>
       </div>
-      <div className="mt-5 flex flex-wrap gap-2">
+      <div className="mt-4 flex flex-wrap gap-2">
         <a href={clientHref} className="rounded-full bg-violet-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-violet-700">Открыть клиента</a>
         <a href={blueprintHref} className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-violet-200 hover:text-violet-700">Открыть Blueprint</a>
       </div>
@@ -464,7 +464,7 @@ function OverviewSmallCard({
     <article className={`${overviewCardClass} p-4 lg:col-span-4 xl:col-span-4`}>
       <p className="text-xs font-semibold text-slate-400">{title}</p>
       <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">{value}</p>
-      <p className="mt-1 min-h-8 text-xs leading-4 text-slate-500">{copy}</p>
+      <p className="mt-1 text-xs leading-4 text-slate-500">{copy}</p>
       <a href={href} className={`mt-4 inline-flex text-xs font-semibold ${overviewAccentTextClass} transition hover:text-violet-900`}>{action}</a>
     </article>
   );
@@ -474,7 +474,6 @@ function OverviewDashboard({
   currentMonthLabel,
   workspaceLinks,
   latestBlueprint,
-  selectedMonthlyPlan,
   needsManagerReviewCount,
   waitingForClientCount,
   approvedDraftCount,
@@ -497,12 +496,6 @@ function OverviewDashboard({
     nextRecommendedAction: string;
     client: { name: string; industry: string | null };
   } | null;
-  selectedMonthlyPlan: {
-    month: string;
-    status: string;
-    summary: string;
-    scheduledPublications: ScheduledPublicationPreview[];
-  } | null;
   needsManagerReviewCount: number;
   waitingForClientCount: number;
   approvedDraftCount: number;
@@ -518,24 +511,50 @@ function OverviewDashboard({
   brandAssetsCount: number;
   generationJobs: GenerationJobPreview[];
 }) {
+  const clientName = latestBlueprint?.client.name ?? "Клиент";
+  const focus =
+    integrationTaskCount > 0
+      ? {
+          title: "Заблокировано",
+          value: integrationTaskCount,
+          copy: "Нужно настроить доступы.",
+          href: workspaceLinks.calendar,
+          action: "Открыть календарь",
+        }
+      : missingTextCount > 0
+        ? {
+            title: "Материалы без текста",
+            value: missingTextCount,
+            copy: `${missingTextCount} материала ждут текста.`,
+            href: workspaceLinks.drafts,
+            action: "Открыть материалы",
+          }
+        : missingVisualCount > 0
+          ? {
+              title: "Нужны визуалы",
+              value: missingVisualCount,
+              copy: "Подготовьте ТЗ или визуал.",
+              href: workspaceLinks.assets,
+              action: "Открыть креативы",
+            }
+          : {
+              title: "Фокус",
+              value: "OK",
+              copy: "Критичных задач нет.",
+              href: workspaceLinks.reports,
+              action: "Открыть отчёт",
+            };
   const recentItems = [
     ...generationJobs.slice(0, 3).map((job) => ({
       title: formatGenerationJobType(job.jobType),
-      meta: formatGenerationJobStatus(job.status),
+      meta: `${clientName} · ${formatGenerationJobStatus(job.status)}`,
       time: job.createdAt.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" }),
     })),
-    selectedMonthlyPlan
-      ? {
-          title: "Месячный план",
-          meta: formatStatus(selectedMonthlyPlan.status),
-          time: selectedMonthlyPlan.month,
-        }
-      : null,
-  ].filter(Boolean).slice(0, 4) as Array<{ title: string; meta: string; time: string }>;
+  ].slice(0, 3);
 
   return (
-    <section id="overview" className="min-h-[calc(100vh-132px)] rounded-[28px] bg-[#f7f5fb] p-4 text-slate-900 sm:p-5 xl:p-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <section id="overview" className="min-h-[calc(100vh-132px)] rounded-[28px] bg-[#f7f5fb] p-4 text-slate-900 sm:p-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Обзор</h2>
           <p className="mt-1 text-sm text-slate-500">{currentMonthLabel} · Adaptive Presence OS</p>
@@ -551,7 +570,7 @@ function OverviewDashboard({
         </div>
       </div>
 
-      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <OverviewMetricCard label="Требует проверки" value={needsManagerReviewCount} detail="Внутренняя очередь" href={workspaceLinks.approvals} glyph="П" />
         <OverviewMetricCard label="У клиента" value={waitingForClientCount} detail="Ждём решение" href={workspaceLinks.client_portal} glyph="К" />
         <OverviewMetricCard label="Согласовано" value={approvedDraftCount} detail="Можно продолжать" href={workspaceLinks.approvals} glyph="ОК" />
@@ -582,11 +601,11 @@ function OverviewDashboard({
 
       <div className="mt-3 grid gap-3 lg:grid-cols-12">
         <OverviewSmallCard
-          title="Материалы без текста"
-          value={missingTextCount}
-          copy={missingTextCount > 0 ? "Нужно подготовить тексты перед согласованием." : "Тексты по плану подготовлены."}
-          href={workspaceLinks.drafts}
-          action="Открыть материалы"
+          title={focus.title}
+          value={focus.value}
+          copy={focus.copy}
+          href={focus.href}
+          action={focus.action}
         />
         <article className={`${overviewCardClass} p-4 lg:col-span-4 xl:col-span-4`}>
           <p className="text-xs font-semibold text-slate-400">Очередь</p>
@@ -612,7 +631,7 @@ function OverviewDashboard({
           <div className="mt-3 grid gap-2">
             {recentItems.map((item) => (
               <div key={`${item.title}-${item.time}`} className="flex items-center gap-3">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-50 text-[10px] font-bold text-violet-700">AI</span>
+                <span className="h-2 w-2 shrink-0 rounded-full bg-violet-500" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-semibold text-slate-800">{item.title}</p>
                   <p className="truncate text-[11px] text-slate-400">{item.meta}</p>
@@ -620,28 +639,9 @@ function OverviewDashboard({
                 <span className="text-[11px] text-slate-400">{item.time}</span>
               </div>
             ))}
-            {recentItems.length === 0 ? <p className="text-xs leading-5 text-slate-400">Активность появится после генерации плана и материалов.</p> : null}
+            {recentItems.length === 0 ? <p className="text-xs leading-5 text-slate-400">Пока нет недавних событий.</p> : null}
           </div>
         </article>
-      </div>
-
-      <div className="mt-3 grid gap-3 lg:grid-cols-12">
-        <div className={`${overviewCardClass} flex items-center justify-between gap-3 p-4 lg:col-span-8`}>
-          <div>
-            <p className="text-xs font-semibold text-slate-400">Следующее действие</p>
-            <p className="mt-1 text-sm font-semibold text-slate-950">
-              {latestBlueprint ? formatStatus(latestBlueprint.nextRecommendedAction) : "Создать бриф клиента"}
-            </p>
-          </div>
-          <a href={workspaceLinks.client_setup} className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-violet-200 hover:text-violet-700">Открыть настройку</a>
-        </div>
-        <div className={`${overviewCardClass} flex items-center justify-between gap-3 p-4 lg:col-span-4`}>
-          <div>
-            <p className="text-xs font-semibold text-slate-400">Календарь</p>
-            <p className="mt-1 text-sm font-semibold text-slate-950">{selectedMonthlyPlan?.scheduledPublications.length ?? 0} публикаций</p>
-          </div>
-          <a href={workspaceLinks.calendar} className="text-xs font-semibold text-violet-700">Открыть</a>
-        </div>
       </div>
     </section>
   );
@@ -4734,7 +4734,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 currentMonthLabel={currentMonth()}
                 workspaceLinks={workspaceLinks}
                 latestBlueprint={latestBlueprint}
-                selectedMonthlyPlan={selectedMonthlyPlan}
                 needsManagerReviewCount={needsManagerReviewCount}
                 waitingForClientCount={waitingForClientCount}
                 approvedDraftCount={approvedDraftCount}
