@@ -17,6 +17,7 @@ import {
   generateBlueprint,
   generateContentDraftForItem,
   regenerateContentDraftForItem,
+  generateCreativeBriefForSelectedMaterial,
   generateCreativeAssetBriefForPublication,
   generateCreativeVisualVariantForAsset,
   generateMonthlyPlan,
@@ -2955,19 +2956,11 @@ type MaterialNextStepKind =
 
 function materialNextStep(item: MaterialPlannedItem, publication?: ScheduledPublicationPreview) {
   const draft = item.contentDraft;
-  const asset = publication?.creativeAssets[0];
-  const variants = asset?.generatedVariants ?? [];
+  const asset = item.creativeAssets[0] ?? publication?.creativeAssets[0];
+  const variants = asset?.generatedVariants.length ? asset.generatedVariants : item.generatedCreativeVariants;
 
   if (!draft) {
     return { kind: "generate_text" as const, label: "Сгенерируйте текст публикации" };
-  }
-
-  if (!["approved", "ready_to_schedule"].includes(draft.status)) {
-    return { kind: "review_text" as const, label: "Проверьте и согласуйте текст публикации" };
-  }
-
-  if (!publication) {
-    return { kind: "schedule" as const, label: "Запланируйте публикацию" };
   }
 
   if (!asset) {
@@ -2984,6 +2977,14 @@ function materialNextStep(item: MaterialPlannedItem, publication?: ScheduledPubl
 
   if (!variants.some((variant) => variant.status === "approved")) {
     return { kind: "approve_visual" as const, label: "Согласуйте выбранный визуал" };
+  }
+
+  if (!["approved", "ready_to_schedule"].includes(draft.status)) {
+    return { kind: "review_text" as const, label: "Проверьте и согласуйте текст публикации" };
+  }
+
+  if (!publication) {
+    return { kind: "schedule" as const, label: "Запланируйте публикацию" };
   }
 
   return { kind: "ready" as const, label: "Материал готов к месячному пакету" };
@@ -3003,7 +3004,7 @@ function MaterialPrimaryAction({
   assetsHref: string;
 }) {
   const nextStep = materialNextStep(item, publication);
-  const asset = publication?.creativeAssets[0];
+  const asset = item.creativeAssets[0] ?? publication?.creativeAssets[0];
   const primaryActionClass =
     "inline-flex w-full justify-center rounded-full bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:bg-slate-300";
   const secondaryActionClass =
@@ -3028,7 +3029,18 @@ function MaterialPrimaryAction({
     return <a href={calendarHref} className={primaryActionClass}>Запланировать</a>;
   }
 
-  if (nextStep.kind === "generate_brief" && publication) {
+  if (nextStep.kind === "generate_brief") {
+    if (!publication) {
+      return (
+        <form action={generateCreativeBriefForSelectedMaterial}>
+          <input type="hidden" name="plannedContentItemId" value={item.id} />
+          <PendingSubmitButton pendingLabel="Генерируем ТЗ..." className={primaryActionClass}>
+            Сгенерировать ТЗ
+          </PendingSubmitButton>
+        </form>
+      );
+    }
+
     return (
       <form action={generateCreativeAssetBriefForPublication}>
         <input type="hidden" name="scheduledPublicationId" value={publication.id} />
@@ -3457,12 +3469,12 @@ function DraftsView({
   const publicationByItemId = new Map(publications.map((publication) => [publication.plannedContentItemId, publication]));
   const itemMatchesFilter = (item: MaterialPlannedItem) => {
     const publication = publicationByItemId.get(item.id);
-    const asset = publication?.creativeAssets[0];
+    const asset = item.creativeAssets[0] ?? publication?.creativeAssets[0];
     const draftStatus = item.contentDraft?.status;
 
     if (currentFilter === "missing_text") return !item.contentDraft;
     if (currentFilter === "missing_brief") return Boolean(item.contentDraft) && !asset;
-    if (currentFilter === "missing_visual") return Boolean(publication) && (!asset || asset.generatedVariants.length === 0);
+    if (currentFilter === "missing_visual") return Boolean(asset) && asset.generatedVariants.length === 0 && item.generatedCreativeVariants.length === 0;
     if (currentFilter === "review") return draftStatus === "draft" || draftStatus === "needs_review";
     if (currentFilter === "ready") return draftStatus === "ready_to_schedule" || publication?.status === "ready";
     if (currentFilter === "package") return publication?.status === "ready";
@@ -3731,8 +3743,18 @@ function DraftsView({
                             </PendingSubmitButton>
                           </form>
                         </div>
+                      ) : selectedItem.contentDraft ? (
+                        <div className="mt-4 rounded-2xl bg-white p-4">
+                          <p className="text-sm text-slate-500">Текст готов. Можно сразу подготовить ТЗ для визуала.</p>
+                          <form action={generateCreativeBriefForSelectedMaterial} className="mt-3">
+                            <input type="hidden" name="plannedContentItemId" value={selectedItem.id} />
+                            <PendingSubmitButton pendingLabel="Генерируем ТЗ..." className="rounded-full bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700">
+                              Сгенерировать ТЗ
+                            </PendingSubmitButton>
+                          </form>
+                        </div>
                       ) : (
-                        <p className="mt-4 rounded-2xl bg-white p-4 text-sm text-slate-500">ТЗ ещё не создано.</p>
+                        <p className="mt-4 rounded-2xl bg-white p-4 text-sm text-slate-500">Сначала подготовьте текст публикации.</p>
                       )}
                     </section>
 

@@ -3057,6 +3057,166 @@ export async function generateCreativeAssetBriefForPublication(formData: FormDat
   }));
 }
 
+export async function generateCreativeBriefForSelectedMaterial(formData: FormData) {
+  const plannedContentItemId = formText(formData, "plannedContentItemId");
+
+  if (!plannedContentItemId) {
+    errorRedirect("Не выбран материал для генерации ТЗ.", "drafts");
+  }
+
+  const item = await prisma.plannedContentItem.findUnique({
+    where: { id: plannedContentItemId },
+    include: {
+      contentDraft: true,
+      creativeAssets: true,
+      monthlyPlan: {
+        include: {
+          client: true,
+          blueprint: {
+            include: {
+              riskRules: true,
+            },
+          },
+        },
+      },
+      scheduledPublications: {
+        orderBy: { createdAt: "desc" },
+        include: {
+          creativeAssets: true,
+        },
+      },
+    },
+  });
+
+  if (!item) {
+    errorRedirect("Материал не найден.", "drafts");
+  }
+
+  const plan = item.monthlyPlan;
+  const returnLocation = (options: { error?: string; notice?: string }) =>
+    workspaceLocation("drafts", {
+      blueprintId: plan.blueprintId,
+      planId: plan.id,
+      materialId: item.id,
+      ...options,
+    });
+
+  if (!item.contentDraft) {
+    redirect(returnLocation({ error: "Сначала подготовьте текст." }));
+  }
+
+  if (item.creativeAssets.length > 0 || item.scheduledPublications.some((publication) => publication.creativeAssets.length > 0)) {
+    redirect(returnLocation({ notice: "Для этого материала уже есть ТЗ на креатив." }));
+  }
+
+  let publicationId = item.scheduledPublications[0]?.id;
+
+  if (!publicationId) {
+    const publication = await prisma.scheduledPublication.create({
+      data: {
+        clientId: plan.clientId,
+        blueprintId: plan.blueprintId,
+        monthlyPlanId: plan.id,
+        plannedContentItemId: item.id,
+        contentDraftId: item.contentDraft.id,
+        platformName: item.platformName,
+        format: item.format,
+        topic: item.topic,
+        scheduledDate: item.plannedDate || item.week || "after approval",
+        scheduledTime: null,
+        timezone: null,
+        status: "needs_assets",
+        publishMode: "manual",
+        notes: "Служебная публикация для подготовки ТЗ и визуала в Materials Studio.",
+      },
+    });
+    publicationId = publication.id;
+  }
+
+  const publication = await prisma.scheduledPublication.findUnique({
+    where: { id: publicationId },
+    include: {
+      client: true,
+      blueprint: {
+        include: {
+          riskRules: true,
+        },
+      },
+      monthlyPlan: true,
+      plannedContentItem: true,
+      contentDraft: true,
+      creativeAssets: true,
+    },
+  });
+
+  if (!publication) {
+    redirect(returnLocation({ error: "Не удалось подготовить публикацию для генерации ТЗ." }));
+  }
+
+  if (publication.creativeAssets.length > 0) {
+    redirect(returnLocation({ notice: "Для этого материала уже есть ТЗ на креатив." }));
+  }
+
+  const generationJob = await createGenerationJob({
+    clientId: publication.clientId,
+    blueprintId: publication.blueprintId,
+    monthlyPlanId: publication.monthlyPlanId,
+    plannedContentItemId: publication.plannedContentItemId,
+    contentDraftId: publication.contentDraftId,
+    scheduledPublicationId: publication.id,
+    jobType: "generate_creative_brief",
+    title: "Генерация ТЗ на креатив",
+  });
+
+  try {
+    await markGenerationJobRunning(generationJob.id, "AI готовит ТЗ на креатив.");
+    const brief = await generateCreativeAssetBriefFromContext(publication);
+
+    const createdAsset = await prisma.$transaction(async (transaction) => {
+      const asset = await transaction.creativeAsset.create({
+        data: {
+          clientId: publication.clientId,
+          blueprintId: publication.blueprintId,
+          monthlyPlanId: publication.monthlyPlanId,
+          plannedContentItemId: publication.plannedContentItemId,
+          contentDraftId: publication.contentDraftId,
+          scheduledPublicationId: publication.id,
+          assetType: brief.assetType,
+          title: brief.title,
+          brief: brief.brief,
+          formatRequirements: brief.formatRequirements,
+          textOnAsset: brief.textOnAsset || null,
+          references: brief.references,
+          status: "brief_ready",
+          source: "ai",
+          approvalRequired: brief.approvalRequired,
+          notes: brief.notes,
+        },
+      });
+
+      if (publication.status === "scheduled") {
+        await transaction.scheduledPublication.update({
+          where: { id: publication.id },
+          data: { status: "needs_assets" },
+        });
+      }
+
+      return asset;
+    });
+
+    await markGenerationJobCompleted(generationJob.id, "ТЗ на креатив сгенерировано.", {
+      creativeAssetId: createdAsset.id,
+    });
+  } catch {
+    const message = "Не удалось сгенерировать ТЗ на креатив. Проверьте настройки AI и попробуйте ещё раз.";
+    await markGenerationJobFailedSafely(generationJob.id, message);
+    redirect(returnLocation({ error: message }));
+  }
+
+  revalidatePath("/");
+  redirect(returnLocation({ notice: "AI сгенерировал ТЗ на креативный материал." }));
+}
+
 export async function regenerateCreativeAssetBrief(formData: FormData) {
   const creativeAssetId = formText(formData, "creativeAssetId");
 
