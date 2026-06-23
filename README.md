@@ -407,6 +407,13 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Existing month plans with week-only items can be repaired from Calendar with the “Расставить даты” action.
 - The sidebar uses real SVG navigation icons and keeps only global destinations.
 
+## Core/UI-12 Clients And Overview Styling
+
+- Clients is now a dedicated client base screen without redundant workspace tabs.
+- Overview shows the selected client context directly in the main header area.
+- Letter placeholder badges in Overview metrics were replaced with real SVG icons.
+- Clients and Overview accents were unified into a calmer lavender/purple visual system.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.

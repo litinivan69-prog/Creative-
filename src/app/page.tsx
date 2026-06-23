@@ -179,7 +179,7 @@ const navigationGroups = [
   },
 ];
 
-type SidebarIconName = "overview" | "clients" | "settings" | "profile";
+type SidebarIconName = "overview" | "clients" | "settings" | "profile" | "review" | "client" | "check" | "calendar" | "bell" | "brief" | "blueprint";
 
 function SidebarIcon({ name, className = "h-4 w-4" }: { name: SidebarIconName; className?: string }) {
   const commonProps = {
@@ -219,6 +219,76 @@ function SidebarIcon({ name, className = "h-4 w-4" }: { name: SidebarIconName; c
       <svg aria-hidden="true" {...commonProps}>
         <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
         <path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.04.04a2.1 2.1 0 0 1-2.98 2.98l-.04-.04a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.1 1.66V21.3a2.1 2.1 0 0 1-4.2 0v-.04A1.8 1.8 0 0 0 8.4 19.6a1.8 1.8 0 0 0-1.98.36l-.04.04a2.1 2.1 0 0 1-2.98-2.98l.04-.04A1.8 1.8 0 0 0 3.8 15a1.8 1.8 0 0 0-1.66-1.1H2.1a2.1 2.1 0 0 1 0-4.2h.04A1.8 1.8 0 0 0 3.8 8.6a1.8 1.8 0 0 0-.36-1.98l-.04-.04A2.1 2.1 0 0 1 6.38 3.6l.04.04a1.8 1.8 0 0 0 1.98.36A1.8 1.8 0 0 0 9.5 2.34V2.3a2.1 2.1 0 0 1 4.2 0v.04A1.8 1.8 0 0 0 14.8 4a1.8 1.8 0 0 0 1.98-.36l.04-.04a2.1 2.1 0 0 1 2.98 2.98l-.04.04A1.8 1.8 0 0 0 19.4 8.6a1.8 1.8 0 0 0 1.66 1.1h.04a2.1 2.1 0 0 1 0 4.2h-.04A1.8 1.8 0 0 0 19.4 15Z" />
+      </svg>
+    );
+  }
+
+  if (name === "review") {
+    return (
+      <svg aria-hidden="true" {...commonProps}>
+        <path d="M12 9v4" />
+        <path d="M12 17h.01" />
+        <path d="M10.3 3.7 2.9 16.5A2.3 2.3 0 0 0 4.9 20h14.2a2.3 2.3 0 0 0 2-3.5L13.7 3.7a2 2 0 0 0-3.4 0Z" />
+      </svg>
+    );
+  }
+
+  if (name === "client") {
+    return (
+      <svg aria-hidden="true" {...commonProps}>
+        <path d="M12 12a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
+        <path d="M5 20c.5-3 3-5 7-5s6.5 2 7 5" />
+      </svg>
+    );
+  }
+
+  if (name === "check") {
+    return (
+      <svg aria-hidden="true" {...commonProps}>
+        <path d="M20 6 9 17l-5-5" />
+      </svg>
+    );
+  }
+
+  if (name === "calendar") {
+    return (
+      <svg aria-hidden="true" {...commonProps}>
+        <path d="M7 3v4" />
+        <path d="M17 3v4" />
+        <path d="M4 9h16" />
+        <path d="M5 5h14a1 1 0 0 1 1 1v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1Z" />
+      </svg>
+    );
+  }
+
+  if (name === "bell") {
+    return (
+      <svg aria-hidden="true" {...commonProps}>
+        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z" />
+        <path d="M10 21h4" />
+      </svg>
+    );
+  }
+
+  if (name === "brief") {
+    return (
+      <svg aria-hidden="true" {...commonProps}>
+        <path d="M8 7h8" />
+        <path d="M8 11h8" />
+        <path d="M8 15h5" />
+        <path d="M6 3h9l3 3v15H6V3Z" />
+        <path d="M15 3v4h4" />
+      </svg>
+    );
+  }
+
+  if (name === "blueprint") {
+    return (
+      <svg aria-hidden="true" {...commonProps}>
+        <path d="M4 5h7v7H4V5Z" />
+        <path d="M13 5h7v4h-7V5Z" />
+        <path d="M13 11h7v8h-7v-8Z" />
+        <path d="M4 14h7v5H4v-5Z" />
       </svg>
     );
   }
@@ -298,7 +368,7 @@ function operationalStatusTone(status: string): "neutral" | "teal" | "amber" | "
 function ConnectionBadge({ label, active = true }: { label: string; active?: boolean }) {
   return (
     <span className="inline-flex items-center gap-2 text-xs font-medium text-stone-500">
-      <span className={`h-1.5 w-1.5 rounded-full ${active ? "bg-emerald-500" : "bg-amber-500"}`} />
+      <span className={`h-1.5 w-1.5 rounded-full ${active ? "bg-emerald-500" : "bg-slate-300"}`} />
       {label}
     </span>
   );
@@ -340,19 +410,19 @@ function OverviewMetricCard({
   value,
   detail,
   href,
-  glyph,
+  icon,
 }: {
   label: string;
   value: React.ReactNode;
   detail: string;
   href: string;
-  glyph: string;
+  icon: SidebarIconName;
 }) {
   return (
     <a href={href} className={`${overviewCardClass} group min-w-0 p-3.5 transition hover:-translate-y-0.5 hover:shadow-[0_16px_34px_rgba(88,75,135,0.1)]`}>
       <div className="flex items-center justify-between gap-3">
-        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl ${overviewAccentBgClass} text-[11px] font-bold`}>
-          {glyph}
+        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl ${overviewAccentBgClass}`}>
+          <SidebarIcon name={icon} className="h-4 w-4" />
         </span>
         <span className="text-base text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-violet-400">›</span>
       </div>
@@ -395,9 +465,9 @@ function OverviewProgressCard({
           <p className="mt-1 text-xs text-slate-400">Готовность производства за текущий цикл.</p>
         </div>
         {integrationTaskCount > 0 ? (
-          <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">Настроить доступы</span>
+          <span className="rounded-full border border-violet-100 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">Проверьте доступы</span>
         ) : (
-          <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">Онлайн</span>
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">Система готова</span>
         )}
       </div>
       <div className="mt-4 grid gap-4 md:grid-cols-[128px_minmax(0,1fr)] md:items-center">
@@ -461,7 +531,7 @@ function OverviewClientCard({
           <h2 className="mt-2 truncate text-xl font-semibold text-slate-950">{clientName}</h2>
           <p className="mt-1 text-xs text-slate-400">{industry}</p>
         </div>
-        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">active</span>
+        <span className="rounded-full border border-violet-100 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">Клиент выбран</span>
       </div>
       <div className="mt-4 grid gap-2 text-xs">
         <div className="flex items-center justify-between border-b border-slate-100 pb-2">
@@ -595,7 +665,16 @@ function OverviewDashboard({
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Обзор</h2>
-          <p className="mt-1 text-sm text-slate-500">{currentMonthLabel} · Adaptive Presence OS</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-2 rounded-full border border-violet-100 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 shadow-sm">
+              <SidebarIcon name="client" className="h-3.5 w-3.5 text-violet-700" />
+              Клиент: {clientName}
+            </span>
+            <span className="rounded-full bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700">
+              {currentMonthLabel}
+            </span>
+            <span className="text-sm text-slate-400">Adaptive Presence OS</span>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="hidden min-w-72 items-center rounded-full border border-slate-200 bg-white px-3 py-2 text-xs text-slate-400 shadow-sm md:flex">
@@ -604,15 +683,17 @@ function OverviewDashboard({
           <ConnectionBadge label="OpenAI" active />
           <ConnectionBadge label="Neon" active />
           <ConnectionBadge label="Онлайн" active />
-          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-xs font-semibold text-slate-600 shadow-sm">M</span>
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-slate-600 shadow-sm">
+            <SidebarIcon name="profile" className="h-3.5 w-3.5" />
+          </span>
         </div>
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <OverviewMetricCard label="Требует проверки" value={needsManagerReviewCount} detail="Внутренняя очередь" href={workspaceLinks.approvals} glyph="П" />
-        <OverviewMetricCard label="У клиента" value={waitingForClientCount} detail="Ждём решение" href={workspaceLinks.client_portal} glyph="К" />
-        <OverviewMetricCard label="Согласовано" value={approvedDraftCount} detail="Можно продолжать" href={workspaceLinks.approvals} glyph="ОК" />
-        <OverviewMetricCard label="Готово к планированию" value={readyToScheduleCount} detail="Следующий шаг" href={workspaceLinks.calendar} glyph="Г" />
+        <OverviewMetricCard label="Требует проверки" value={needsManagerReviewCount} detail="Внутренняя очередь" href={workspaceLinks.approvals} icon="review" />
+        <OverviewMetricCard label="У клиента" value={waitingForClientCount} detail="Ждём решение" href={workspaceLinks.client_portal} icon="client" />
+        <OverviewMetricCard label="Согласовано" value={approvedDraftCount} detail="Можно продолжать" href={workspaceLinks.approvals} icon="check" />
+        <OverviewMetricCard label="Готово к планированию" value={readyToScheduleCount} detail="Следующий шаг" href={workspaceLinks.calendar} icon="calendar" />
       </div>
 
       <div className="mt-3 grid gap-3 lg:grid-cols-12">
@@ -731,22 +812,6 @@ function StringList({
         </li>
       ))}
     </ul>
-  );
-}
-
-function PreviewCard({ title, copy, glyph }: { title: string; copy: string; glyph: string }) {
-  return (
-    <article className={`${panelClass} p-5`}>
-      <div className="flex items-start gap-4">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-teal-200 bg-teal-50 text-sm font-bold text-teal-800">
-          {glyph}
-        </div>
-        <div>
-          <h3 className="font-semibold text-stone-950">{title}</h3>
-          <p className="mt-2 text-sm leading-6 text-stone-500">{copy}</p>
-        </div>
-      </div>
-    </article>
   );
 }
 
@@ -4667,6 +4732,85 @@ function ClientSetupWizard({
   );
 }
 
+function ClientsBasePage({
+  clients,
+  workspaceContext,
+  createClientHref,
+}: {
+  clients: ClientSetupClient[];
+  workspaceContext: WorkspaceContext;
+  createClientHref: string;
+}) {
+  return (
+    <section id="clients" className="min-h-[calc(100vh-132px)] rounded-[28px] bg-[#f7f5fb] p-4 text-slate-900 sm:p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-violet-700">Клиентская база</p>
+          <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Клиенты</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+            Выберите клиента для работы, настройки брифа, Blueprint, месячного плана и брендового контекста.
+          </p>
+        </div>
+        <a href={createClientHref} className="inline-flex items-center justify-center rounded-full bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700">
+          Создать клиента
+        </a>
+      </div>
+
+      <div className="mt-5 grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+        {clients.map((client) => {
+          const clientBlueprint = client.blueprints[0];
+          const clientBrief = client.briefs[0];
+          const statusLabel = clientBlueprint ? "Blueprint готов" : clientBrief ? "Есть бриф" : "Нужен бриф";
+          const description =
+            clientBrief?.rawBrief ||
+            client.website ||
+            "Клиент пока без подробного брифа. Откройте настройку, чтобы добавить исходные данные.";
+
+          return (
+            <article key={client.id} className="group min-w-0 rounded-[24px] border border-slate-200/80 bg-white p-4 shadow-[0_10px_28px_rgba(88,75,135,0.045)] transition hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-[0_16px_34px_rgba(88,75,135,0.09)]">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="truncate text-lg font-semibold text-slate-950">{client.name}</h3>
+                  <p className="mt-1 truncate text-sm text-slate-500">{client.industry || "Сфера бизнеса не указана"}</p>
+                </div>
+                <span className="shrink-0 rounded-full border border-violet-100 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">
+                  {statusLabel}
+                </span>
+              </div>
+
+              <p className="mt-4 line-clamp-3 min-h-[3.75rem] text-sm leading-5 text-slate-500">{description}</p>
+
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2">
+                  <p className="text-slate-400">Брифов</p>
+                  <p className="mt-1 font-semibold text-slate-950">{client.briefs.length}</p>
+                </div>
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2">
+                  <p className="text-slate-400">Blueprint</p>
+                  <p className="mt-1 font-semibold text-slate-950">{clientBlueprint ? "готов" : "не создан"}</p>
+                </div>
+              </div>
+
+              <a
+                href={workspaceHref("client_setup", { ...workspaceContext, client: client.id, blueprint: clientBlueprint?.id })}
+                className="mt-4 inline-flex w-full items-center justify-center rounded-full border border-violet-100 bg-violet-50 px-4 py-2.5 text-sm font-semibold text-violet-700 transition hover:border-violet-200 hover:bg-violet-100"
+              >
+                Открыть настройку клиента
+              </a>
+            </article>
+          );
+        })}
+      </div>
+
+      {clients.length === 0 ? (
+        <div className="mt-5 rounded-[24px] border border-dashed border-violet-200 bg-white p-6 text-sm leading-6 text-slate-500">
+          Клиентов пока нет. Создайте первого клиента и добавьте бриф, чтобы собрать Blueprint.
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function currentMonth() {
   return new Date().toISOString().slice(0, 7);
 }
@@ -4996,8 +5140,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
           >
             <SidebarIcon name="settings" />
           </a>
-          <div className="flex h-9 w-9 items-center justify-center justify-self-center rounded-full bg-violet-50 text-violet-700" title="Профиль менеджера">
-            <SidebarIcon name="profile" className="h-3.5 w-3.5" />
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-violet-100 bg-violet-50 text-violet-700" title="Профиль менеджера">
+            <SidebarIcon name="profile" />
           </div>
         </div>
       </aside>
@@ -5034,8 +5178,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                       placeholder="Клиенты, материалы, события..."
                     />
                   ) : null}
-                  <button type="button" aria-label="Уведомления" className="relative flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-xs font-bold text-slate-600">
-                    N
+                  <button type="button" aria-label="Уведомления" className="relative flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600">
+                    <SidebarIcon name="bell" className="h-3.5 w-3.5" />
                     <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] text-white">{approvalQueueCount}</span>
                   </button>
                 </>
@@ -5057,7 +5201,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
               </div>
             ) : null}
 
-            <WorkspaceSwitcher activeView={activeView} links={workspaceLinks} />
+            {activeView !== "clients" ? <WorkspaceSwitcher activeView={activeView} links={workspaceLinks} /> : null}
 
             {activeView === "overview" ? (
               <OverviewDashboard
@@ -5176,47 +5320,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
             ) : null}
 
             {activeView === "clients" ? (
-              <section>
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                  <WorkspaceViewHeader
-                    eyebrow="Клиентская база"
-                    title="Клиенты"
-                    description="Выберите клиента для работы или откройте настройку, чтобы добавить новый бриф и собрать операционную конфигурацию."
-                  />
-                  <a href={workspaceLinks.client_setup} className={primaryButtonClass}>Создать клиента</a>
-                </div>
-                <div className="mt-5 grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
-                  {clients.map((client) => {
-                    const clientBlueprint = client.blueprints[0];
-                    const clientBrief = client.briefs[0];
-
-                    return (
-                      <article key={client.id} className={`${panelClass} min-w-0 p-4`}>
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <h3 className="truncate font-semibold text-stone-950">{client.name}</h3>
-                            <p className="mt-1 text-xs text-stone-500">{client.industry || "Сфера бизнеса не указана"}</p>
-                          </div>
-                          <StatusBadge tone={clientBlueprint ? "green" : clientBrief ? "amber" : "neutral"}>
-                            {clientBlueprint ? "Blueprint готов" : clientBrief ? "Есть бриф" : "Нужен бриф"}
-                          </StatusBadge>
-                        </div>
-                        <div className="mt-4 grid gap-2 text-xs leading-5 text-stone-500">
-                          <p>Брифов: <span className="font-semibold text-stone-700">{client.briefs.length}</span></p>
-                          <p>Blueprint: <span className="font-semibold text-stone-700">{clientBlueprint ? "сгенерирован" : "не сгенерирован"}</span></p>
-                        </div>
-                        <a
-                          href={workspaceHref("client_setup", { ...workspaceContext, client: client.id, blueprint: clientBlueprint?.id })}
-                          className="mt-4 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950"
-                        >
-                          Открыть настройку клиента
-                        </a>
-                      </article>
-                    );
-                  })}
-                  {clients.length === 0 ? <EmptyState>Клиентов пока нет. Создайте первого клиента в отдельном экране настройки.</EmptyState> : null}
-                </div>
-              </section>
+              <ClientsBasePage
+                clients={clients}
+                workspaceContext={workspaceContext}
+                createClientHref={clientSetupHref("create_client", workspaceContext)}
+              />
             ) : null}
 
             {activeView === "client_setup" ? (
