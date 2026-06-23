@@ -193,7 +193,7 @@ const navigationGroups = [
   },
 ];
 
-const pageBackgroundClass = "min-h-screen bg-[#f6f6f3] text-stone-900";
+const pageBackgroundClass = "min-h-screen bg-[#f7f5fb] text-stone-900";
 const panelClass = "rounded-lg border border-stone-200 bg-white shadow-[0_1px_2px_rgba(28,36,38,0.04)]";
 const cardHeaderClass = "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between";
 const mutedTextClass = "text-sm leading-6 text-stone-500";
@@ -290,6 +290,360 @@ function MetricCard({
       <p className="mt-2 text-2xl font-semibold text-stone-950">{value}</p>
       {detail ? <p className="mt-1 text-xs leading-5 text-stone-500">{detail}</p> : null}
     </div>
+  );
+}
+
+const overviewCardClass = "rounded-[22px] border border-slate-200/80 bg-white shadow-[0_16px_40px_rgba(88,75,135,0.07)]";
+const overviewAccentTextClass = "text-violet-700";
+const overviewAccentBgClass = "bg-violet-50 text-violet-700";
+
+function OverviewMetricCard({
+  label,
+  value,
+  detail,
+  href,
+  glyph,
+}: {
+  label: string;
+  value: React.ReactNode;
+  detail: string;
+  href: string;
+  glyph: string;
+}) {
+  return (
+    <a href={href} className={`${overviewCardClass} group min-w-0 p-4 transition hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(88,75,135,0.11)]`}>
+      <div className="flex items-start justify-between gap-3">
+        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${overviewAccentBgClass} text-xs font-bold`}>
+          {glyph}
+        </span>
+        <span className="text-lg text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-violet-400">›</span>
+      </div>
+      <p className="mt-4 text-3xl font-semibold tracking-tight text-slate-950">{value}</p>
+      <p className="mt-1 text-sm font-semibold text-slate-800">{label}</p>
+      <p className="mt-1 truncate text-xs text-slate-400">{detail}</p>
+    </a>
+  );
+}
+
+function OverviewProgressCard({
+  progress,
+  plannedContentCount,
+  draftCount,
+  approvalQueueCount,
+  readyToScheduleCount,
+  integrationTaskCount,
+  draftsHref,
+}: {
+  progress: number;
+  plannedContentCount: number;
+  draftCount: number;
+  approvalQueueCount: number;
+  readyToScheduleCount: number;
+  integrationTaskCount: number;
+  draftsHref: string;
+}) {
+  const steps = [
+    { label: "План", active: plannedContentCount > 0 },
+    { label: "Тексты", active: draftCount > 0 },
+    { label: "Проверка", active: approvalQueueCount > 0 || draftCount > 0 },
+    { label: "Готово", active: readyToScheduleCount > 0 },
+  ];
+
+  return (
+    <article className={`${overviewCardClass} p-5 lg:col-span-7 xl:col-span-7`}>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-950">Состояние работы на месяц</h2>
+          <p className="mt-1 text-xs text-slate-400">{plannedContentCount} материалов · {draftCount} текстов готово</p>
+        </div>
+        {integrationTaskCount > 0 ? (
+          <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">Настроить доступы</span>
+        ) : (
+          <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">Онлайн</span>
+        )}
+      </div>
+      <div className="mt-5 grid gap-5 md:grid-cols-[156px_minmax(0,1fr)] md:items-center">
+        <div className="relative flex h-32 w-32 items-center justify-center justify-self-center rounded-full bg-violet-50">
+          <div
+            className="absolute inset-0 rounded-full"
+            style={{
+              background: `conic-gradient(#7c3aed ${Math.max(progress, 2)}%, #ede9fe 0)`,
+            }}
+          />
+          <div className="relative flex h-24 w-24 flex-col items-center justify-center rounded-full bg-white shadow-inner">
+            <span className="text-3xl font-semibold tracking-tight text-slate-950">{progress}%</span>
+            <span className="text-[11px] font-semibold text-slate-400">готовность</span>
+          </div>
+        </div>
+        <div>
+          <div className="grid grid-cols-4 gap-2">
+            {steps.map((step) => (
+              <div key={step.label} className={`rounded-2xl border px-3 py-3 text-center ${step.active ? "border-violet-200 bg-violet-50 text-violet-800" : "border-slate-200 bg-slate-50 text-slate-400"}`}>
+                <p className="text-xs font-semibold">{step.label}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div className="h-full rounded-full bg-violet-600" style={{ width: `${progress}%` }} />
+          </div>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-slate-500">План → Тексты → Проверка → Готово</p>
+            <a href={draftsHref} className="rounded-full bg-violet-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-violet-700">Открыть материалы</a>
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function OverviewClientCard({
+  clientName,
+  industry,
+  confidenceScore,
+  plannedContentCount,
+  brandProfileReady,
+  brandAssetsCount,
+  clientHref,
+  blueprintHref,
+}: {
+  clientName: string;
+  industry: string;
+  confidenceScore: number | null;
+  plannedContentCount: number;
+  brandProfileReady: boolean;
+  brandAssetsCount: number;
+  clientHref: string;
+  blueprintHref: string;
+}) {
+  return (
+    <article className={`${overviewCardClass} p-5 lg:col-span-5 xl:col-span-5`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold text-slate-400">Клиент в работе</p>
+          <h2 className="mt-2 truncate text-xl font-semibold text-slate-950">{clientName}</h2>
+          <p className="mt-1 text-xs text-slate-400">{industry}</p>
+        </div>
+        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">active</span>
+      </div>
+      <div className="mt-5 grid grid-cols-3 gap-2">
+        <div className="rounded-2xl bg-slate-50 p-3">
+          <p className="text-[11px] font-semibold text-slate-400">Blueprint</p>
+          <p className="mt-1 text-lg font-semibold text-slate-950">{confidenceScore ?? 0}%</p>
+        </div>
+        <div className="rounded-2xl bg-slate-50 p-3">
+          <p className="text-[11px] font-semibold text-slate-400">План</p>
+          <p className="mt-1 text-lg font-semibold text-slate-950">{plannedContentCount}</p>
+        </div>
+        <div className="rounded-2xl bg-slate-50 p-3">
+          <p className="text-[11px] font-semibold text-slate-400">Бренд</p>
+          <p className="mt-1 text-lg font-semibold text-slate-950">{brandProfileReady ? "OK" : brandAssetsCount}</p>
+        </div>
+      </div>
+      <div className="mt-5 flex flex-wrap gap-2">
+        <a href={clientHref} className="rounded-full bg-violet-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-violet-700">Открыть клиента</a>
+        <a href={blueprintHref} className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-violet-200 hover:text-violet-700">Открыть Blueprint</a>
+      </div>
+    </article>
+  );
+}
+
+function OverviewSmallCard({
+  title,
+  value,
+  copy,
+  href,
+  action,
+}: {
+  title: string;
+  value: React.ReactNode;
+  copy: string;
+  href: string;
+  action: string;
+}) {
+  return (
+    <article className={`${overviewCardClass} p-4 lg:col-span-4 xl:col-span-4`}>
+      <p className="text-xs font-semibold text-slate-400">{title}</p>
+      <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">{value}</p>
+      <p className="mt-1 min-h-8 text-xs leading-4 text-slate-500">{copy}</p>
+      <a href={href} className={`mt-4 inline-flex text-xs font-semibold ${overviewAccentTextClass} transition hover:text-violet-900`}>{action}</a>
+    </article>
+  );
+}
+
+function OverviewDashboard({
+  currentMonthLabel,
+  workspaceLinks,
+  latestBlueprint,
+  selectedMonthlyPlan,
+  needsManagerReviewCount,
+  waitingForClientCount,
+  approvedDraftCount,
+  readyToScheduleCount,
+  approvalQueueCount,
+  integrationTaskCount,
+  plannedContentCount,
+  draftCount,
+  productionProgress,
+  missingTextCount,
+  missingVisualCount,
+  brandProfileReady,
+  brandAssetsCount,
+  generationJobs,
+}: {
+  currentMonthLabel: string;
+  workspaceLinks: Record<WorkspaceView, string>;
+  latestBlueprint: {
+    confidenceScore: number;
+    nextRecommendedAction: string;
+    client: { name: string; industry: string | null };
+  } | null;
+  selectedMonthlyPlan: {
+    month: string;
+    status: string;
+    summary: string;
+    scheduledPublications: ScheduledPublicationPreview[];
+  } | null;
+  needsManagerReviewCount: number;
+  waitingForClientCount: number;
+  approvedDraftCount: number;
+  readyToScheduleCount: number;
+  approvalQueueCount: number;
+  integrationTaskCount: number;
+  plannedContentCount: number;
+  draftCount: number;
+  productionProgress: number;
+  missingTextCount: number;
+  missingVisualCount: number;
+  brandProfileReady: boolean;
+  brandAssetsCount: number;
+  generationJobs: GenerationJobPreview[];
+}) {
+  const recentItems = [
+    ...generationJobs.slice(0, 3).map((job) => ({
+      title: formatGenerationJobType(job.jobType),
+      meta: formatGenerationJobStatus(job.status),
+      time: job.createdAt.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" }),
+    })),
+    selectedMonthlyPlan
+      ? {
+          title: "Месячный план",
+          meta: formatStatus(selectedMonthlyPlan.status),
+          time: selectedMonthlyPlan.month,
+        }
+      : null,
+  ].filter(Boolean).slice(0, 4) as Array<{ title: string; meta: string; time: string }>;
+
+  return (
+    <section id="overview" className="min-h-[calc(100vh-132px)] rounded-[28px] bg-[#f7f5fb] p-4 text-slate-900 sm:p-5 xl:p-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Обзор</h2>
+          <p className="mt-1 text-sm text-slate-500">{currentMonthLabel} · Adaptive Presence OS</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="hidden min-w-72 items-center rounded-full border border-slate-200 bg-white px-3 py-2 text-xs text-slate-400 shadow-sm md:flex">
+            Поиск по клиентам, материалам, событиям
+          </div>
+          <ConnectionBadge label="OpenAI" active />
+          <ConnectionBadge label="Neon" active />
+          <ConnectionBadge label="Онлайн" active />
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-xs font-semibold text-slate-600 shadow-sm">M</span>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <OverviewMetricCard label="Требует проверки" value={needsManagerReviewCount} detail="Внутренняя очередь" href={workspaceLinks.approvals} glyph="П" />
+        <OverviewMetricCard label="У клиента" value={waitingForClientCount} detail="Ждём решение" href={workspaceLinks.client_portal} glyph="К" />
+        <OverviewMetricCard label="Согласовано" value={approvedDraftCount} detail="Можно продолжать" href={workspaceLinks.approvals} glyph="ОК" />
+        <OverviewMetricCard label="Готово к планированию" value={readyToScheduleCount} detail="Следующий шаг" href={workspaceLinks.calendar} glyph="Г" />
+      </div>
+
+      <div className="mt-3 grid gap-3 lg:grid-cols-12">
+        <OverviewProgressCard
+          progress={productionProgress}
+          plannedContentCount={plannedContentCount}
+          draftCount={draftCount}
+          approvalQueueCount={approvalQueueCount}
+          readyToScheduleCount={readyToScheduleCount}
+          integrationTaskCount={integrationTaskCount}
+          draftsHref={workspaceLinks.drafts}
+        />
+        <OverviewClientCard
+          clientName={latestBlueprint?.client.name ?? "Клиент не выбран"}
+          industry={latestBlueprint?.client.industry ?? "Создайте клиента и Blueprint"}
+          confidenceScore={latestBlueprint?.confidenceScore ?? null}
+          plannedContentCount={plannedContentCount}
+          brandProfileReady={brandProfileReady}
+          brandAssetsCount={brandAssetsCount}
+          clientHref={workspaceLinks.client_setup}
+          blueprintHref={workspaceLinks.client_setup}
+        />
+      </div>
+
+      <div className="mt-3 grid gap-3 lg:grid-cols-12">
+        <OverviewSmallCard
+          title="Материалы без текста"
+          value={missingTextCount}
+          copy={missingTextCount > 0 ? "Нужно подготовить тексты перед согласованием." : "Тексты по плану подготовлены."}
+          href={workspaceLinks.drafts}
+          action="Открыть материалы"
+        />
+        <article className={`${overviewCardClass} p-4 lg:col-span-4 xl:col-span-4`}>
+          <p className="text-xs font-semibold text-slate-400">Очередь</p>
+          <div className="mt-3 grid gap-2">
+            {[
+              ["Проверка", needsManagerReviewCount],
+              ["Клиент", waitingForClientCount],
+              ["Визуалы", missingVisualCount],
+              ["Доступы", integrationTaskCount],
+            ].map(([label, value]) => (
+              <div key={label} className="flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-2">
+                <span className="text-xs font-semibold text-slate-500">{label}</span>
+                <span className="text-sm font-semibold text-slate-950">{value}</span>
+              </div>
+            ))}
+          </div>
+        </article>
+        <article className={`${overviewCardClass} p-4 lg:col-span-4 xl:col-span-4`}>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold text-slate-400">Активность</p>
+            <a href={workspaceLinks.reports} className="text-xs font-semibold text-violet-700">Отчёт</a>
+          </div>
+          <div className="mt-3 grid gap-2">
+            {recentItems.map((item) => (
+              <div key={`${item.title}-${item.time}`} className="flex items-center gap-3">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-50 text-[10px] font-bold text-violet-700">AI</span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-semibold text-slate-800">{item.title}</p>
+                  <p className="truncate text-[11px] text-slate-400">{item.meta}</p>
+                </div>
+                <span className="text-[11px] text-slate-400">{item.time}</span>
+              </div>
+            ))}
+            {recentItems.length === 0 ? <p className="text-xs leading-5 text-slate-400">Активность появится после генерации плана и материалов.</p> : null}
+          </div>
+        </article>
+      </div>
+
+      <div className="mt-3 grid gap-3 lg:grid-cols-12">
+        <div className={`${overviewCardClass} flex items-center justify-between gap-3 p-4 lg:col-span-8`}>
+          <div>
+            <p className="text-xs font-semibold text-slate-400">Следующее действие</p>
+            <p className="mt-1 text-sm font-semibold text-slate-950">
+              {latestBlueprint ? formatStatus(latestBlueprint.nextRecommendedAction) : "Создать бриф клиента"}
+            </p>
+          </div>
+          <a href={workspaceLinks.client_setup} className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-violet-200 hover:text-violet-700">Открыть настройку</a>
+        </div>
+        <div className={`${overviewCardClass} flex items-center justify-between gap-3 p-4 lg:col-span-4`}>
+          <div>
+            <p className="text-xs font-semibold text-slate-400">Календарь</p>
+            <p className="mt-1 text-sm font-semibold text-slate-950">{selectedMonthlyPlan?.scheduledPublications.length ?? 0} публикаций</p>
+          </div>
+          <a href={workspaceLinks.calendar} className="text-xs font-semibold text-violet-700">Открыть</a>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -2191,14 +2545,14 @@ function WorkspaceSwitcher({
   ];
 
   return (
-    <nav aria-label="Рабочие зоны" className="mt-5 overflow-x-auto rounded-lg border border-stone-200 bg-white p-1.5 shadow-[0_1px_2px_rgba(28,36,38,0.04)]">
+    <nav aria-label="Рабочие зоны" className="mb-4 overflow-x-auto rounded-[18px] border border-slate-200/80 bg-white/80 p-1 shadow-[0_10px_30px_rgba(88,75,135,0.05)]">
       <div className="flex min-w-max gap-1">
         {items.map((item) => (
           <a
             key={item.view}
             href={links[item.view]}
-            className={`rounded-md px-3 py-2 text-xs font-bold transition ${
-              item.view === activeView ? "bg-teal-800 text-white" : "text-stone-600 hover:bg-stone-100 hover:text-stone-950"
+            className={`rounded-[14px] px-3 py-2 text-xs font-semibold transition ${
+              item.view === activeView ? "bg-violet-50 text-violet-700" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
             }`}
           >
             {item.label}
@@ -4262,15 +4616,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
 
   return (
     <div className={pageBackgroundClass}>
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 border-r border-stone-200 bg-[#f8f8f5] text-stone-700 lg:flex lg:flex-col">
-        <div className="border-b border-stone-200 px-5 py-5">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 border-r border-slate-200 bg-white text-slate-700 lg:flex lg:flex-col">
+        <div className="border-b border-slate-100 px-5 py-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-800 text-sm font-bold text-white">
+            <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-violet-600 text-sm font-bold text-white">
               AP
             </div>
             <div>
-              <p className="text-sm font-semibold text-stone-950">Adaptive Presence</p>
-              <p className="mt-0.5 text-xs text-stone-500">OS by Creative</p>
+              <p className="text-sm font-semibold text-slate-950">Adaptive Presence</p>
+              <p className="mt-0.5 text-xs text-slate-400">OS by Creative</p>
             </div>
           </div>
         </div>
@@ -4279,19 +4633,19 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
           <div className="grid gap-5">
             {navigationGroups.map((group) => (
               <div key={group.label}>
-                <p className="px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-stone-400">{group.label}</p>
+                <p className="px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{group.label}</p>
                 <div className="mt-2 grid gap-1">
                   {group.items.map((item) => (
                     <a
                       key={item.label}
                       href={workspaceLinks[item.view]}
-                      className={`flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition ${
+                      className={`flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm transition ${
                         item.view === activeView
-                          ? "border border-stone-200 bg-white font-semibold text-stone-950 shadow-[0_1px_2px_rgba(28,36,38,0.04)]"
-                          : "text-stone-500 hover:bg-white hover:text-stone-950"
+                          ? "bg-violet-50 font-semibold text-violet-700"
+                          : "text-slate-500 hover:bg-slate-50 hover:text-slate-950"
                       }`}
                     >
-                      <span className="flex h-5 w-5 items-center justify-center rounded border border-stone-200 bg-white text-[10px] font-bold text-stone-600">
+                      <span className={`flex h-6 w-6 items-center justify-center rounded-xl text-[10px] font-bold ${item.view === activeView ? "bg-white text-violet-700" : "bg-slate-50 text-slate-500"}`}>
                         {item.glyph}
                       </span>
                       {item.label}
@@ -4303,34 +4657,34 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
           </div>
         </nav>
 
-        <div id="settings" className="grid gap-3 border-t border-stone-200 px-4 py-4">
-          <div className="rounded-md border border-stone-200 bg-white p-3">
-            <p className="text-xs font-semibold text-stone-800">AI-помощник</p>
-            <p className="mt-1 text-xs leading-5 text-stone-500">Помощь по клиентам и текущим задачам.</p>
+        <div id="settings" className="grid gap-3 border-t border-slate-100 px-4 py-4">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+            <p className="text-xs font-semibold text-slate-800">AI-помощник</p>
+            <p className="mt-1 text-xs leading-5 text-slate-500">Короткие подсказки по рабочим задачам.</p>
           </div>
           <div className="flex items-center gap-3 px-1">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-800 text-xs font-bold text-white">M</div>
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-violet-600 text-xs font-bold text-white">M</div>
             <div>
-              <p className="text-xs font-semibold text-stone-700">Профиль менеджера</p>
-              <p className="mt-0.5 text-[11px] text-stone-400">Операционная команда Creative</p>
+              <p className="text-xs font-semibold text-slate-700">Профиль менеджера</p>
+              <p className="mt-0.5 text-[11px] text-slate-400">Creative operations</p>
             </div>
           </div>
         </div>
       </aside>
 
       <div className="lg:pl-60">
-        <header className="sticky top-0 z-20 border-b border-stone-200 bg-white/95 backdrop-blur">
+        <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90 backdrop-blur">
           <div className="flex min-h-16 flex-col gap-3 px-5 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-7 xl:px-9">
             <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[#172226] text-xs font-bold text-white lg:hidden">
+              <div className="flex h-8 w-8 items-center justify-center rounded-2xl bg-violet-600 text-xs font-bold text-white lg:hidden">
                 AP
               </div>
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-base font-semibold text-stone-950">{viewTitles[activeView]}</h1>
-                  <StatusBadge tone="teal">Adaptive Presence OS</StatusBadge>
+                  <h1 className="text-base font-semibold text-slate-950">{viewTitles[activeView]}</h1>
+                  <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-semibold text-violet-700">Manager Console</span>
                 </div>
-                <p className="mt-0.5 text-xs font-medium text-stone-400">by Creative</p>
+                <p className="mt-0.5 text-xs font-medium text-slate-400">Adaptive Presence OS · by Creative</p>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-3">
@@ -4343,12 +4697,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                     <ConnectionBadge label="Neon подключен" />
                     <ConnectionBadge label={process.env.VERCEL ? "Онлайн" : "Локально"} />
                   </div>
-                  <input
-                    aria-label="Поиск по рабочему пространству"
-                    className="w-64 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-700 outline-none placeholder:text-stone-400 focus:border-teal-500"
-                    placeholder="Клиенты, материалы, события..."
-                  />
-                  <button type="button" aria-label="Уведомления" className="relative flex h-9 w-9 items-center justify-center rounded-md border border-stone-200 bg-white text-xs font-bold text-stone-600">
+                  {activeView !== "overview" ? (
+                    <input
+                      aria-label="Поиск по рабочему пространству"
+                      className="w-64 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 outline-none placeholder:text-slate-400 focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                      placeholder="Клиенты, материалы, события..."
+                    />
+                  ) : null}
+                  <button type="button" aria-label="Уведомления" className="relative flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-xs font-bold text-slate-600">
                     N
                     <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] text-white">{approvalQueueCount}</span>
                   </button>
@@ -4374,179 +4730,26 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
             <WorkspaceSwitcher activeView={activeView} links={workspaceLinks} />
 
             {activeView === "overview" ? (
-              <>
-            <section id="overview" className="scroll-mt-24">
-              <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-                <div>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-teal-700">Рабочее пространство</p>
-                  <h2 className="mt-2 text-3xl font-semibold text-stone-950">Центр управления присутствием</h2>
-                  <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
-                    Превращайте бриф клиента в исполнимый Blueprint, месячный операционный план и готовые к проверке
-                    материалы.
-                  </p>
-                </div>
-              <p className="text-xs font-semibold text-stone-400">Текущий цикл: {currentMonth()}</p>
-              </div>
-
-              <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <MetricCard label="Требует проверки" value={needsManagerReviewCount} detail="Материалы во внутренней очереди" tone="amber" />
-                <MetricCard label="У клиента" value={waitingForClientCount} detail="Согласование с клиентом" tone="teal" />
-                <MetricCard label="Согласовано" value={approvedDraftCount} detail="Можно перейти к планированию" />
-                <MetricCard label="Готово к планированию" value={readyToScheduleCount} detail="Публикации пока не подключены" tone="teal" />
-              </div>
-              {selectedMonthlyPlan && (missingTextCount > 0 || missingVisualCount > 0) ? (
-                <div className="mt-4 flex flex-col gap-3 rounded-lg border border-teal-200 bg-teal-50/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-teal-950">
-                      {missingTextCount > 0 ? "Есть материалы без текста" : "Тексты готовы, осталось подготовить визуалы"}
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-teal-800">
-                      {missingTextCount > 0
-                        ? `${missingTextCount} материалов ждут автоподготовки или ручной генерации текста.`
-                        : `${missingVisualCount} публикаций ждут ТЗ или визуал.`}
-                    </p>
-                  </div>
-                  <a href={workspaceLinks.drafts} className={primaryButtonClass}>Открыть материалы</a>
-                </div>
-              ) : null}
-            </section>
-
-            <section className="mt-7 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-              <OperationsOverview
-                progress={productionProgress}
-                attentionCount={approvalQueueCount}
-                draftCount={draftCount}
+              <OverviewDashboard
+                currentMonthLabel={currentMonth()}
+                workspaceLinks={workspaceLinks}
+                latestBlueprint={latestBlueprint}
+                selectedMonthlyPlan={selectedMonthlyPlan}
+                needsManagerReviewCount={needsManagerReviewCount}
+                waitingForClientCount={waitingForClientCount}
+                approvedDraftCount={approvedDraftCount}
+                readyToScheduleCount={readyToScheduleCount}
+                approvalQueueCount={approvalQueueCount}
                 integrationTaskCount={integrationTaskCount}
-                creativeAssetAttentionCount={creativeAssetAttentionCount}
+                plannedContentCount={plannedContentCount}
+                draftCount={draftCount}
+                productionProgress={productionProgress}
+                missingTextCount={missingTextCount}
+                missingVisualCount={missingVisualCount}
+                brandProfileReady={brandProfileReady}
+                brandAssetsCount={brandAssetsCount}
+                generationJobs={generationJobs}
               />
-              <article className={`${panelClass} p-5`}>
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Клиент в работе</p>
-                  <StatusBadge tone={latestBlueprint ? "green" : "amber"}>{latestBlueprint ? "Активен" : "Нужна настройка"}</StatusBadge>
-                </div>
-                <h2 className="mt-4 text-xl font-semibold text-stone-950">{latestBlueprint?.client.name ?? "Клиент не выбран"}</h2>
-                <p className="mt-1 text-xs font-semibold text-stone-400">{latestBlueprint?.client.industry ?? "Выберите или создайте клиента, чтобы начать."}</p>
-                <div className="mt-5 grid gap-2">
-                  <div className="rounded-md border border-stone-200 bg-stone-50 p-3">
-                    <p className="text-xs font-bold text-stone-700">Blueprint</p>
-                    <p className="mt-1 text-xs leading-5 text-stone-500">{latestBlueprint ? `${latestBlueprint.confidenceScore}% уверенности` : "Не сгенерирован"}</p>
-                  </div>
-                  <div className="rounded-md border border-stone-200 bg-stone-50 p-3">
-                    <p className="text-xs font-bold text-stone-700">Месячный план</p>
-                    <p className="mt-1 text-xs leading-5 text-stone-500">{selectedMonthlyPlan ? `${plannedContentCount} материалов в календаре` : "Не сгенерирован"}</p>
-                  </div>
-                  <div className="rounded-md border border-stone-200 bg-stone-50 p-3">
-                    <p className="text-xs font-bold text-stone-700">Следующий рекомендуемый шаг</p>
-                    <p className="mt-1 text-xs leading-5 text-stone-500">{latestBlueprint ? formatStatus(latestBlueprint.nextRecommendedAction) : "Создать бриф клиента"}</p>
-                  </div>
-                  <div className="rounded-md border border-stone-200 bg-stone-50 p-3">
-                    <p className="text-xs font-bold text-stone-700">Отчёт по месяцу</p>
-                    <p className="mt-1 text-xs leading-5 text-stone-500">{selectedMonthlyPlan ? "Сводка по текстам, визуалам и согласованиям готова." : "Появится после генерации месячного плана."}</p>
-                    {selectedMonthlyPlan ? <a href={workspaceLinks.reports} className="mt-2 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">Открыть отчёт</a> : null}
-                  </div>
-                  <div className="rounded-md border border-stone-200 bg-stone-50 p-3">
-                    <p className="text-xs font-bold text-stone-700">Библиотека бренда</p>
-                    <p className="mt-1 text-xs leading-5 text-stone-500">{brandProfileReady ? "Профиль бренда заполнен" : "Профиль бренда не заполнен"} &middot; Материалов бренда: {brandAssetsCount}</p>
-                    <a href={workspaceLinks.brand_assets} className="mt-2 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">Открыть библиотеку бренда</a>
-                  </div>
-                </div>
-                <div className="mt-4 rounded-md border border-teal-200 bg-teal-50 p-3">
-                  <p className="text-xs font-bold text-teal-900">Подсказка AI</p>
-                  <p className="mt-1 text-xs leading-5 text-teal-800">
-                    {latestBlueprint ? "Сохраняйте фокус на качестве проверки и естественной подаче для каждой площадки." : "AI-слой активируется после генерации Blueprint."}
-                  </p>
-                </div>
-                {selectedMonthlyPlan ? (
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    <a href={workspaceLinks.client_portal} className="inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">
-                      Посмотреть клиентский календарь
-                    </a>
-                    <a href={workspaceLinks.reports} className="inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">
-                      Открыть отчёт по месяцу
-                    </a>
-                  </div>
-                ) : null}
-              </article>
-            </section>
-
-            <section id="approvals" className="mt-7 grid scroll-mt-24 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
-              <article className={`${panelClass} p-5 sm:p-6`}>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Сегодня / текущий фокус</p>
-                    <h2 className="mt-1 text-xl font-semibold text-stone-950">Требует внимания сегодня</h2>
-                    <p className="mt-2 text-sm leading-6 text-stone-500">
-                      Рабочая очередь на основе Blueprint клиента и текущего месячного плана.
-                    </p>
-                  </div>
-                  <StatusBadge tone={approvalQueueCount + integrationTaskCount > 0 ? "amber" : "green"}>
-                    {approvalQueueCount + integrationTaskCount > 0 ? "Есть задачи" : "Всё спокойно"}
-                  </StatusBadge>
-                </div>
-                <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-                    <p className="text-xs font-bold text-amber-900">Требует проверки</p>
-                    <p className="mt-2 text-2xl font-semibold text-stone-950">{needsManagerReviewCount}</p>
-                  </div>
-                  <div className="rounded-lg border border-teal-200 bg-teal-50 p-4">
-                    <p className="text-xs font-bold text-teal-900">У клиента</p>
-                    <p className="mt-2 text-2xl font-semibold text-stone-950">{waitingForClientCount}</p>
-                  </div>
-                  <div className="rounded-lg border border-stone-200 bg-stone-50 p-4">
-                    <p className="text-xs font-bold text-stone-700">Согласовано</p>
-                    <p className="mt-2 text-2xl font-semibold text-stone-950">{approvedDraftCount}</p>
-                  </div>
-                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-                    <p className="text-xs font-bold text-emerald-900">Готово к планированию</p>
-                    <p className="mt-2 text-2xl font-semibold text-stone-950">{readyToScheduleCount}</p>
-                  </div>
-                </div>
-                <div className="mt-4 rounded-lg border border-stone-200 bg-stone-50 px-4 py-3">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-stone-400">Следующий шаг по Blueprint</p>
-                  <p className="mt-1 text-sm font-semibold text-stone-800">
-                    {latestBlueprint ? formatStatus(latestBlueprint.nextRecommendedAction) : "Создайте бриф клиента и сгенерируйте Blueprint."}
-                  </p>
-                </div>
-              </article>
-
-              <article className={`${panelClass} p-5`}>
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Статус месячного плана</p>
-                  {selectedMonthlyPlan ? <StatusBadge tone="green">{formatStatus(selectedMonthlyPlan.status)}</StatusBadge> : <StatusBadge tone="amber">Не сгенерирован</StatusBadge>}
-                </div>
-                {selectedMonthlyPlan ? (
-                  <div className="mt-4">
-                    <p className="text-2xl font-semibold text-stone-950">{selectedMonthlyPlan.month}</p>
-                    <p className="mt-2 text-sm leading-6 text-stone-500">{selectedMonthlyPlan.summary}</p>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <StatusBadge tone="teal">{selectedMonthlyPlan.totalPlannedUnits} материалов в плане</StatusBadge>
-                      <StatusBadge>{selectedMonthlyPlan.plannedContentItems.length} материалов в календаре</StatusBadge>
-                    </div>
-                    <a href={workspaceLinks.client_setup} className="mt-4 inline-flex text-sm font-bold text-teal-700 transition hover:text-teal-900">
-                      Открыть настройку клиента
-                    </a>
-                  </div>
-                ) : (
-                  <div className="mt-4">
-                    <p className="text-sm leading-6 text-stone-500">
-                      Сгенерируйте месячный операционный план, чтобы активировать календарь и очередь материалов.
-                    </p>
-                    <a href={workspaceLinks.calendar} className="mt-4 inline-flex text-sm font-bold text-teal-700 transition hover:text-teal-900">
-                      Открыть настройку календаря
-                    </a>
-                  </div>
-                )}
-              </article>
-            </section>
-
-            <OverviewPreviews
-              drafts={contentDrafts}
-              publications={selectedMonthlyPlan?.scheduledPublications ?? []}
-              assets={creativeAssets}
-              jobs={generationJobs}
-              links={workspaceLinks}
-            />
-              </>
             ) : null}
 
             {activeView === "approvals" ? (

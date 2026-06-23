@@ -352,6 +352,13 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Manual updates synchronize linked draft and non-published calendar metadata so the calendar reflects changed platform, topic, and date after refresh.
 - This gives managers reliable control over AI-generated plans without requiring AI Copilot.
 
+## UI-9A Compact Overview Dashboard
+
+- The Overview screen was redesigned as a compact no-scroll manager dashboard.
+- The visual direction now uses a unified light SaaS style with white cards, subtle borders, soft shadows, and lavender accents.
+- Key counters, monthly readiness, active client context, queue, activity, and next actions are visible above the fold on desktop.
+- Sidebar and workspace tabs were lightly cleaned up without changing product logic or other workflows.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.
