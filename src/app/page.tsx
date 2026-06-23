@@ -3196,6 +3196,15 @@ function DraftsView({
     return `/?${searchParams.toString()}`;
   };
   const publicationByItemId = new Map(publications.map((publication) => [publication.plannedContentItemId, publication]));
+  const parseExactDate = (value: string) => {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return null;
+    const year = Number(match[1]);
+    const monthIndex = Number(match[2]) - 1;
+    const day = Number(match[3]);
+    const date = new Date(year, monthIndex, day);
+    return date.getFullYear() === year && date.getMonth() === monthIndex && date.getDate() === day ? date : null;
+  };
   const itemMatchesFilter = (item: MaterialPlannedItem) => {
     const publication = publicationByItemId.get(item.id);
     const asset = publication?.creativeAssets[0];
@@ -3219,25 +3228,103 @@ function DraftsView({
   const selectedPublication = selectedItem ? publicationByItemId.get(selectedItem.id) : undefined;
   const selectedAsset = selectedPublication?.creativeAssets[0];
   const selectedVisual = selectedAsset?.generatedVariants[0] ?? selectedItem?.generatedCreativeVariants[0];
-  const calendarGroups = groupCalendarItems(visibleItems);
-  const compactStatusTone = (tone: "done" | "attention" | "active" | "missing") => {
-    if (tone === "done") return "bg-emerald-50 text-emerald-700";
-    if (tone === "attention") return "bg-amber-50 text-amber-700";
-    if (tone === "active") return "bg-violet-50 text-violet-700";
-    return "bg-slate-100 text-slate-500";
-  };
-  const materialStatusChips = (item: MaterialPlannedItem) => {
+  const selectedDate =
+    selectedPublication ? parseExactDate(selectedPublication.scheduledDate) : null;
+  const firstExactDate =
+    selectedDate ??
+    visibleItems
+      .map((item) => parseExactDate(publicationByItemId.get(item.id)?.scheduledDate ?? item.plannedDate))
+      .find((date): date is Date => Boolean(date)) ??
+    (month ? parseExactDate(`${month}-01`) : null) ??
+    new Date();
+  const calendarYear = firstExactDate.getFullYear();
+  const calendarMonth = firstExactDate.getMonth();
+  const calendarMonthLabel = firstExactDate.toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
+  const monthStart = new Date(calendarYear, calendarMonth, 1);
+  const monthEnd = new Date(calendarYear, calendarMonth + 1, 0);
+  const leadingDays = (monthStart.getDay() + 6) % 7;
+  const calendarCells = Array.from({ length: Math.ceil((leadingDays + monthEnd.getDate()) / 7) * 7 }, (_, index) => {
+    const date = new Date(calendarYear, calendarMonth, index - leadingDays + 1);
+    return date;
+  });
+  const dateKey = (date: Date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  const exactDateItems = visibleItems.filter((item) => parseExactDate(publicationByItemId.get(item.id)?.scheduledDate ?? item.plannedDate));
+  const floatingItems = visibleItems.filter((item) => !parseExactDate(publicationByItemId.get(item.id)?.scheduledDate ?? item.plannedDate));
+  const itemsByDate = new Map<string, MaterialPlannedItem[]>();
+  for (const item of exactDateItems) {
+    const key = publicationByItemId.get(item.id)?.scheduledDate ?? item.plannedDate;
+    itemsByDate.set(key, [...(itemsByDate.get(key) ?? []), item]);
+  }
+  const floatingGroups = groupCalendarItems(floatingItems);
+  const nextActionLabel = (item: MaterialPlannedItem) => {
     const publication = publicationByItemId.get(item.id);
     const asset = publication?.creativeAssets[0];
-    return [
-      { label: "Текст", tone: item.contentDraft ? "done" as const : "missing" as const },
-      { label: "ТЗ", tone: asset ? "done" as const : "missing" as const },
-      { label: "Визуал", tone: asset?.generatedVariants.length ? "done" as const : "missing" as const },
-      {
-        label: item.contentDraft?.status === "sent_to_client" ? "Клиент" : "Проверка",
-        tone: item.contentDraft?.status === "sent_to_client" ? "active" as const : item.contentDraft ? "attention" as const : "missing" as const,
-      },
-    ];
+    const draftStatus = item.contentDraft?.status;
+
+    if (!item.contentDraft) return "Нужен текст";
+    if (draftStatus === "sent_to_client") return "У клиента";
+    if (draftStatus === "approved") return "Согласовано";
+    if (draftStatus === "ready_to_schedule" || publication?.status === "ready") return "Готово";
+    if (!asset) return "Нужно ТЗ";
+    if (asset.generatedVariants.length === 0) return "Нужен визуал";
+    if (draftStatus === "draft" || draftStatus === "needs_review") return "На проверке";
+    return materialNextStep(item, publication).label;
+  };
+  const nextActionTone = (label: string) => {
+    if (["Согласовано", "Готово"].includes(label)) return "bg-emerald-50 text-emerald-700";
+    if (["Нужен текст", "Нужно ТЗ", "Нужен визуал", "На проверке"].includes(label)) return "bg-amber-50 text-amber-700";
+    if (label === "У клиента") return "bg-violet-50 text-violet-700";
+    return "bg-slate-100 text-slate-500";
+  };
+  const shortPlatform = (platform: string) => {
+    const normalized = platform.toLowerCase();
+    if (normalized.includes("telegram") || normalized.includes("телег")) return "TG";
+    if (normalized.includes("vk") || normalized.includes("вк")) return "VK";
+    if (normalized.includes("дзен") || normalized.includes("zen")) return "Дзен";
+    if (normalized.includes("ozon")) return "Ozon";
+    if (normalized.includes("wildberries") || normalized.includes("wb")) return "WB";
+    if (normalized.includes("статья") || normalized.includes("blog") || normalized.includes("сайт")) return "Статья";
+    return platform.slice(0, 8);
+  };
+  const selectedActionLabel = selectedItem ? nextActionLabel(selectedItem) : "";
+  const purpleButtonClass = "rounded-full bg-violet-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-violet-700 disabled:bg-slate-300";
+  const softButtonClass = "rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-violet-200 hover:text-violet-700";
+  const materialHasVisual = (item: MaterialPlannedItem) => {
+    const publication = publicationByItemId.get(item.id);
+    const asset = publication?.creativeAssets[0];
+    return Boolean(asset?.generatedVariants.length || item.generatedCreativeVariants.length);
+  };
+  const calendarWeekdays = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+  const renderMaterialChip = (item: MaterialPlannedItem, compact = false) => {
+    const publication = publicationByItemId.get(item.id);
+    const action = nextActionLabel(item);
+    const active = selectedItem?.id === item.id;
+    const hasVisual = materialHasVisual(item);
+
+    return (
+      <a
+        key={item.id}
+        href={materialHref(item.id)}
+        className={`block rounded-xl border bg-white p-2.5 text-left transition hover:border-violet-200 hover:shadow-[0_8px_20px_rgba(88,75,135,0.08)] ${
+          active ? "border-violet-300 ring-2 ring-violet-100" : "border-slate-200"
+        }`}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700">
+            {shortPlatform(item.platformName)}
+          </span>
+          {hasVisual ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">Визуал</span> : null}
+        </div>
+        <p className={`${compact ? "mt-1 line-clamp-1" : "mt-2 line-clamp-2"} text-xs font-semibold leading-4 text-slate-900`}>
+          {item.topic}
+        </p>
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <span className="truncate text-[10px] font-semibold text-slate-400">{publication?.scheduledTime ?? item.format}</span>
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${nextActionTone(action)}`}>{action}</span>
+        </div>
+      </a>
+    );
   };
 
   return (
@@ -3311,56 +3398,74 @@ function DraftsView({
             </div>
 
             <div className="max-h-[calc(100vh-320px)] min-h-[420px] overflow-auto pr-1">
-              <div className="grid gap-3">
-                {calendarGroups.map((group) => (
-                  <section key={group.label} className="rounded-[20px] border border-slate-200 bg-slate-50/70 p-3">
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <h3 className="text-sm font-semibold text-slate-950">{group.label}</h3>
-                      <span className="text-xs font-semibold text-slate-400">{group.items.length} материалов</span>
-                    </div>
-                    <div className="grid gap-2 md:grid-cols-2 2xl:grid-cols-3">
-                      {group.items.map((item) => {
-                        const publication = publicationByItemId.get(item.id);
-                        const nextStep = materialNextStep(item, publication);
-                        const active = selectedItem?.id === item.id;
-
-                        return (
-                          <a
-                            key={item.id}
-                            href={materialHref(item.id)}
-                            className={`rounded-2xl border bg-white p-3 transition hover:border-violet-200 hover:shadow-[0_8px_24px_rgba(88,75,135,0.08)] ${
-                              active ? "border-violet-300 ring-2 ring-violet-100" : "border-slate-200"
-                            }`}
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex min-w-0 gap-1.5">
-                                <span className="truncate rounded-full bg-violet-50 px-2 py-1 text-[11px] font-semibold text-violet-700">{item.platformName}</span>
-                                <span className="truncate rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-500">{item.format}</span>
-                              </div>
-                              <span className="h-2 w-2 shrink-0 rounded-full bg-violet-500" />
-                            </div>
-                            <p className="mt-3 line-clamp-2 text-sm font-semibold leading-5 text-slate-950">{item.topic}</p>
-                            <p className="mt-2 truncate text-[11px] font-semibold text-slate-400">{publication?.scheduledDate ?? item.plannedDate}</p>
-                            <div className="mt-3 flex flex-wrap gap-1">
-                              {materialStatusChips(item).map((chip) => (
-                                <span key={chip.label} className={`rounded-full px-2 py-1 text-[10px] font-semibold ${compactStatusTone(chip.tone)}`}>
-                                  {chip.label}
-                                </span>
-                              ))}
-                            </div>
-                            <p className="mt-3 truncate text-[11px] font-semibold text-violet-700">{nextStep.label}</p>
-                          </a>
-                        );
-                      })}
-                    </div>
-                  </section>
-                ))}
-                {visibleItems.length === 0 ? (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
-                    По этому фильтру материалов нет.
+              <div className="rounded-[22px] border border-slate-200 bg-slate-50/70 p-3">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-semibold capitalize text-slate-950">{calendarMonthLabel}</h3>
+                    <p className="text-xs font-semibold text-slate-400">{visibleItems.length} материалов в текущем фильтре</p>
                   </div>
-                ) : null}
+                  <div className="flex items-center gap-1 rounded-full bg-white p-1 text-xs font-semibold text-slate-400">
+                    <span className="px-2 py-1">←</span>
+                    <span className="rounded-full bg-violet-50 px-3 py-1 text-violet-700">Сегодня</span>
+                    <span className="px-2 py-1">→</span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-7 gap-px overflow-hidden rounded-2xl border border-slate-200 bg-slate-200">
+                  {calendarWeekdays.map((day) => (
+                    <div key={day} className="bg-white px-2 py-2 text-center text-[11px] font-semibold text-slate-400">
+                      {day}
+                    </div>
+                  ))}
+                  {calendarCells.map((date) => {
+                    const key = dateKey(date);
+                    const dayItems = itemsByDate.get(key) ?? [];
+                    const inMonth = date.getMonth() === calendarMonth;
+
+                    return (
+                      <div key={key} className={`min-h-[138px] bg-white p-2 ${inMonth ? "" : "opacity-45"}`}>
+                        <div className="mb-2 flex items-center justify-between">
+                          <span className={`text-xs font-semibold ${inMonth ? "text-slate-700" : "text-slate-400"}`}>{date.getDate()}</span>
+                          {dayItems.length > 0 ? <span className="text-[10px] font-semibold text-violet-500">{dayItems.length}</span> : null}
+                        </div>
+                        <div className="grid gap-1.5">
+                          {dayItems.slice(0, 3).map((item) => renderMaterialChip(item, true))}
+                          {dayItems.length > 3 ? (
+                            <span className="rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500">+ ещё {dayItems.length - 3}</span>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
+
+              {floatingGroups.length > 0 ? (
+                <section className="mt-3 rounded-[22px] border border-slate-200 bg-white p-3">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-slate-950">Без точной даты</h3>
+                    <span className="text-xs font-semibold text-slate-400">{floatingItems.length} материалов</span>
+                  </div>
+                  <div className="grid gap-3">
+                    {floatingGroups.map((group) => (
+                      <div key={group.label} className="rounded-2xl bg-slate-50/80 p-3">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <p className="text-xs font-semibold text-slate-700">{group.label}</p>
+                          <span className="text-[10px] font-semibold text-slate-400">{group.items.length}</span>
+                        </div>
+                        <div className="grid gap-2 md:grid-cols-2 2xl:grid-cols-3">
+                          {group.items.map((item) => renderMaterialChip(item))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+
+              {visibleItems.length === 0 ? (
+                <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
+                  По этому фильтру материалов нет.
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -3378,17 +3483,19 @@ function DraftsView({
                 <p className="mt-1 line-clamp-3 text-sm leading-6 text-slate-500">{selectedItem.goal}</p>
                 <div className="mt-4 rounded-2xl bg-violet-50 p-3">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-violet-700">Следующее действие</p>
-                  <p className="mt-1 text-sm font-semibold text-violet-950">{materialNextStep(selectedItem, selectedPublication).label}</p>
-                  <div className="mt-3">
-                    <MaterialPrimaryAction item={selectedItem} publication={selectedPublication} approvalsHref={approvalsHref} calendarHref={calendarHref} assetsHref={assetsHref} />
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${nextActionTone(selectedActionLabel)}`}>
+                      {selectedActionLabel}
+                    </span>
+                    {selectedPublication ? <a href="#scheduling" className={softButtonClass}>Расписание</a> : null}
                   </div>
                 </div>
 
                 <div className="mt-4 grid gap-3">
                   <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
                     <div className="flex items-center justify-between gap-2">
-                      <h4 className="text-sm font-semibold text-slate-950">Текст</h4>
-                      <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${compactStatusTone(selectedItem.contentDraft ? "done" : "missing")}`}>
+                      <h4 className="text-sm font-semibold text-slate-950">Текст публикации</h4>
+                      <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${selectedItem.contentDraft ? nextActionTone(selectedActionLabel) : nextActionTone("Нужен текст")}`}>
                         {selectedItem.contentDraft ? formatDraftStatus(selectedItem.contentDraft.status) : "Не создан"}
                       </span>
                     </div>
@@ -3396,23 +3503,46 @@ function DraftsView({
                       <>
                         <p className="mt-2 line-clamp-3 text-xs leading-5 text-slate-500">{selectedItem.contentDraft.draftBody}</p>
                         <details className="mt-3">
-                          <summary className="cursor-pointer text-xs font-semibold text-violet-700">Открыть / редактировать</summary>
+                          <summary className="cursor-pointer text-xs font-semibold text-violet-700">Открыть материал</summary>
                           <form action={updatePublicationText} className="mt-3 grid gap-2">
                             <input type="hidden" name="contentDraftId" value={selectedItem.contentDraft.id} />
                             <input type="text" name="draftTitle" required defaultValue={selectedItem.contentDraft.draftTitle} className={inputClass} />
                             <textarea name="draftBody" required rows={6} defaultValue={selectedItem.contentDraft.draftBody} className={inputClass} />
                             <input type="text" name="comment" className={inputClass} placeholder="Комментарий к правке" />
-                            <PendingSubmitButton pendingLabel="Сохраняем..." className={primaryButtonClass}>Сохранить текст</PendingSubmitButton>
+                            <PendingSubmitButton pendingLabel="Сохраняем..." className={purpleButtonClass}>Сохранить текст</PendingSubmitButton>
                           </form>
                         </details>
-                        <div className="mt-3">
-                          <DraftWorkflowControls draft={selectedItem.contentDraft} calendarHref={calendarHref} returnView="drafts" />
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {selectedItem.contentDraft.status === "draft" || selectedItem.contentDraft.status === "needs_review" || selectedItem.contentDraft.status === "client_changes_requested" ? (
+                            <form action={sendDraftToClient}>
+                              <input type="hidden" name="contentDraftId" value={selectedItem.contentDraft.id} />
+                              <input type="hidden" name="returnView" value="drafts" />
+                              <PendingSubmitButton pendingLabel="Отправляем..." className={purpleButtonClass}>Отправить клиенту</PendingSubmitButton>
+                            </form>
+                          ) : null}
+                          {selectedItem.contentDraft.status === "draft" || selectedItem.contentDraft.status === "needs_review" ? (
+                            <form action={approveDraft}>
+                              <input type="hidden" name="contentDraftId" value={selectedItem.contentDraft.id} />
+                              <input type="hidden" name="returnView" value="drafts" />
+                              <PendingSubmitButton pendingLabel="Согласовываем..." className={softButtonClass}>Согласовать внутри</PendingSubmitButton>
+                            </form>
+                          ) : null}
+                          {selectedItem.contentDraft.status === "approved" ? (
+                            <form action={markDraftReadyToSchedule}>
+                              <input type="hidden" name="contentDraftId" value={selectedItem.contentDraft.id} />
+                              <input type="hidden" name="returnView" value="drafts" />
+                              <PendingSubmitButton pendingLabel="Обновляем..." className={purpleButtonClass}>Готово к планированию</PendingSubmitButton>
+                            </form>
+                          ) : null}
+                          {selectedItem.contentDraft.status === "ready_to_schedule" ? (
+                            <span className="rounded-full bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">Готово к планированию</span>
+                          ) : null}
                         </div>
                       </>
                     ) : (
                       <form action={generateContentDraftForItem} className="mt-3">
                         <input type="hidden" name="plannedContentItemId" value={selectedItem.id} />
-                        <PendingSubmitButton pendingLabel="Генерируем текст..." className="rounded-full bg-violet-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-violet-700">
+                        <PendingSubmitButton pendingLabel="Генерируем текст..." className={purpleButtonClass}>
                           Сгенерировать текст
                         </PendingSubmitButton>
                       </form>
@@ -3421,8 +3551,8 @@ function DraftsView({
 
                   <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
                     <div className="flex items-center justify-between gap-2">
-                      <h4 className="text-sm font-semibold text-slate-950">ТЗ</h4>
-                      <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${compactStatusTone(selectedAsset ? "done" : "missing")}`}>
+                      <h4 className="text-sm font-semibold text-slate-950">Креативное ТЗ</h4>
+                      <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${selectedAsset ? "bg-emerald-50 text-emerald-700" : nextActionTone("Нужно ТЗ")}`}>
                         {selectedAsset ? formatStatus(selectedAsset.status) : "Нет ТЗ"}
                       </span>
                     </div>
@@ -3435,7 +3565,7 @@ function DraftsView({
                       <form action={generateCreativeAssetBriefForPublication} className="mt-3">
                         <input type="hidden" name="scheduledPublicationId" value={selectedPublication.id} />
                         <input type="hidden" name="returnView" value="drafts" />
-                        <PendingSubmitButton pendingLabel="Генерируем ТЗ..." className="rounded-full bg-violet-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-violet-700">
+                        <PendingSubmitButton pendingLabel="Генерируем ТЗ..." className={purpleButtonClass}>
                           Сгенерировать ТЗ
                         </PendingSubmitButton>
                       </form>
@@ -3447,7 +3577,7 @@ function DraftsView({
                   <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
                     <div className="flex items-center justify-between gap-2">
                       <h4 className="text-sm font-semibold text-slate-950">Визуал</h4>
-                      <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${compactStatusTone(selectedVisual ? "done" : "missing")}`}>
+                      <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${selectedVisual ? "bg-emerald-50 text-emerald-700" : nextActionTone("Нужен визуал")}`}>
                         {selectedVisual ? formatStatus(selectedVisual.status) : "Не создан"}
                       </span>
                     </div>
@@ -3460,7 +3590,7 @@ function DraftsView({
                       <form action={generateCreativeVisualVariantForAsset} className="mt-3">
                         <input type="hidden" name="creativeAssetId" value={selectedAsset.id} />
                         <input type="hidden" name="returnView" value="drafts" />
-                        <PendingSubmitButton pendingLabel="Генерируем визуал..." className="rounded-full bg-violet-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-violet-700">
+                        <PendingSubmitButton pendingLabel="Генерируем визуал..." className={purpleButtonClass}>
                           {selectedVisual ? "Перегенерировать" : "Сгенерировать визуал"}
                         </PendingSubmitButton>
                       </form>
@@ -3477,13 +3607,13 @@ function DraftsView({
                       <form action={updatePlannedContentItemManual} className="mt-3 grid gap-3">
                         <input type="hidden" name="plannedContentItemId" value={selectedItem.id} />
                         <ManualPlanFields item={selectedItem} />
-                        <PendingSubmitButton pendingLabel="Сохраняем..." className={primaryButtonClass}>Сохранить изменения</PendingSubmitButton>
+                        <PendingSubmitButton pendingLabel="Сохраняем..." className={purpleButtonClass}>Сохранить изменения</PendingSubmitButton>
                       </form>
                     </details>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <form action={duplicatePlannedContentItemManual}>
                         <input type="hidden" name="plannedContentItemId" value={selectedItem.id} />
-                        <PendingSubmitButton pendingLabel="Дублируем..." className={secondaryButtonClass}>Дублировать</PendingSubmitButton>
+                        <PendingSubmitButton pendingLabel="Дублируем..." className={softButtonClass}>Дублировать</PendingSubmitButton>
                       </form>
                       <form action={deletePlannedContentItemManual}>
                         <input type="hidden" name="plannedContentItemId" value={selectedItem.id} />

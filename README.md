@@ -373,6 +373,13 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - The inspector shows text, creative brief, visual, approval status, next action, and manual plan controls in one place.
 - The old endless Materials page is reduced to a compact fallback list and advanced sections.
 
+## UI-10B Real Materials Calendar
+
+- Materials now uses a real month-style calendar surface with weekday columns and dated material chips.
+- Week-only items stay in a compact “Без точной даты” area grouped by week.
+- Material cards now show one clear next-action chip instead of several noisy technical badges.
+- The material inspector was cleaned up around text, creative brief, visual, approval, and manual plan actions without changing product logic.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.
