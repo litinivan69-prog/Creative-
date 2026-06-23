@@ -56,6 +56,7 @@ function workspaceLocation(
     calendarView?: string;
     error?: string;
     filter?: string;
+    materialId?: string;
     notice?: string;
     portalLink?: string;
   } = {},
@@ -70,6 +71,7 @@ function workspaceLocation(
   if (options.calendarView && options.calendarView !== "month") searchParams.set("calendarView", options.calendarView);
   if (options.calendarDate) searchParams.set("calendarDate", options.calendarDate);
   if (options.filter && options.filter !== "all") searchParams.set("filter", options.filter);
+  if (options.materialId) searchParams.set("materialId", options.materialId);
   if (options.error) searchParams.set("error", options.error);
   if (options.notice) searchParams.set("notice", options.notice);
   if (options.portalLink) searchParams.set("portalLink", options.portalLink);
@@ -2078,6 +2080,7 @@ async function generateContentTextForItem(formData: FormData, replaceExisting: b
   redirect(workspaceLocation("drafts", {
     blueprintId: result.blueprintId,
     planId: result.monthlyPlanId,
+    materialId: plannedContentItemId,
     ...(result.status === "failed" ? { error: result.message } : { notice: result.message }),
   }));
 }
@@ -2207,6 +2210,291 @@ export async function prepareMonthAutopilot(formData: FormData) {
   }));
 }
 
+export async function prepareMonthCreativeBriefs(formData: FormData) {
+  const monthlyPlanId = formText(formData, "monthlyPlanId");
+
+  if (!monthlyPlanId) {
+    errorRedirect("Не выбран месячный план для подготовки ТЗ.", "drafts");
+  }
+
+  const plan = await prisma.monthlyOperatingPlan.findUnique({
+    where: { id: monthlyPlanId },
+    include: {
+      scheduledPublications: {
+        include: {
+          client: true,
+          blueprint: {
+            include: {
+              riskRules: true,
+            },
+          },
+          monthlyPlan: true,
+          plannedContentItem: true,
+          contentDraft: true,
+          creativeAssets: true,
+        },
+      },
+    },
+  });
+
+  if (!plan) {
+    errorRedirect("Месячный план для подготовки ТЗ не найден.", "drafts");
+  }
+
+  const candidates = plan.scheduledPublications
+    .filter((publication) => publication.contentDraft && publication.creativeAssets.length === 0)
+    .slice(0, 3);
+  let createdCount = 0;
+  let failedCount = 0;
+  const skippedCount = plan.scheduledPublications.length - candidates.length;
+
+  for (const publication of candidates) {
+    const generationJob = await createGenerationJob({
+      clientId: publication.clientId,
+      blueprintId: publication.blueprintId,
+      monthlyPlanId: publication.monthlyPlanId,
+      plannedContentItemId: publication.plannedContentItemId,
+      contentDraftId: publication.contentDraftId,
+      scheduledPublicationId: publication.id,
+      jobType: "generate_creative_brief",
+      title: "Генерация ТЗ на креатив",
+    });
+
+    try {
+      await markGenerationJobRunning(generationJob.id, "AI готовит ТЗ на креатив.");
+      const brief = await generateCreativeAssetBriefFromContext(publication);
+      const createdAsset = await prisma.$transaction(async (transaction) => {
+        const asset = await transaction.creativeAsset.create({
+          data: {
+            clientId: publication.clientId,
+            blueprintId: publication.blueprintId,
+            monthlyPlanId: publication.monthlyPlanId,
+            plannedContentItemId: publication.plannedContentItemId,
+            contentDraftId: publication.contentDraftId,
+            scheduledPublicationId: publication.id,
+            assetType: brief.assetType,
+            title: brief.title,
+            brief: brief.brief,
+            formatRequirements: brief.formatRequirements,
+            textOnAsset: brief.textOnAsset || null,
+            references: brief.references,
+            status: "brief_ready",
+            source: "ai",
+            approvalRequired: brief.approvalRequired,
+            notes: brief.notes,
+          },
+        });
+
+        if (publication.status === "scheduled") {
+          await transaction.scheduledPublication.update({
+            where: { id: publication.id },
+            data: { status: "needs_assets" },
+          });
+        }
+
+        return asset;
+      });
+
+      await markGenerationJobCompleted(generationJob.id, "ТЗ на креатив сгенерировано.", {
+        creativeAssetId: createdAsset.id,
+      });
+      createdCount += 1;
+    } catch {
+      failedCount += 1;
+      await markGenerationJobFailedSafely(generationJob.id, "Не удалось сгенерировать ТЗ на креатив.");
+    }
+  }
+
+  const remainingCount = plan.scheduledPublications.filter(
+    (publication) => publication.contentDraft && publication.creativeAssets.length === 0,
+  ).length - createdCount;
+  const notice = `Подготовлено ${createdCount} ТЗ, пропущено ${Math.max(skippedCount, 0)}. Осталось ${Math.max(remainingCount, 0)}.`;
+
+  revalidatePath("/");
+  redirect(workspaceLocation("drafts", {
+    blueprintId: plan.blueprintId,
+    planId: plan.id,
+    ...(failedCount > 0 ? { error: `${notice} Ошибок: ${failedCount}.` } : { notice }),
+  }));
+}
+
+async function generateVisualForCreativeAssetId(creativeAssetId: string) {
+  const asset = await prisma.creativeAsset.findUnique({
+    where: { id: creativeAssetId },
+    include: {
+      client: true,
+      blueprint: true,
+      monthlyPlan: true,
+      plannedContentItem: true,
+      contentDraft: true,
+      scheduledPublication: true,
+      generatedVariants: {
+        select: {
+          id: true,
+        },
+      },
+    },
+  });
+
+  if (!asset) {
+    return {
+      status: "failed" as const,
+      message: "Креативный материал не найден.",
+    };
+  }
+
+  const generationJob = await createGenerationJob({
+    clientId: asset.clientId,
+    blueprintId: asset.blueprintId,
+    monthlyPlanId: asset.monthlyPlanId,
+    plannedContentItemId: asset.plannedContentItemId,
+    contentDraftId: asset.contentDraftId,
+    scheduledPublicationId: asset.scheduledPublicationId,
+    creativeAssetId: asset.id,
+    jobType: asset.generatedVariants.length > 0 ? "regenerate_visual" : "generate_visual",
+    title: asset.generatedVariants.length > 0 ? "Генерация нового варианта визуала" : "Генерация премиум-визуала",
+  });
+
+  try {
+    await markGenerationJobRunning(generationJob.id, "Premium Visual Engine создаёт вариант визуала.");
+    const variant = await generateCreativeVisualVariant({
+      clientName: asset.client.name,
+      clientIndustry: asset.client.industry,
+      brandContext: await getClientBrandContext(asset.clientId),
+      creativeAsset: {
+        assetType: asset.assetType,
+        title: asset.title,
+        brief: asset.brief,
+        formatRequirements: asset.formatRequirements,
+        textOnAsset: asset.textOnAsset,
+        references: asset.references,
+        notes: asset.notes,
+      },
+      scheduledPublication: {
+        platformName: asset.scheduledPublication.platformName,
+        format: asset.scheduledPublication.format,
+        topic: asset.scheduledPublication.topic,
+        scheduledDate: asset.scheduledPublication.scheduledDate,
+        scheduledTime: asset.scheduledPublication.scheduledTime,
+      },
+      contentDraft: {
+        draftTitle: asset.contentDraft.draftTitle,
+        draftBody: asset.contentDraft.draftBody,
+        riskLevel: asset.contentDraft.riskLevel,
+        approvalRequired: asset.contentDraft.approvalRequired,
+      },
+    });
+    const storedVisual = await storeGeneratedVisual({
+      imageBase64: variant.imageBase64,
+      mimeType: variant.mimeType,
+      clientId: asset.clientId,
+      monthlyPlanId: asset.monthlyPlanId,
+      creativeAssetId: asset.id,
+    });
+
+    const createdVariant = await prisma.generatedCreativeVariant.create({
+      data: {
+        clientId: asset.clientId,
+        blueprintId: asset.blueprintId,
+        monthlyPlanId: asset.monthlyPlanId,
+        plannedContentItemId: asset.plannedContentItemId,
+        contentDraftId: asset.contentDraftId,
+        scheduledPublicationId: asset.scheduledPublicationId,
+        creativeAssetId: asset.id,
+        variantTitle: `Вариант визуала: ${asset.title}`,
+        prompt: variant.prompt,
+        revisedPrompt: variant.revisedPrompt,
+        imageBase64: storedVisual.storageProvider === "database_base64" ? storedVisual.imageBase64 : null,
+        imageUrl: storedVisual.storageProvider === "vercel_blob" ? storedVisual.imageUrl : null,
+        storageKey: storedVisual.storageProvider === "vercel_blob" ? storedVisual.storageKey : null,
+        storageProvider: storedVisual.storageProvider,
+        fileSize: storedVisual.fileSize,
+        mimeType: variant.mimeType,
+        status: "generated",
+        source: variant.provider,
+        provider: variant.provider,
+        model: variant.model,
+        quality: variant.quality,
+        size: variant.size,
+        textMode: variant.textMode,
+        qualityStatus: "needs_manual_review",
+        qualityNotes: "Проверьте читаемость текста, лица, руки, медицинские утверждения и соответствие ТЗ.",
+        notes: null,
+      },
+    });
+
+    await markGenerationJobCompleted(
+      generationJob.id,
+      storedVisual.storageProvider === "vercel_blob"
+        ? "Визуал сгенерирован и сохранён в хранилище."
+        : "Визуал сгенерирован и временно сохранён в базе.",
+      {
+        generatedCreativeVariantId: createdVariant.id,
+      },
+    );
+
+    return {
+      status: "created" as const,
+      message: "AI сгенерировал визуал.",
+      blueprintId: asset.blueprintId,
+      monthlyPlanId: asset.monthlyPlanId,
+    };
+  } catch {
+    const message = "Не удалось сгенерировать визуал. Проверьте настройки визуального движка и попробуйте ещё раз.";
+    await markGenerationJobFailedSafely(generationJob.id, message);
+    return {
+      status: "failed" as const,
+      message,
+      blueprintId: asset.blueprintId,
+      monthlyPlanId: asset.monthlyPlanId,
+    };
+  }
+}
+
+export async function prepareMonthVisuals(formData: FormData) {
+  const monthlyPlanId = formText(formData, "monthlyPlanId");
+
+  if (!monthlyPlanId) {
+    errorRedirect("Не выбран месячный план для подготовки визуалов.", "drafts");
+  }
+
+  const plan = await prisma.monthlyOperatingPlan.findUnique({
+    where: { id: monthlyPlanId },
+    include: {
+      creativeAssets: {
+        include: {
+          generatedVariants: {
+            select: { id: true },
+          },
+        },
+      },
+    },
+  });
+
+  if (!plan) {
+    errorRedirect("Месячный план для подготовки визуалов не найден.", "drafts");
+  }
+
+  const candidates = plan.creativeAssets.filter((asset) => asset.generatedVariants.length === 0).slice(0, 1);
+  const results = [];
+
+  for (const asset of candidates) {
+    results.push(await generateVisualForCreativeAssetId(asset.id));
+  }
+
+  const createdCount = results.filter((result) => result.status === "created").length;
+  const failedCount = results.filter((result) => result.status === "failed").length;
+  const remainingCount = Math.max(0, plan.creativeAssets.filter((asset) => asset.generatedVariants.length === 0).length - createdCount);
+  const notice = `Подготовлено ${createdCount} визуалов. Осталось ${remainingCount}. В MVP визуалы готовятся по одному за запуск.`;
+
+  revalidatePath("/");
+  redirect(workspaceLocation("drafts", {
+    blueprintId: plan.blueprintId,
+    planId: plan.id,
+    ...(failedCount > 0 ? { error: `${notice} Ошибок: ${failedCount}.` } : { notice }),
+  }));
+}
+
 export async function updatePublicationText(formData: FormData) {
   const contentDraftId = formText(formData, "contentDraftId");
   const draftTitle = formText(formData, "draftTitle");
@@ -2223,6 +2511,7 @@ export async function updatePublicationText(formData: FormData) {
       id: true,
       blueprintId: true,
       monthlyPlanId: true,
+      plannedContentItemId: true,
     },
   });
 
@@ -2257,6 +2546,7 @@ export async function updatePublicationText(formData: FormData) {
   redirect(workspaceLocation("drafts", {
     blueprintId: draft.blueprintId,
     planId: draft.monthlyPlanId,
+    materialId: draft.plannedContentItemId,
     notice: "Текст публикации обновлён и отправлен на проверку.",
   }));
 }
@@ -2368,7 +2658,12 @@ export async function scheduleContentDraft(formData: FormData) {
   });
 
   if (existingPublication) {
-    redirect(workspaceLocation(returnViewFromForm(formData, "calendar"), { blueprintId: draft.blueprintId, planId: draft.monthlyPlanId, notice: "Для этого материала публикация уже запланирована." }));
+  redirect(workspaceLocation(returnViewFromForm(formData, "calendar"), {
+    blueprintId: draft.blueprintId,
+    planId: draft.monthlyPlanId,
+    materialId: draft.plannedContentItemId,
+    notice: "Для этого материала публикация уже запланирована.",
+  }));
   }
 
   await prisma.scheduledPublication.create({
@@ -2391,7 +2686,12 @@ export async function scheduleContentDraft(formData: FormData) {
   });
 
   revalidatePath("/");
-  redirect(workspaceLocation(returnViewFromForm(formData, "calendar"), { blueprintId: draft.blueprintId, planId: draft.monthlyPlanId, notice: "Публикация запланирована." }));
+  redirect(workspaceLocation(returnViewFromForm(formData, "calendar"), {
+    blueprintId: draft.blueprintId,
+    planId: draft.monthlyPlanId,
+    materialId: draft.plannedContentItemId,
+    notice: "Публикация запланирована.",
+  }));
 }
 
 async function updateScheduledPublicationStatus(
@@ -2411,6 +2711,7 @@ async function updateScheduledPublicationStatus(
       id: true,
       blueprintId: true,
       monthlyPlanId: true,
+      plannedContentItemId: true,
     },
   });
 
@@ -2424,7 +2725,12 @@ async function updateScheduledPublicationStatus(
   });
 
   revalidatePath("/");
-  redirect(workspaceLocation("calendar", { blueprintId: publication.blueprintId, planId: publication.monthlyPlanId, notice }));
+  redirect(workspaceLocation(returnViewFromForm(formData, "calendar"), {
+    blueprintId: publication.blueprintId,
+    planId: publication.monthlyPlanId,
+    materialId: publication.plannedContentItemId,
+    notice,
+  }));
 }
 
 export async function updateScheduledPublication(formData: FormData) {
@@ -2608,7 +2914,12 @@ export async function generateCreativeAssetBriefForPublication(formData: FormDat
   }
 
   if (publication.creativeAssets.length > 0) {
-    redirect(workspaceLocation(returnViewFromForm(formData, "assets"), { blueprintId: publication.blueprintId, planId: publication.monthlyPlanId, notice: "Для этой публикации уже есть ТЗ на креатив." }));
+    redirect(workspaceLocation(returnViewFromForm(formData, "assets"), {
+      blueprintId: publication.blueprintId,
+      planId: publication.monthlyPlanId,
+      materialId: publication.plannedContentItemId,
+      notice: "Для этой публикации уже есть ТЗ на креатив.",
+    }));
   }
 
   const generationJob = await createGenerationJob({
@@ -2673,7 +2984,12 @@ export async function generateCreativeAssetBriefForPublication(formData: FormDat
   }
 
   revalidatePath("/");
-  redirect(workspaceLocation(returnViewFromForm(formData, "assets"), { blueprintId: publication.blueprintId, planId: publication.monthlyPlanId, notice: "AI сгенерировал ТЗ на креативный материал." }));
+  redirect(workspaceLocation(returnViewFromForm(formData, "assets"), {
+    blueprintId: publication.blueprintId,
+    planId: publication.monthlyPlanId,
+    materialId: publication.plannedContentItemId,
+    notice: "AI сгенерировал ТЗ на креативный материал.",
+  }));
 }
 
 export async function regenerateCreativeAssetBrief(formData: FormData) {
@@ -2778,6 +3094,7 @@ export async function updateCreativeAssetStatus(formData: FormData) {
       id: true,
       blueprintId: true,
       monthlyPlanId: true,
+      plannedContentItemId: true,
     },
   });
 
@@ -2817,6 +3134,7 @@ export async function updateCreativeAssetBrief(formData: FormData) {
       id: true,
       blueprintId: true,
       monthlyPlanId: true,
+      plannedContentItemId: true,
     },
   });
 
@@ -2837,7 +3155,12 @@ export async function updateCreativeAssetBrief(formData: FormData) {
   });
 
   revalidatePath("/");
-  redirect(workspaceLocation("assets", { blueprintId: asset.blueprintId, planId: asset.monthlyPlanId, notice: "ТЗ на креативный материал обновлено." }));
+  redirect(workspaceLocation(returnViewFromForm(formData, "assets"), {
+    blueprintId: asset.blueprintId,
+    planId: asset.monthlyPlanId,
+    materialId: asset.plannedContentItemId,
+    notice: "ТЗ на креативный материал обновлено.",
+  }));
 }
 
 export async function generateCreativeVisualVariantForAsset(formData: FormData) {
@@ -2969,7 +3292,12 @@ export async function generateCreativeVisualVariantForAsset(formData: FormData) 
   }
 
   revalidatePath("/");
-  redirect(workspaceLocation(returnViewFromForm(formData, "assets"), { blueprintId: asset.blueprintId, planId: asset.monthlyPlanId, notice: "AI сгенерировал визуал." }));
+  redirect(workspaceLocation(returnViewFromForm(formData, "assets"), {
+    blueprintId: asset.blueprintId,
+    planId: asset.monthlyPlanId,
+    materialId: asset.plannedContentItemId,
+    notice: "AI сгенерировал визуал.",
+  }));
 }
 
 async function updateCreativeVariantStatus(
@@ -2989,6 +3317,7 @@ async function updateCreativeVariantStatus(
       id: true,
       blueprintId: true,
       monthlyPlanId: true,
+      plannedContentItemId: true,
       creativeAssetId: true,
     },
   });
@@ -3020,7 +3349,12 @@ async function updateCreativeVariantStatus(
   }
 
   revalidatePath("/");
-  redirect(workspaceLocation(returnViewFromForm(formData, "assets"), { blueprintId: variant.blueprintId, planId: variant.monthlyPlanId, notice }));
+  redirect(workspaceLocation(returnViewFromForm(formData, "assets"), {
+    blueprintId: variant.blueprintId,
+    planId: variant.monthlyPlanId,
+    materialId: variant.plannedContentItemId,
+    notice,
+  }));
 }
 
 export async function markCreativeVariantNeedsReview(formData: FormData) {

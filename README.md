@@ -414,6 +414,13 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Letter placeholder badges in Overview metrics were replaced with real SVG icons.
 - Clients and Overview accents were unified into a calmer lavender/purple visual system.
 
+## UI-12B Materials Production Studio
+
+- Materials is now a unified production studio for one selected material instead of fragmented text, brief, visual, and approval blocks.
+- Managers can edit publication text, creative brief, visual generation/review, plan fields, and readiness from one screen.
+- Month-level preparation now surfaces text, brief, visual, and monthly package actions in one compact area.
+- Client approval is treated as a future monthly package step, not the default per-post action inside Materials.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.
