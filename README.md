@@ -381,6 +381,12 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - The calendar is now the primary full-width workspace, with material details moved below so the month grid is not squeezed.
 - The material inspector was cleaned up around text, creative brief, visual, approval, and manual plan actions without changing product logic.
 
+## UI-10C Calendar And Materials Split
+
+- Calendar is now the dedicated full-page visual production calendar with dated material cards and visual previews.
+- Materials is restored as the production workbench for editing text, creative briefs, visuals, approvals, and manual plan items.
+- Calendar cards can open the related material directly in Materials for production work.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.

@@ -844,6 +844,63 @@ function materialTextStatusTone(draft?: { status: string } | null): "neutral" | 
   return draftStatusTone(draft.status);
 }
 
+function appendSearchParam(href: string, key: string, value: string) {
+  const separator = href.includes("?") ? "&" : "?";
+  return `${href}${separator}${key}=${encodeURIComponent(value)}`;
+}
+
+function materialWorkspaceHref(draftsHref: string, itemId: string) {
+  return appendSearchParam(draftsHref, "material", itemId);
+}
+
+function parseExactDate(value: string) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const monthIndex = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  const date = new Date(year, monthIndex, day);
+
+  return date.getFullYear() === year && date.getMonth() === monthIndex && date.getDate() === day ? date : null;
+}
+
+function dateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function shortPlatformName(platform: string) {
+  const normalized = platform.toLowerCase();
+  if (normalized.includes("telegram") || normalized.includes("телег")) return "TG";
+  if (normalized.includes("vk") || normalized.includes("вк")) return "VK";
+  if (normalized.includes("дзен") || normalized.includes("zen")) return "Дзен";
+  if (normalized.includes("email") || normalized.includes("почт")) return "Email";
+  if (normalized.includes("ozon")) return "Ozon";
+  if (normalized.includes("wildberries") || normalized.includes("wb")) return "WB";
+  if (normalized.includes("статья") || normalized.includes("article") || normalized.includes("blog") || normalized.includes("сайт")) return "Article";
+  return platform.slice(0, 8);
+}
+
+function materialNextActionLabel(item: { contentDraft: { status: string } | null }, publication?: { status: string; creativeAssets: Array<{ generatedVariants: GeneratedCreativeVariantPreview[] }> }) {
+  const asset = publication?.creativeAssets[0];
+  const draftStatus = item.contentDraft?.status;
+
+  if (!item.contentDraft) return "Нужен текст";
+  if (draftStatus === "sent_to_client") return "У клиента";
+  if (draftStatus === "approved") return "Согласовано";
+  if (draftStatus === "ready_to_schedule" || publication?.status === "ready") return "Готово";
+  if (!asset) return "Нужно ТЗ";
+  if (asset.generatedVariants.length === 0) return "Нужен визуал";
+  if (draftStatus === "draft" || draftStatus === "needs_review") return "На проверке";
+  return "Готово";
+}
+
+function nextActionBadgeClass(label: string) {
+  if (["Согласовано", "Готово"].includes(label)) return "bg-emerald-50 text-emerald-700";
+  if (["Нужен текст", "Нужно ТЗ", "Нужен визуал", "На проверке"].includes(label)) return "bg-amber-50 text-amber-700";
+  if (label === "У клиента") return "bg-violet-50 text-violet-700";
+  return "bg-slate-100 text-slate-500";
+}
+
 function formatReviewActor(actorType: string) {
   const labels: Record<string, string> = {
     client: "Клиент",
@@ -3196,15 +3253,6 @@ function DraftsView({
     return `/?${searchParams.toString()}`;
   };
   const publicationByItemId = new Map(publications.map((publication) => [publication.plannedContentItemId, publication]));
-  const parseExactDate = (value: string) => {
-    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (!match) return null;
-    const year = Number(match[1]);
-    const monthIndex = Number(match[2]) - 1;
-    const day = Number(match[3]);
-    const date = new Date(year, monthIndex, day);
-    return date.getFullYear() === year && date.getMonth() === monthIndex && date.getDate() === day ? date : null;
-  };
   const itemMatchesFilter = (item: MaterialPlannedItem) => {
     const publication = publicationByItemId.get(item.id);
     const asset = publication?.creativeAssets[0];
@@ -3228,64 +3276,10 @@ function DraftsView({
   const selectedPublication = selectedItem ? publicationByItemId.get(selectedItem.id) : undefined;
   const selectedAsset = selectedPublication?.creativeAssets[0];
   const selectedVisual = selectedAsset?.generatedVariants[0] ?? selectedItem?.generatedCreativeVariants[0];
-  const selectedDate =
-    selectedPublication ? parseExactDate(selectedPublication.scheduledDate) : null;
-  const firstExactDate =
-    selectedDate ??
-    visibleItems
-      .map((item) => parseExactDate(publicationByItemId.get(item.id)?.scheduledDate ?? item.plannedDate))
-      .find((date): date is Date => Boolean(date)) ??
-    (month ? parseExactDate(`${month}-01`) : null) ??
-    new Date();
-  const calendarYear = firstExactDate.getFullYear();
-  const calendarMonth = firstExactDate.getMonth();
-  const calendarMonthLabel = firstExactDate.toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
-  const monthStart = new Date(calendarYear, calendarMonth, 1);
-  const monthEnd = new Date(calendarYear, calendarMonth + 1, 0);
-  const leadingDays = (monthStart.getDay() + 6) % 7;
-  const calendarCells = Array.from({ length: Math.ceil((leadingDays + monthEnd.getDate()) / 7) * 7 }, (_, index) => {
-    const date = new Date(calendarYear, calendarMonth, index - leadingDays + 1);
-    return date;
-  });
-  const dateKey = (date: Date) =>
-    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-  const exactDateItems = visibleItems.filter((item) => parseExactDate(publicationByItemId.get(item.id)?.scheduledDate ?? item.plannedDate));
-  const floatingItems = visibleItems.filter((item) => !parseExactDate(publicationByItemId.get(item.id)?.scheduledDate ?? item.plannedDate));
-  const itemsByDate = new Map<string, MaterialPlannedItem[]>();
-  for (const item of exactDateItems) {
-    const key = publicationByItemId.get(item.id)?.scheduledDate ?? item.plannedDate;
-    itemsByDate.set(key, [...(itemsByDate.get(key) ?? []), item]);
-  }
-  const floatingGroups = groupCalendarItems(floatingItems);
+  const productionGroups = groupCalendarItems(visibleItems);
   const nextActionLabel = (item: MaterialPlannedItem) => {
     const publication = publicationByItemId.get(item.id);
-    const asset = publication?.creativeAssets[0];
-    const draftStatus = item.contentDraft?.status;
-
-    if (!item.contentDraft) return "Нужен текст";
-    if (draftStatus === "sent_to_client") return "У клиента";
-    if (draftStatus === "approved") return "Согласовано";
-    if (draftStatus === "ready_to_schedule" || publication?.status === "ready") return "Готово";
-    if (!asset) return "Нужно ТЗ";
-    if (asset.generatedVariants.length === 0) return "Нужен визуал";
-    if (draftStatus === "draft" || draftStatus === "needs_review") return "На проверке";
-    return materialNextStep(item, publication).label;
-  };
-  const nextActionTone = (label: string) => {
-    if (["Согласовано", "Готово"].includes(label)) return "bg-emerald-50 text-emerald-700";
-    if (["Нужен текст", "Нужно ТЗ", "Нужен визуал", "На проверке"].includes(label)) return "bg-amber-50 text-amber-700";
-    if (label === "У клиента") return "bg-violet-50 text-violet-700";
-    return "bg-slate-100 text-slate-500";
-  };
-  const shortPlatform = (platform: string) => {
-    const normalized = platform.toLowerCase();
-    if (normalized.includes("telegram") || normalized.includes("телег")) return "TG";
-    if (normalized.includes("vk") || normalized.includes("вк")) return "VK";
-    if (normalized.includes("дзен") || normalized.includes("zen")) return "Дзен";
-    if (normalized.includes("ozon")) return "Ozon";
-    if (normalized.includes("wildberries") || normalized.includes("wb")) return "WB";
-    if (normalized.includes("статья") || normalized.includes("blog") || normalized.includes("сайт")) return "Статья";
-    return platform.slice(0, 8);
+    return materialNextActionLabel(item, publication);
   };
   const selectedActionLabel = selectedItem ? nextActionLabel(selectedItem) : "";
   const purpleButtonClass = "rounded-full bg-violet-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-violet-700 disabled:bg-slate-300";
@@ -3295,7 +3289,6 @@ function DraftsView({
     const asset = publication?.creativeAssets[0];
     return Boolean(asset?.generatedVariants.length || item.generatedCreativeVariants.length);
   };
-  const calendarWeekdays = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
   const renderMaterialChip = (item: MaterialPlannedItem, compact = false) => {
     const publication = publicationByItemId.get(item.id);
     const action = nextActionLabel(item);
@@ -3312,7 +3305,7 @@ function DraftsView({
       >
         <div className="flex items-center justify-between gap-2">
           <span className="truncate rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700">
-            {shortPlatform(item.platformName)}
+            {shortPlatformName(item.platformName)}
           </span>
           {hasVisual ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">Визуал</span> : null}
         </div>
@@ -3321,7 +3314,7 @@ function DraftsView({
         </p>
         <div className="mt-2 flex items-center justify-between gap-2">
           <span className="truncate text-[10px] font-semibold text-slate-400">{publication?.scheduledTime ?? item.format}</span>
-          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${nextActionTone(action)}`}>{action}</span>
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${nextActionBadgeClass(action)}`}>{action}</span>
         </div>
       </a>
     );
@@ -3397,69 +3390,21 @@ function DraftsView({
               <MetricCard label="Запланированы" value={scheduledCount} detail="Есть дата" />
             </div>
 
-            <div className="overflow-x-auto pb-2">
-              <div className="min-w-[1120px] rounded-[24px] border border-slate-200 bg-slate-50/70 p-3">
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-xl font-semibold capitalize text-slate-950">{calendarMonthLabel}</h3>
-                    <p className="text-xs font-semibold text-slate-400">{visibleItems.length} материалов в текущем фильтре</p>
-                  </div>
-                  <div className="flex items-center gap-1 rounded-full bg-white p-1 text-xs font-semibold text-slate-400">
-                    <span className="px-2 py-1">←</span>
-                    <span className="rounded-full bg-violet-50 px-3 py-1 text-violet-700">Сегодня</span>
-                    <span className="px-2 py-1">→</span>
-                  </div>
-                </div>
-                <div className="grid grid-cols-7 gap-px overflow-hidden rounded-2xl border border-slate-200 bg-slate-200">
-                  {calendarWeekdays.map((day) => (
-                    <div key={day} className="bg-white px-2 py-2 text-center text-[11px] font-semibold text-slate-400">
-                      {day}
-                    </div>
-                  ))}
-                  {calendarCells.map((date) => {
-                    const key = dateKey(date);
-                    const dayItems = itemsByDate.get(key) ?? [];
-                    const inMonth = date.getMonth() === calendarMonth;
-
-                    return (
-                      <div key={key} className={`min-h-[178px] bg-white p-2.5 ${inMonth ? "" : "opacity-45"}`}>
-                        <div className="mb-2 flex items-center justify-between">
-                          <span className={`text-xs font-semibold ${inMonth ? "text-slate-700" : "text-slate-400"}`}>{date.getDate()}</span>
-                          {dayItems.length > 0 ? <span className="text-[10px] font-semibold text-violet-500">{dayItems.length}</span> : null}
-                        </div>
-                        <div className="grid gap-1.5">
-                          {dayItems.slice(0, 3).map((item) => renderMaterialChip(item, true))}
-                          {dayItems.length > 3 ? (
-                            <span className="rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500">+ ещё {dayItems.length - 3}</span>
-                          ) : null}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {floatingGroups.length > 0 ? (
-                <section className="mt-3 rounded-[22px] border border-slate-200 bg-white p-3">
+            <div className="grid gap-3">
+              {productionGroups.map((group) => (
+                <section key={group.label} className="rounded-[22px] border border-slate-200 bg-slate-50/70 p-3">
                   <div className="mb-3 flex items-center justify-between gap-3">
-                    <h3 className="text-sm font-semibold text-slate-950">Без точной даты</h3>
-                    <span className="text-xs font-semibold text-slate-400">{floatingItems.length} материалов</span>
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-950">{group.label}</h3>
+                      <p className="text-xs font-semibold text-slate-400">{group.items.length} материалов</p>
+                    </div>
+                    <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500">{group.items.length}</span>
                   </div>
-                  <div className="grid gap-3">
-                    {floatingGroups.map((group) => (
-                      <div key={group.label} className="rounded-2xl bg-slate-50/80 p-3">
-                        <div className="mb-2 flex items-center justify-between gap-2">
-                          <p className="text-xs font-semibold text-slate-700">{group.label}</p>
-                          <span className="text-[10px] font-semibold text-slate-400">{group.items.length}</span>
-                        </div>
-                        <div className="grid gap-2 md:grid-cols-2 2xl:grid-cols-3">
-                          {group.items.map((item) => renderMaterialChip(item))}
-                        </div>
-                      </div>
-                    ))}
+                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                    {group.items.map((item) => renderMaterialChip(item))}
                   </div>
                 </section>
-              ) : null}
+              ))}
 
               {visibleItems.length === 0 ? (
                 <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
@@ -3471,7 +3416,7 @@ function DraftsView({
 
           <article className="rounded-[24px] border border-slate-200/80 bg-white p-4 shadow-[0_10px_28px_rgba(88,75,135,0.055)]">
             {!selectedItem ? (
-              <p className="text-sm leading-6 text-slate-500">Выберите материал в календаре, чтобы открыть текст, ТЗ и визуал.</p>
+              <p className="text-sm leading-6 text-slate-500">Выберите материал в списке, чтобы открыть текст, ТЗ и визуал.</p>
             ) : (
               <div>
                 <div className="flex flex-wrap gap-1.5">
@@ -3484,7 +3429,7 @@ function DraftsView({
                 <div className="mt-4 rounded-2xl bg-violet-50 p-3">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-violet-700">Следующее действие</p>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${nextActionTone(selectedActionLabel)}`}>
+                    <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${nextActionBadgeClass(selectedActionLabel)}`}>
                       {selectedActionLabel}
                     </span>
                     {selectedPublication ? <a href="#scheduling" className={softButtonClass}>Расписание</a> : null}
@@ -3495,7 +3440,7 @@ function DraftsView({
                   <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
                     <div className="flex items-center justify-between gap-2">
                       <h4 className="text-sm font-semibold text-slate-950">Текст публикации</h4>
-                      <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${selectedItem.contentDraft ? nextActionTone(selectedActionLabel) : nextActionTone("Нужен текст")}`}>
+                      <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${selectedItem.contentDraft ? nextActionBadgeClass(selectedActionLabel) : nextActionBadgeClass("Нужен текст")}`}>
                         {selectedItem.contentDraft ? formatDraftStatus(selectedItem.contentDraft.status) : "Не создан"}
                       </span>
                     </div>
@@ -3552,7 +3497,7 @@ function DraftsView({
                   <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
                     <div className="flex items-center justify-between gap-2">
                       <h4 className="text-sm font-semibold text-slate-950">Креативное ТЗ</h4>
-                      <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${selectedAsset ? "bg-emerald-50 text-emerald-700" : nextActionTone("Нужно ТЗ")}`}>
+                      <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${selectedAsset ? "bg-emerald-50 text-emerald-700" : nextActionBadgeClass("Нужно ТЗ")}`}>
                         {selectedAsset ? formatStatus(selectedAsset.status) : "Нет ТЗ"}
                       </span>
                     </div>
@@ -3577,7 +3522,7 @@ function DraftsView({
                   <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
                     <div className="flex items-center justify-between gap-2">
                       <h4 className="text-sm font-semibold text-slate-950">Визуал</h4>
-                      <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${selectedVisual ? "bg-emerald-50 text-emerald-700" : nextActionTone("Нужен визуал")}`}>
+                      <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${selectedVisual ? "bg-emerald-50 text-emerald-700" : nextActionBadgeClass("Нужен визуал")}`}>
                         {selectedVisual ? formatStatus(selectedVisual.status) : "Не создан"}
                       </span>
                     </div>
@@ -3823,8 +3768,8 @@ function ContentItemAction({ item, draftsHref }: { item: CalendarPreviewItem; dr
   return item.contentDraft ? (
     <div className="flex flex-wrap gap-2">
       <a
-        href={draftsHref}
-        className="inline-flex rounded-md border border-teal-200 bg-teal-50 px-2.5 py-1.5 text-xs font-bold text-teal-800 transition hover:bg-teal-100"
+        href={materialWorkspaceHref(draftsHref, item.id)}
+        className="inline-flex rounded-full bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-violet-700"
       >
         Открыть материал
       </a>
@@ -3843,7 +3788,7 @@ function ContentItemAction({ item, draftsHref }: { item: CalendarPreviewItem; dr
       <input type="hidden" name="plannedContentItemId" value={item.id} />
       <PendingSubmitButton
         pendingLabel="Генерируем текст..."
-        className="rounded-md bg-stone-950 px-2.5 py-1.5 text-xs font-bold text-white transition hover:bg-stone-800 disabled:cursor-wait disabled:bg-stone-400"
+        className="rounded-full bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-violet-700 disabled:cursor-wait disabled:bg-slate-300"
       >
         Сгенерировать текст
       </PendingSubmitButton>
@@ -3930,230 +3875,254 @@ function ContentCalendar({
   groups,
   publications,
   month,
+  monthlyPlanId,
   blueprintId,
+  clientName,
   generationBlocked,
   draftsHref,
   clientSetupHref,
+  activeFilter,
 }: {
-  groups: ReturnType<typeof groupCalendarItems>;
+  groups: Array<{ label: string; items: MaterialPlannedItem[] }>;
   publications: ScheduledPublicationPreview[];
   month: string;
+  monthlyPlanId?: string;
   blueprintId?: string;
+  clientName?: string;
   generationBlocked: boolean;
   draftsHref: string;
   clientSetupHref: string;
+  activeFilter?: string;
 }) {
   const items = groups.flatMap((group) => group.items);
-  const inspectorItem = items[0];
-  const scheduledByItemId = new Map(
-    publications.map((publication) => [publication.plannedContentItemId, publication]),
-  );
-  const inspectorPublication = inspectorItem ? scheduledByItemId.get(inspectorItem.id) : null;
-  const unscheduledItems = items.filter((item) => !scheduledByItemId.has(item.id));
-  const unscheduledGroups = groupCalendarItems(unscheduledItems);
+  const publicationByItemId = new Map(publications.map((publication) => [publication.plannedContentItemId, publication]));
   const scheduledCount = publications.filter((publication) => publication.status === "scheduled").length;
   const needsAssetsCount = publications.filter((publication) => publication.status === "needs_assets").length;
   const readyCount = publications.filter((publication) => publication.status === "ready").length;
   const skippedCount = publications.filter((publication) => publication.status === "skipped").length;
+  const filters = [
+    { id: "all", label: "Все" },
+    { id: "missing_text", label: "Без текста" },
+    { id: "missing_visual", label: "Без визуала" },
+    { id: "review", label: "На проверке" },
+    { id: "client", label: "У клиента" },
+    { id: "approved", label: "Согласовано" },
+    { id: "ready", label: "Готово" },
+  ];
+  const currentFilter = activeFilter && filters.some((filter) => filter.id === activeFilter) ? activeFilter : "all";
+  const calendarHref = (filter = currentFilter) => {
+    const searchParams = new URLSearchParams({ view: "calendar" });
+    if (blueprintId) searchParams.set("blueprint", blueprintId);
+    if (monthlyPlanId) searchParams.set("plan", monthlyPlanId);
+    if (filter !== "all") searchParams.set("filter", filter);
+    return `/?${searchParams.toString()}`;
+  };
+  const itemMatchesFilter = (item: MaterialPlannedItem) => {
+    const publication = publicationByItemId.get(item.id);
+    const asset = publication?.creativeAssets[0];
+    const draftStatus = item.contentDraft?.status;
+
+    if (currentFilter === "missing_text") return !item.contentDraft;
+    if (currentFilter === "missing_visual") return Boolean(publication) && (!asset || asset.generatedVariants.length === 0);
+    if (currentFilter === "review") return draftStatus === "draft" || draftStatus === "needs_review";
+    if (currentFilter === "client") return draftStatus === "sent_to_client";
+    if (currentFilter === "approved") return draftStatus === "approved";
+    if (currentFilter === "ready") return draftStatus === "ready_to_schedule" || publication?.status === "ready";
+    return true;
+  };
+  const visibleItems = items.filter(itemMatchesFilter);
+  const firstExactDate =
+    visibleItems
+      .map((item) => parseExactDate(publicationByItemId.get(item.id)?.scheduledDate ?? item.plannedDate))
+      .find((date): date is Date => Boolean(date)) ??
+    parseExactDate(`${month}-01`) ??
+    new Date();
+  const calendarYear = firstExactDate.getFullYear();
+  const calendarMonth = firstExactDate.getMonth();
+  const calendarMonthLabel = firstExactDate.toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
+  const monthStart = new Date(calendarYear, calendarMonth, 1);
+  const monthEnd = new Date(calendarYear, calendarMonth + 1, 0);
+  const leadingDays = (monthStart.getDay() + 6) % 7;
+  const calendarCells = Array.from({ length: Math.ceil((leadingDays + monthEnd.getDate()) / 7) * 7 }, (_, index) => (
+    new Date(calendarYear, calendarMonth, index - leadingDays + 1)
+  ));
+  const exactDateItems = visibleItems.filter((item) => parseExactDate(publicationByItemId.get(item.id)?.scheduledDate ?? item.plannedDate));
+  const floatingItems = visibleItems.filter((item) => !parseExactDate(publicationByItemId.get(item.id)?.scheduledDate ?? item.plannedDate));
+  const itemsByDate = new Map<string, MaterialPlannedItem[]>();
+  for (const item of exactDateItems) {
+    const key = publicationByItemId.get(item.id)?.scheduledDate ?? item.plannedDate;
+    itemsByDate.set(key, [...(itemsByDate.get(key) ?? []), item]);
+  }
+  const floatingGroups = groupCalendarItems(floatingItems);
+  const calendarWeekdays = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+  const renderCalendarCard = (item: MaterialPlannedItem, compact = false) => {
+    const publication = publicationByItemId.get(item.id);
+    const asset = publication?.creativeAssets[0];
+    const visual = asset?.generatedVariants[0] ?? item.generatedCreativeVariants[0];
+    const action = materialNextActionLabel(item, publication);
+
+    return (
+      <a
+        key={item.id}
+        href={materialWorkspaceHref(draftsHref, item.id)}
+        className="group block overflow-hidden rounded-2xl border border-slate-200 bg-white text-left shadow-[0_4px_14px_rgba(88,75,135,0.045)] transition hover:border-violet-200 hover:shadow-[0_10px_26px_rgba(88,75,135,0.11)]"
+      >
+        {visual ? (
+          <GeneratedVisualImage
+            variant={visual}
+            alt={visual.variantTitle}
+            className={`${compact ? "h-16" : "h-20"} w-full bg-slate-100 object-cover`}
+          />
+        ) : (
+          <div className={`${compact ? "h-16" : "h-20"} flex items-center justify-center bg-slate-50 px-3 text-center text-[11px] font-semibold text-slate-400`}>
+            Нет визуала
+          </div>
+        )}
+        <div className="p-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700">{shortPlatformName(item.platformName)}</span>
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${nextActionBadgeClass(action)}`}>{action}</span>
+          </div>
+          <p className="mt-2 line-clamp-2 text-xs font-semibold leading-4 text-slate-950">{item.topic}</p>
+          <span className="mt-2 inline-flex text-[10px] font-semibold text-violet-600 opacity-0 transition group-hover:opacity-100">Открыть материал</span>
+        </div>
+      </a>
+    );
+  };
 
   return (
-    <section id="calendar" className={`${panelClass} scroll-mt-24 overflow-hidden`}>
-      <div className="border-b border-stone-200 px-5 py-5 sm:px-6">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Рабочее пространство</p>
-            <h2 className="mt-1 text-2xl font-semibold text-stone-950">Контент-календарь</h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
-              Центр управления планом, текстами, согласованиями и будущими публикациями.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className={secondaryButtonClass}>Все клиенты</button>
-            <button type="button" className={secondaryButtonClass}>Все площадки</button>
-            <button type="button" className={secondaryButtonClass}>Неделя</button>
-            <StatusBadge tone="teal">{month}</StatusBadge>
-          </div>
+    <section id="calendar" className="rounded-[28px] bg-[#f7f5fb] p-4 text-slate-900 sm:p-5">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-600">Визуальный календарь</p>
+          <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">Календарь</h2>
+          <p className="mt-1 text-sm text-slate-500">{clientName ?? "Клиент не выбран"} · {calendarMonthLabel}</p>
         </div>
-        <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-          <MetricCard label="Запланировано" value={scheduledCount} detail="Публикации с датой" tone="teal" />
-          <MetricCard label="Нужны материалы" value={needsAssetsCount} detail="Нужно подготовить визуал" tone="amber" />
-          <MetricCard label="Готово" value={readyCount} detail="Можно размещать вручную" />
-          <MetricCard label="Пропущено" value={skippedCount} detail="Снято с текущей работы" />
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-400">←</span>
+          <a href={calendarHref("all")} className="rounded-full bg-violet-50 px-4 py-2 text-sm font-semibold text-violet-700">Сегодня</a>
+          <span className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-400">→</span>
         </div>
       </div>
 
-      {publications.length > 0 ? (
-        <>
-          <ScheduledPublicationCalendar publications={publications} />
-          {unscheduledItems.length > 0 ? (
-            <div className="border-t border-stone-200 bg-white p-4 sm:p-5">
-              <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-amber-700">Ещё не запланировано</p>
-                  <h3 className="mt-1 text-lg font-semibold text-stone-950">Материалы без даты публикации</h3>
-                  <p className="mt-1 text-xs leading-5 text-stone-500">
-                    Эти пункты уже есть в месячном плане, но ещё не прошли путь до расписания.
-                  </p>
-                </div>
-                <StatusBadge tone="amber">{unscheduledItems.length} в плане</StatusBadge>
-              </div>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                {unscheduledGroups.flatMap((group) => group.items).map((item) => (
-                  <article key={item.id} className="rounded-lg border border-stone-200 bg-stone-50/70 p-3">
-                    <div className="flex flex-wrap gap-1.5">
-                      <StatusBadge tone="teal">{item.platformName}</StatusBadge>
-                      <StatusBadge>{item.format}</StatusBadge>
-                    </div>
-                    <p className="mt-3 text-xs font-semibold text-stone-400">{item.week || item.plannedDate}</p>
-                    <h4 className="mt-1 text-sm font-semibold leading-5 text-stone-950">{item.topic}</h4>
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      <StatusBadge tone={item.status === "planned" ? "teal" : "amber"}>{formatStatus(item.status)}</StatusBadge>
-                      <StatusBadge tone={materialTextStatusTone(item.contentDraft)}>{formatMaterialTextStatus(item.contentDraft)}</StatusBadge>
-                    </div>
-                    <div className="mt-3 border-t border-stone-200 pt-3">
-                      <ContentItemAction item={item} draftsHref={draftsHref} />
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </>
-      ) : groups.length > 0 ? (
-        <div className="grid xl:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="overflow-x-auto bg-stone-50/50 p-4">
-            <div className="grid min-w-[920px] grid-cols-4 gap-3">
-              {groups.map((group) => (
-                <article key={group.label} className="rounded-lg border border-stone-200 bg-stone-100/70 p-3">
-                  <div className="flex items-center justify-between gap-3 border-b border-stone-200 pb-3">
-                    <div>
-                      <p className="text-sm font-semibold text-stone-950">{group.label}</p>
-                      <p className="mt-1 text-xs text-stone-400">{group.items.length} материалов</p>
-                    </div>
-                    <StatusBadge>{group.items.length}</StatusBadge>
-                  </div>
-                  <div className="mt-3 grid gap-2">
-                    {group.items.map((item) => {
-                      const scheduledPublication = scheduledByItemId.get(item.id);
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <MetricCard label="Запланировано" value={scheduledCount} detail="Публикации с датой" />
+          <MetricCard label="Нужны материалы" value={needsAssetsCount} detail="Нужно подготовить визуал" tone={needsAssetsCount > 0 ? "amber" : "stone"} />
+          <MetricCard label="Готово" value={readyCount} detail="Можно размещать вручную" />
+          <MetricCard label="Пропущено" value={skippedCount} detail="Снято с работы" />
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {filters.map((filter) => (
+            <a
+              key={filter.id}
+              href={calendarHref(filter.id)}
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                currentFilter === filter.id ? "bg-violet-50 text-violet-700" : "bg-white text-slate-500 hover:text-violet-700"
+              }`}
+            >
+              {filter.label}
+            </a>
+          ))}
+        </div>
+      </div>
 
-                      return (
-                      <div key={item.id} className="rounded-md border border-stone-200 bg-white p-3 shadow-[0_1px_2px_rgba(28,36,38,0.04)]">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <StatusBadge tone="teal">{item.platformName}</StatusBadge>
-                          <StatusBadge>{item.format}</StatusBadge>
+      {items.length > 0 ? (
+        <>
+          <div className="mt-4 rounded-[26px] border border-slate-200/80 bg-white p-4 shadow-[0_10px_28px_rgba(88,75,135,0.055)]">
+            <div className="overflow-x-auto pb-2">
+              <div className="min-w-[1180px] rounded-[24px] border border-slate-200 bg-slate-50/70 p-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-xl font-semibold capitalize text-slate-950">{calendarMonthLabel}</h3>
+                    <p className="text-xs font-semibold text-slate-400">{visibleItems.length} материалов в текущем фильтре</p>
+                  </div>
+                  <a href={draftsHref} className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-violet-200 hover:text-violet-700">
+                    Открыть материалы
+                  </a>
+                </div>
+                <div className="grid grid-cols-7 gap-px overflow-hidden rounded-2xl border border-slate-200 bg-slate-200">
+                  {calendarWeekdays.map((day) => (
+                    <div key={day} className="bg-white px-2 py-2 text-center text-[11px] font-semibold text-slate-400">
+                      {day}
+                    </div>
+                  ))}
+                  {calendarCells.map((date) => {
+                    const key = dateKey(date);
+                    const dayItems = itemsByDate.get(key) ?? [];
+                    const inMonth = date.getMonth() === calendarMonth;
+
+                    return (
+                      <div key={key} className={`min-h-[252px] bg-white p-2.5 ${inMonth ? "" : "opacity-45"}`}>
+                        <div className="mb-2 flex items-center justify-between">
+                          <span className={`text-xs font-semibold ${inMonth ? "text-slate-700" : "text-slate-400"}`}>{date.getDate()}</span>
+                          {dayItems.length > 0 ? <span className="text-[10px] font-semibold text-violet-500">{dayItems.length}</span> : null}
                         </div>
-                        <p className="mt-3 text-xs font-semibold text-stone-400">{item.plannedDate}</p>
-                        {scheduledPublication ? (
-                          <p className="mt-1 text-xs font-bold text-teal-700">
-                            Публикация: {scheduledPublication.scheduledDate}
-                            {scheduledPublication.scheduledTime ? `, ${scheduledPublication.scheduledTime}` : ""}
-                          </p>
-                        ) : null}
-                        <p className="mt-1 text-sm font-semibold leading-5 text-stone-900">{item.topic}</p>
-                        {suggestsVisualAsset(item.format) ? (
-                          <div className="mt-3 flex h-16 items-center justify-center rounded-md border border-dashed border-stone-300 bg-stone-50 text-[10px] font-bold uppercase tracking-[0.1em] text-stone-400">
-                            Визуал / видео
-                          </div>
-                        ) : null}
-                        <div className="mt-3 flex flex-wrap gap-1.5">
-                          {scheduledPublication ? (
-                            <StatusBadge tone={scheduledPublicationTone(scheduledPublication.status)}>{formatStatus(scheduledPublication.status)}</StatusBadge>
-                          ) : (
-                            <StatusBadge tone={item.status === "planned" ? "teal" : "amber"}>{formatStatus(item.status)}</StatusBadge>
-                          )}
-                          {item.approvalRequired ? <StatusBadge tone="amber">Нужно проверить</StatusBadge> : null}
-                          <StatusBadge tone={materialTextStatusTone(item.contentDraft)}>{formatMaterialTextStatus(item.contentDraft)}</StatusBadge>
-                        </div>
-                        <div className="mt-3 border-t border-stone-100 pt-3">
-                          <ContentItemAction item={item} draftsHref={draftsHref} />
+                        <div className="grid gap-2">
+                          {dayItems.slice(0, 2).map((item) => renderCalendarCard(item, true))}
+                          {dayItems.length > 2 ? (
+                            <a href={materialWorkspaceHref(draftsHref, dayItems[2].id)} className="rounded-xl bg-slate-100 px-2 py-1.5 text-[10px] font-semibold text-slate-500 transition hover:text-violet-700">
+                              + ещё {dayItems.length - 2}
+                            </a>
+                          ) : null}
                         </div>
                       </div>
                     );
-                    })}
-                  </div>
-                </article>
-              ))}
-            </div>
-          </div>
-
-          <aside className="border-t border-stone-200 bg-white p-5 xl:border-l xl:border-t-0">
-            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Карточка материала</p>
-            {inspectorItem ? (
-              <div className="mt-4">
-                <div className="flex flex-wrap gap-1.5">
-                  <StatusBadge tone="teal">{inspectorItem.platformName}</StatusBadge>
-                  <StatusBadge>{inspectorItem.format}</StatusBadge>
-                </div>
-                <h3 className="mt-3 text-lg font-semibold leading-7 text-stone-950">{inspectorItem.topic}</h3>
-                <p className="mt-1 text-xs font-semibold text-stone-400">{inspectorItem.plannedDate}</p>
-                {inspectorPublication ? (
-                  <p className="mt-1 text-xs font-bold text-teal-700">
-                    Публикация: {inspectorPublication.scheduledDate}
-                    {inspectorPublication.scheduledTime ? `, ${inspectorPublication.scheduledTime}` : ""}
-                  </p>
-                ) : null}
-                <div className="mt-4 flex flex-wrap gap-1.5">
-                  {inspectorPublication ? (
-                    <StatusBadge tone={scheduledPublicationTone(inspectorPublication.status)}>{formatStatus(inspectorPublication.status)}</StatusBadge>
-                  ) : (
-                    <StatusBadge tone="teal">{formatStatus(inspectorItem.status)}</StatusBadge>
-                  )}
-                  {inspectorItem.approvalRequired ? <StatusBadge tone="amber">Нужно проверить</StatusBadge> : <StatusBadge tone="green">Проверка необязательна</StatusBadge>}
-                </div>
-                <div className="mt-4 flex h-32 items-center justify-center rounded-lg border border-dashed border-stone-300 bg-stone-50 text-center text-[10px] font-bold uppercase tracking-[0.12em] text-stone-400">
-                  Превью визуала
-                </div>
-                <div className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3">
-                  <p className="text-xs font-bold text-stone-700">Текст публикации</p>
-                  <p className="mt-2 line-clamp-5 text-xs leading-5 text-stone-500">
-                    {inspectorItem.contentDraft?.draftBody || "Сгенерируйте текст, чтобы подготовить материал к проверке менеджером."}
-                  </p>
-                </div>
-                <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3">
-                  <p className="text-xs font-bold text-amber-900">Согласование</p>
-                  <p className="mt-1 text-xs leading-5 text-amber-800">
-                    {inspectorItem.approvalRequired ? "Перед планированием материал должен проверить человек." : "Для материала действует политика проверки из Blueprint."}
-                  </p>
-                </div>
-                <div className="mt-3 rounded-md border border-teal-200 bg-teal-50 p-3">
-                  <p className="text-xs font-bold text-teal-900">Рекомендация AI</p>
-                  <p className="mt-1 text-xs leading-5 text-teal-800">Сохраните естественную подачу для площадки и проверьте фактические детали перед согласованием.</p>
-                </div>
-                <div className="mt-3 rounded-md border border-stone-200 p-3">
-                  <p className="text-xs font-bold text-stone-700">Путь материала</p>
-                  <p className="mt-1 text-xs leading-5 text-stone-500">Текст &rarr; Проверка &rarr; Согласование &rarr; Планирование</p>
-                </div>
-                <div className="mt-4 grid gap-2">
-                  <ContentItemAction item={inspectorItem} draftsHref={draftsHref} />
-                  <button type="button" disabled className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs font-bold text-stone-400">Отправить клиенту</button>
-                  <button type="button" disabled className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs font-bold text-stone-400">Согласовать и запланировать</button>
+                  })}
                 </div>
               </div>
-            ) : (
-              <p className="mt-4 text-sm leading-6 text-stone-500">Детали материала появятся после генерации первого месячного плана.</p>
-            )}
-          </aside>
-        </div>
-      ) : (
-        <div className="p-5 sm:p-6">
-          <div className="rounded-lg border border-dashed border-teal-300 bg-teal-50/70 p-6">
-            <p className="text-sm font-semibold text-teal-950">Контент-календарь готов к первому плану.</p>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-teal-800">
-              Сгенерируйте месячный план, чтобы заполнить недели, очередь согласований и карточки материалов.
-            </p>
-            {blueprintId ? (
-              <form action={generateMonthlyPlan} className="mt-4">
-                <input type="hidden" name="blueprintId" value={blueprintId} />
-                <PendingSubmitButton pendingLabel="Генерируем месячный план..." disabled={generationBlocked} className={primaryButtonClass}>
-                  Сгенерировать месячный план
-                </PendingSubmitButton>
-              </form>
-            ) : (
-              <a href={clientSetupHref} className="mt-4 inline-flex text-sm font-bold text-teal-800 transition hover:text-teal-950">
-                Начать с настройки клиента
-              </a>
-            )}
+            </div>
+
+            {visibleItems.length === 0 ? (
+              <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
+                По этому фильтру материалов нет.
+              </div>
+            ) : null}
           </div>
+
+          {floatingGroups.length > 0 ? (
+            <section className="mt-4 rounded-[26px] border border-slate-200/80 bg-white p-4 shadow-[0_10px_28px_rgba(88,75,135,0.055)]">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-950">Без точной даты</h3>
+                  <p className="text-xs font-semibold text-slate-400">Материалы с недельной привязкой остаются отдельно.</p>
+                </div>
+                <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-500">{floatingItems.length}</span>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {floatingGroups.map((group) => (
+                  <div key={group.label} className="rounded-2xl bg-slate-50/80 p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-slate-800">{group.label}</p>
+                      <span className="text-[10px] font-semibold text-slate-400">{group.items.length}</span>
+                    </div>
+                    <div className="grid gap-2">
+                      {group.items.map((item) => renderCalendarCard(item))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </>
+      ) : (
+        <div className="mt-4 rounded-[24px] border border-violet-200 bg-white p-6">
+          <div>
+            <p className="text-sm font-semibold text-slate-950">Календарь готов к первому месячному плану.</p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">Сгенерируйте месячный план, чтобы увидеть материалы по датам и неделям.</p>
+          </div>
+          {blueprintId ? (
+            <form action={generateMonthlyPlan} className="mt-4">
+              <input type="hidden" name="blueprintId" value={blueprintId} />
+              <PendingSubmitButton pendingLabel="Генерируем месячный план..." disabled={generationBlocked} className="rounded-full bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:bg-slate-300">
+                Сгенерировать месячный план
+              </PendingSubmitButton>
+            </form>
+          ) : (
+            <a href={clientSetupHref} className="mt-4 inline-flex text-sm font-semibold text-violet-700 transition hover:text-violet-900">
+              Начать с настройки клиента
+            </a>
+          )}
         </div>
       )}
     </section>
@@ -5003,23 +4972,26 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   title="Календарь"
                   description="Планируйте согласованные публикации, управляйте датами и отслеживайте состояние материалов в одном рабочем экране."
                 />
-                <SchedulingLayer
-                  drafts={contentDrafts}
+                <ContentCalendar
+                  groups={calendarGroups}
                   publications={selectedMonthlyPlan?.scheduledPublications ?? []}
-                  assetsHref={workspaceLinks.assets}
+                  month={selectedMonthlyPlan?.month ?? currentMonth()}
+                  monthlyPlanId={selectedMonthlyPlan?.id}
+                  blueprintId={latestBlueprint?.id}
+                  clientName={latestBlueprint?.client.name}
+                  generationBlocked={latestBlueprint?.nextRecommendedAction === "request_more_brief_data"}
                   draftsHref={workspaceLinks.drafts}
+                  clientSetupHref={workspaceLinks.client_setup}
+                  activeFilter={params.filter}
                 />
-                <section className="mt-7">
-                  <ContentCalendar
-                    groups={calendarGroups}
+                <div className="mt-7">
+                  <SchedulingLayer
+                    drafts={contentDrafts}
                     publications={selectedMonthlyPlan?.scheduledPublications ?? []}
-                    month={selectedMonthlyPlan?.month ?? currentMonth()}
-                    blueprintId={latestBlueprint?.id}
-                    generationBlocked={latestBlueprint?.nextRecommendedAction === "request_more_brief_data"}
+                    assetsHref={workspaceLinks.assets}
                     draftsHref={workspaceLinks.drafts}
-                    clientSetupHref={workspaceLinks.client_setup}
                   />
-                </section>
+                </div>
               </>
             ) : null}
 
