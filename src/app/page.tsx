@@ -67,6 +67,7 @@ type SearchParams = Promise<{
   blueprint?: string;
   plan?: string;
   client?: string;
+  calendarView?: string;
   setupStep?: string;
   brandStep?: string;
   error?: string;
@@ -168,28 +169,18 @@ const viewTitles: Record<WorkspaceView, string> = {
 
 const navigationGroups = [
   {
-    label: "Работа",
+    label: "Главное",
     items: [
       { label: "Обзор", view: "overview" as const, glyph: "О" },
-      { label: "Клиенты", view: "clients" as const, glyph: "К" },
-      { label: "Настройка клиента", view: "client_setup" as const, glyph: "Н" },
-      { label: "Календарь", view: "calendar" as const, glyph: "К" },
-      { label: "Клиентский вид", view: "client_portal" as const, glyph: "В" },
-      { label: "Бренд", view: "brand_assets" as const, glyph: "Б" },
+      { label: "Клиенты", view: "clients" as const, glyph: "Кл" },
+      { label: "Календарь", view: "calendar" as const, glyph: "Кд" },
     ],
   },
   {
-    label: "Проверка",
+    label: "Работа",
     items: [
-      { label: "Согласования", view: "approvals" as const, glyph: "С" },
       { label: "Материалы", view: "drafts" as const, glyph: "М" },
-      { label: "Креативы", view: "assets" as const, glyph: "К" },
-    ],
-  },
-  {
-    label: "Система",
-    items: [
-      { label: "Отчёты", view: "reports" as const, glyph: "О" },
+      { label: "Креативы", view: "assets" as const, glyph: "Кр" },
       { label: "Настройки", view: "settings" as const, glyph: "Н" },
     ],
   },
@@ -3353,9 +3344,9 @@ function DraftsView({
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex rounded-full bg-white p-1 shadow-sm">
-          <span className="rounded-full bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700">Календарь</span>
+          <span className="rounded-full bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700">Карточки</span>
           <a href="#materials-list" className="rounded-full px-3 py-1.5 text-xs font-semibold text-slate-500 transition hover:text-violet-700">Список</a>
-          <span className="rounded-full px-3 py-1.5 text-xs font-semibold text-slate-300">Канбан</span>
+          <span className="rounded-full px-3 py-1.5 text-xs font-semibold text-slate-300">Канбан позже</span>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {filters.map((filter) => (
@@ -3573,9 +3564,12 @@ function DraftsView({
         </div>
       )}
 
-      <details id="materials-list" className="mt-4 rounded-[22px] border border-slate-200 bg-white p-4 shadow-[0_10px_28px_rgba(88,75,135,0.055)]">
-        <summary className="cursor-pointer text-sm font-semibold text-slate-800">Открыть полный список</summary>
-        <div className="mt-3 grid gap-2">
+      <section id="materials-list" className="mt-4 rounded-[22px] border border-slate-200 bg-white p-4 shadow-[0_10px_28px_rgba(88,75,135,0.055)]">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-slate-900">Список материалов</h3>
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-500">{items.length}</span>
+        </div>
+        <div className="grid gap-2">
           {items.map((item) => (
             <a key={item.id} href={materialHref(item.id)} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-2 text-sm transition hover:border-violet-200">
               <span className="min-w-0 truncate font-semibold text-slate-900">{item.topic}</span>
@@ -3583,38 +3577,41 @@ function DraftsView({
             </a>
           ))}
         </div>
-      </details>
+      </section>
 
-      <article className="mt-4 rounded-[22px] border border-slate-200 bg-white p-4 shadow-[0_10px_28px_rgba(88,75,135,0.055)]">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-xs font-semibold text-slate-400">Production Autopilot</p>
-            <h3 className="mt-1 text-sm font-semibold text-slate-950">Автоподготовка месяца</h3>
-            <p className="mt-1 text-xs text-slate-500">До {autopilotBatchLimit} текстов за запуск.</p>
-          </div>
-          {missingTextsCount > 0 && monthlyPlanId ? (
-            <form action={prepareMonthAutopilot}>
-              <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} />
-              {blueprintId ? <input type="hidden" name="blueprintId" value={blueprintId} /> : null}
-              <PendingSubmitButton pendingLabel="Готовим материалы..." className="rounded-full bg-violet-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-violet-700">
-                Подготовить месяц
-              </PendingSubmitButton>
-            </form>
-          ) : (
-            <span className="rounded-full bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-500">
-              {allTextsReady ? "Тексты готовы" : "Нужен месячный план"}
-            </span>
-          )}
-        </div>
-      </article>
-
-      <div className="mt-4">
+      <div className="mt-4 rounded-[22px] border border-slate-200 bg-white p-4 shadow-[0_10px_28px_rgba(88,75,135,0.055)]">
         <details>
-          <summary className="cursor-pointer text-xs font-semibold text-slate-400">Экспериментально: AI-помощник по плану</summary>
-          <MonthlyPlanRevisionCopilot monthlyPlanId={monthlyPlanId} proposal={latestRevisionProposal} />
+          <summary className="cursor-pointer text-sm font-semibold text-slate-700">Расширенные задачи</summary>
+          <div className="mt-4 grid gap-4">
+            <article className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-950">Подготовка текстов месяца</h3>
+                  <p className="mt-1 text-xs text-slate-500">До {autopilotBatchLimit} текстов за запуск.</p>
+                </div>
+                {missingTextsCount > 0 && monthlyPlanId ? (
+                  <form action={prepareMonthAutopilot}>
+                    <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} />
+                    {blueprintId ? <input type="hidden" name="blueprintId" value={blueprintId} /> : null}
+                    <PendingSubmitButton pendingLabel="Готовим материалы..." className="rounded-full bg-violet-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-violet-700">
+                      Подготовить месяц
+                    </PendingSubmitButton>
+                  </form>
+                ) : (
+                  <span className="rounded-full bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-500">
+                    {allTextsReady ? "Тексты готовы" : "Нужен месячный план"}
+                  </span>
+                )}
+              </div>
+            </article>
+            <details>
+              <summary className="cursor-pointer text-xs font-semibold text-slate-400">AI-помощник по плану</summary>
+              <MonthlyPlanRevisionCopilot monthlyPlanId={monthlyPlanId} proposal={latestRevisionProposal} />
+            </details>
+            <GenerationJobsPanel jobs={jobs} />
+          </div>
         </details>
       </div>
-      <GenerationJobsPanel jobs={jobs} />
     </section>
   );
 }
@@ -3882,6 +3879,7 @@ function ContentCalendar({
   draftsHref,
   clientSetupHref,
   activeFilter,
+  activeCalendarView,
 }: {
   groups: Array<{ label: string; items: MaterialPlannedItem[] }>;
   publications: ScheduledPublicationPreview[];
@@ -3893,6 +3891,7 @@ function ContentCalendar({
   draftsHref: string;
   clientSetupHref: string;
   activeFilter?: string;
+  activeCalendarView?: string;
 }) {
   const items = groups.flatMap((group) => group.items);
   const publicationByItemId = new Map(publications.map((publication) => [publication.plannedContentItemId, publication]));
@@ -3910,11 +3909,19 @@ function ContentCalendar({
     { id: "ready", label: "Готово" },
   ];
   const currentFilter = activeFilter && filters.some((filter) => filter.id === activeFilter) ? activeFilter : "all";
-  const calendarHref = (filter = currentFilter) => {
+  const calendarViews = [
+    { id: "month", label: "Месяц" },
+    { id: "week", label: "Неделя" },
+    { id: "threeDays", label: "3 дня" },
+    { id: "day", label: "День" },
+  ];
+  const currentCalendarView = calendarViews.some((view) => view.id === activeCalendarView) ? activeCalendarView! : "month";
+  const calendarHref = (filter = currentFilter, viewMode = currentCalendarView) => {
     const searchParams = new URLSearchParams({ view: "calendar" });
     if (blueprintId) searchParams.set("blueprint", blueprintId);
     if (monthlyPlanId) searchParams.set("plan", monthlyPlanId);
     if (filter !== "all") searchParams.set("filter", filter);
+    if (viewMode !== "month") searchParams.set("calendarView", viewMode);
     return `/?${searchParams.toString()}`;
   };
   const itemMatchesFilter = (item: MaterialPlannedItem) => {
@@ -3955,6 +3962,17 @@ function ContentCalendar({
   }
   const floatingGroups = groupCalendarItems(floatingItems);
   const calendarWeekdays = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+  const selectedDay = firstExactDate;
+  const selectedWeekStart = new Date(selectedDay);
+  selectedWeekStart.setDate(selectedDay.getDate() - ((selectedDay.getDay() + 6) % 7));
+  const weekDays = Array.from({ length: 7 }, (_, index) => new Date(selectedWeekStart.getFullYear(), selectedWeekStart.getMonth(), selectedWeekStart.getDate() + index));
+  const threeDays = Array.from({ length: 3 }, (_, index) => new Date(selectedDay.getFullYear(), selectedDay.getMonth(), selectedDay.getDate() + index));
+  const dayList = [selectedDay];
+  const rangeDays =
+    currentCalendarView === "week" ? weekDays :
+    currentCalendarView === "threeDays" ? threeDays :
+    currentCalendarView === "day" ? dayList :
+    [];
   const renderCalendarCard = (item: MaterialPlannedItem, compact = false) => {
     const publication = publicationByItemId.get(item.id);
     const asset = publication?.creativeAssets[0];
@@ -3994,13 +4012,25 @@ function ContentCalendar({
     <section id="calendar" className="rounded-[28px] bg-[#f7f5fb] p-4 text-slate-900 sm:p-5">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-600">Визуальный календарь</p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">Календарь</h2>
+          <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Календарь</h2>
           <p className="mt-1 text-sm text-slate-500">{clientName ?? "Клиент не выбран"} · {calendarMonthLabel}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <div className="flex rounded-full bg-white p-1 shadow-sm">
+            {calendarViews.map((viewMode) => (
+              <a
+                key={viewMode.id}
+                href={calendarHref(currentFilter, viewMode.id)}
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  currentCalendarView === viewMode.id ? "bg-violet-50 text-violet-700" : "text-slate-500 hover:text-violet-700"
+                }`}
+              >
+                {viewMode.label}
+              </a>
+            ))}
+          </div>
           <span className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-400">←</span>
-          <a href={calendarHref("all")} className="rounded-full bg-violet-50 px-4 py-2 text-sm font-semibold text-violet-700">Сегодня</a>
+          <a href={calendarHref(currentFilter, "month")} className="rounded-full bg-violet-50 px-4 py-2 text-sm font-semibold text-violet-700">Сегодня</a>
           <span className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-400">→</span>
         </div>
       </div>
@@ -4041,35 +4071,62 @@ function ContentCalendar({
                     Открыть материалы
                   </a>
                 </div>
-                <div className="grid grid-cols-7 gap-px overflow-hidden rounded-2xl border border-slate-200 bg-slate-200">
-                  {calendarWeekdays.map((day) => (
-                    <div key={day} className="bg-white px-2 py-2 text-center text-[11px] font-semibold text-slate-400">
-                      {day}
-                    </div>
-                  ))}
-                  {calendarCells.map((date) => {
-                    const key = dateKey(date);
-                    const dayItems = itemsByDate.get(key) ?? [];
-                    const inMonth = date.getMonth() === calendarMonth;
-
-                    return (
-                      <div key={key} className={`min-h-[252px] bg-white p-2.5 ${inMonth ? "" : "opacity-45"}`}>
-                        <div className="mb-2 flex items-center justify-between">
-                          <span className={`text-xs font-semibold ${inMonth ? "text-slate-700" : "text-slate-400"}`}>{date.getDate()}</span>
-                          {dayItems.length > 0 ? <span className="text-[10px] font-semibold text-violet-500">{dayItems.length}</span> : null}
-                        </div>
-                        <div className="grid gap-2">
-                          {dayItems.slice(0, 2).map((item) => renderCalendarCard(item, true))}
-                          {dayItems.length > 2 ? (
-                            <a href={materialWorkspaceHref(draftsHref, dayItems[2].id)} className="rounded-xl bg-slate-100 px-2 py-1.5 text-[10px] font-semibold text-slate-500 transition hover:text-violet-700">
-                              + ещё {dayItems.length - 2}
-                            </a>
-                          ) : null}
-                        </div>
+                {currentCalendarView === "month" ? (
+                  <div className="grid grid-cols-7 gap-px overflow-hidden rounded-2xl border border-slate-200 bg-slate-200">
+                    {calendarWeekdays.map((day) => (
+                      <div key={day} className="bg-white px-2 py-2 text-center text-[11px] font-semibold text-slate-400">
+                        {day}
                       </div>
-                    );
-                  })}
-                </div>
+                    ))}
+                    {calendarCells.map((date) => {
+                      const key = dateKey(date);
+                      const dayItems = itemsByDate.get(key) ?? [];
+                      const inMonth = date.getMonth() === calendarMonth;
+
+                      return (
+                        <div key={key} className={`min-h-[252px] bg-white p-2.5 ${inMonth ? "" : "opacity-45"}`}>
+                          <div className="mb-2 flex items-center justify-between">
+                            <span className={`text-xs font-semibold ${inMonth ? "text-slate-700" : "text-slate-400"}`}>{date.getDate()}</span>
+                            {dayItems.length > 0 ? <span className="text-[10px] font-semibold text-violet-500">{dayItems.length}</span> : null}
+                          </div>
+                          <div className="grid gap-2">
+                            {dayItems.slice(0, 2).map((item) => renderCalendarCard(item, true))}
+                            {dayItems.length > 2 ? (
+                              <a href={materialWorkspaceHref(draftsHref, dayItems[2].id)} className="rounded-xl bg-slate-100 px-2 py-1.5 text-[10px] font-semibold text-slate-500 transition hover:text-violet-700">
+                                + ещё {dayItems.length - 2}
+                              </a>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="grid gap-px overflow-hidden rounded-2xl border border-slate-200 bg-slate-200" style={{ gridTemplateColumns: `repeat(${rangeDays.length}, minmax(${currentCalendarView === "day" ? "560px" : "260px"}, 1fr))` }}>
+                    {rangeDays.map((date) => {
+                      const key = dateKey(date);
+                      const dayItems = itemsByDate.get(key) ?? [];
+
+                      return (
+                        <section key={key} className="min-h-[560px] bg-white p-3">
+                          <div className="mb-3 flex items-center justify-between gap-2">
+                            <div>
+                              <p className="text-xs font-semibold text-slate-400">{date.toLocaleDateString("ru-RU", { weekday: "short" })}</p>
+                              <h4 className="text-base font-semibold text-slate-950">{date.toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}</h4>
+                            </div>
+                            {dayItems.length > 0 ? <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">{dayItems.length}</span> : null}
+                          </div>
+                          <div className={`grid gap-3 ${currentCalendarView === "day" ? "md:grid-cols-2" : ""}`}>
+                            {dayItems.map((item) => renderCalendarCard(item))}
+                            {dayItems.length === 0 ? (
+                              <p className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-400">На этот день материалов нет.</p>
+                            ) : null}
+                          </div>
+                        </section>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -4819,39 +4876,32 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
 
   return (
     <div className={pageBackgroundClass}>
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 border-r border-slate-200 bg-white text-slate-700 lg:flex lg:flex-col">
-        <div className="border-b border-slate-100 px-5 py-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-violet-600 text-sm font-bold text-white">
-              AP
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-slate-950">Adaptive Presence</p>
-              <p className="mt-0.5 text-xs text-slate-400">OS by Creative</p>
-            </div>
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-20 border-r border-slate-200 bg-white text-slate-700 lg:flex lg:flex-col">
+        <div className="flex justify-center px-3 py-5">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-600 text-sm font-bold text-white" title="Adaptive Presence OS">
+            AP
           </div>
         </div>
 
-        <nav className="flex-1 px-3 py-5">
-          <div className="grid gap-5">
+        <nav className="flex-1 px-3 py-3">
+          <div className="grid gap-4">
             {navigationGroups.map((group) => (
               <div key={group.label}>
-                <p className="px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{group.label}</p>
+                <p className="sr-only">{group.label}</p>
                 <div className="mt-2 grid gap-1">
                   {group.items.map((item) => (
                     <a
                       key={item.label}
                       href={workspaceLinks[item.view]}
-                      className={`flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm transition ${
+                      title={item.label}
+                      aria-label={item.label}
+                      className={`flex h-11 w-11 items-center justify-center rounded-2xl text-sm transition ${
                         item.view === activeView
                           ? "bg-violet-50 font-semibold text-violet-700"
                           : "text-slate-500 hover:bg-slate-50 hover:text-slate-950"
                       }`}
                     >
-                      <span className={`flex h-6 w-6 items-center justify-center rounded-xl text-[10px] font-bold ${item.view === activeView ? "bg-white text-violet-700" : "bg-slate-50 text-slate-500"}`}>
-                        {item.glyph}
-                      </span>
-                      {item.label}
+                      <span className="text-[11px] font-bold">{item.glyph}</span>
                     </a>
                   ))}
                 </div>
@@ -4860,22 +4910,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
           </div>
         </nav>
 
-        <div id="settings" className="grid gap-3 border-t border-slate-100 px-4 py-4">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-            <p className="text-xs font-semibold text-slate-800">AI-помощник</p>
-            <p className="mt-1 text-xs leading-5 text-slate-500">Короткие подсказки по рабочим задачам.</p>
-          </div>
-          <div className="flex items-center gap-3 px-1">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-violet-600 text-xs font-bold text-white">M</div>
-            <div>
-              <p className="text-xs font-semibold text-slate-700">Профиль менеджера</p>
-              <p className="mt-0.5 text-[11px] text-slate-400">Creative operations</p>
-            </div>
+        <div id="settings" className="flex justify-center border-t border-slate-100 px-3 py-4">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-50 text-xs font-bold text-violet-700" title="Профиль менеджера">
+            M
           </div>
         </div>
       </aside>
 
-      <div className="lg:pl-60">
+      <div className="lg:pl-20">
         <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90 backdrop-blur">
           <div className="flex min-h-16 flex-col gap-3 px-5 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-7 xl:px-9">
             <div className="flex items-center gap-3">
@@ -4917,7 +4959,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
           </div>
         </header>
 
-        <main className="px-5 py-6 sm:px-7 xl:px-9">
+        <main className="px-4 py-5 sm:px-5 xl:px-6">
           <div className="mx-auto max-w-[1680px]">
             {params.error ? (
               <div className="mb-5 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-900">
@@ -4967,11 +5009,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
 
             {activeView === "calendar" ? (
               <>
-                <WorkspaceViewHeader
-                  eyebrow="Контент-операции"
-                  title="Календарь"
-                  description="Планируйте согласованные публикации, управляйте датами и отслеживайте состояние материалов в одном рабочем экране."
-                />
                 <ContentCalendar
                   groups={calendarGroups}
                   publications={selectedMonthlyPlan?.scheduledPublications ?? []}
@@ -4983,6 +5020,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   draftsHref={workspaceLinks.drafts}
                   clientSetupHref={workspaceLinks.client_setup}
                   activeFilter={params.filter}
+                  activeCalendarView={params.calendarView}
                 />
                 <div className="mt-7">
                   <SchedulingLayer

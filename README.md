@@ -387,6 +387,12 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Materials is restored as the production workbench for editing text, creative briefs, visuals, approvals, and manual plan items.
 - Calendar cards can open the related material directly in Materials for production work.
 
+## UI-10D Calendar Navigation Cleanup
+
+- Calendar header was tightened and now includes Month, Week, 3-day, and Day modes.
+- The sidebar was reduced to a compact global icon rail so Calendar has more horizontal room.
+- Materials no longer exposes calendar-like local navigation; production jobs and autopilot are tucked into advanced tasks.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.
