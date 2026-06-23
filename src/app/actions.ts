@@ -2538,7 +2538,12 @@ export async function updatePublicationText(formData: FormData) {
   }
 
   if (!draftTitle || !draftBody) {
-    monthlyPlanErrorRedirect(draft.blueprintId, draft.monthlyPlanId, "Укажите заголовок и текст публикации.", "drafts");
+    redirect(workspaceLocation("drafts", {
+      blueprintId: draft.blueprintId,
+      planId: draft.monthlyPlanId,
+      materialId: draft.plannedContentItemId,
+      error: "Укажите заголовок и текст публикации.",
+    }));
   }
 
   await prisma.$transaction([
@@ -2565,7 +2570,7 @@ export async function updatePublicationText(formData: FormData) {
     blueprintId: draft.blueprintId,
     planId: draft.monthlyPlanId,
     materialId: draft.plannedContentItemId,
-    notice: "Текст публикации обновлён и отправлен на проверку.",
+    notice: "Текст сохранён.",
   }));
 }
 

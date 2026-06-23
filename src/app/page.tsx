@@ -1081,6 +1081,7 @@ type DraftQueueItem = {
   topic: string;
   draftTitle: string;
   draftBody: string;
+  updatedAt: Date;
   status: string;
   riskLevel: string;
   approvalRequired: boolean;
@@ -3673,7 +3674,7 @@ function DraftsView({
                       </div>
 	                      {selectedItem.contentDraft ? (
 	                        <>
-	                          <form action={updatePublicationText} className="mt-4 grid gap-3">
+	                          <form action={updatePublicationText} key={`${selectedItem.contentDraft.id}-${selectedItem.contentDraft.updatedAt.toISOString()}`} className="mt-4 grid gap-3">
 	                            <input type="hidden" name="contentDraftId" value={selectedItem.contentDraft.id} />
 	                            <input type="text" name="draftTitle" required defaultValue={selectedItem.contentDraft.draftTitle} className={inputClass} />
 	                            <textarea name="draftBody" required rows={10} defaultValue={selectedItem.contentDraft.draftBody} className={`${inputClass} resize-y`} />
