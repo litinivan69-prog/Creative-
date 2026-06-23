@@ -813,6 +813,7 @@ export async function generateMonthlyPlan(formData: FormData) {
   };
 
   let createdId: string;
+  let textPreparationNotice = "";
 
   try {
     const generated = await generateMonthlyOperatingPlan({
@@ -904,6 +905,8 @@ export async function generateMonthlyPlan(formData: FormData) {
     });
 
     createdId = created.id;
+    const textPreparation = await prepareMissingTextsForMonthlyPlan(created.id);
+    textPreparationNotice = textPreparation.notice;
   } catch (error) {
     const message =
       error instanceof Error
@@ -913,7 +916,13 @@ export async function generateMonthlyPlan(formData: FormData) {
   }
 
   revalidatePath("/");
-  redirect(workspaceLocation("client_setup", { blueprintId: blueprint.id, planId: createdId, clientId: blueprint.clientId, setupStep: "brand", notice: "Месячный план сгенерирован. Теперь заполните библиотеку бренда." }));
+  redirect(workspaceLocation("client_setup", {
+    blueprintId: blueprint.id,
+    planId: createdId,
+    clientId: blueprint.clientId,
+    setupStep: "brand",
+    notice: `Месячный план сгенерирован. ${textPreparationNotice || "Тексты будут подготовлены в Materials."} Теперь заполните библиотеку бренда.`,
+  }));
 }
 
 export async function autoScheduleMonthlyPlanDates(formData: FormData) {
@@ -2114,39 +2123,25 @@ export async function clearLegacyBase64ForBlobVariants() {
   }));
 }
 
-export async function prepareMonthAutopilot(formData: FormData) {
-  const monthlyPlanId = formText(formData, "monthlyPlanId");
-
-  if (!monthlyPlanId) {
-    errorRedirect("Не выбран месячный план для автоподготовки.", "drafts");
-  }
-
+async function prepareMissingTextsForMonthlyPlan(monthlyPlanId: string) {
   const plan = await prisma.monthlyOperatingPlan.findUnique({
     where: { id: monthlyPlanId },
     include: {
-      client: true,
-      blueprint: true,
       plannedContentItems: {
         include: {
           contentDraft: true,
-        },
-      },
-      contentDrafts: true,
-      scheduledPublications: true,
-      creativeAssets: {
-        include: {
-          generatedVariants: {
-            select: {
-              id: true,
-            },
-          },
         },
       },
     },
   });
 
   if (!plan) {
-    errorRedirect("Месячный план для автоподготовки не найден.", "drafts");
+    return {
+      blueprintId: "",
+      monthlyPlanId,
+      notice: "Месячный план для подготовки текстов не найден.",
+      hasFailures: true,
+    };
   }
 
   const generationJob = await createGenerationJob({
@@ -2154,12 +2149,9 @@ export async function prepareMonthAutopilot(formData: FormData) {
     blueprintId: plan.blueprintId,
     monthlyPlanId: plan.id,
     jobType: "prepare_month_texts",
-    title: "Автоподготовка текстов месяца",
+    title: "Подготовка текстов месяца",
   });
   await markGenerationJobRunning(generationJob.id, "AI готовит недостающие тексты публикаций.");
-
-  let notice: string;
-  let hasItemFailures = false;
 
   try {
     const missingTextItems = plan.plannedContentItems.filter((item) => !item.contentDraft);
@@ -2181,32 +2173,58 @@ export async function prepareMonthAutopilot(formData: FormData) {
     const skippedTextsCount = existingTextsCount + newlySkippedTextsCount;
     const failedTextsCount = results.filter((result) => result.status === "failed").length;
     const remainingMissingTextsCount = missingTextItems.length - createdTextsCount - newlySkippedTextsCount;
-    hasItemFailures = failedTextsCount > 0;
-    notice = `Автоподготовка месяца завершена: создано ${createdTextsCount} текстов, ${skippedTextsCount} уже были готовы.`;
+    let notice = `Тексты подготовлены: ${createdTextsCount + skippedTextsCount} из ${plan.plannedContentItems.length}.`;
 
     if (remainingMissingTextsCount > 0) {
-      notice = `Создано ${createdTextsCount} текстов. Осталось подготовить ещё ${remainingMissingTextsCount} материалов. Запустите автоподготовку ещё раз, чтобы продолжить.`;
+      notice = `Тексты подготовлены: ${createdTextsCount + skippedTextsCount} из ${plan.plannedContentItems.length}. Осталось ${remainingMissingTextsCount}; нажмите «Подготовить тексты» в Materials, чтобы продолжить.`;
     }
 
-    if (hasItemFailures) {
-      notice = `Автоподготовка выполнена частично: создано ${createdTextsCount} текстов, ${skippedTextsCount} уже были готовы. Не удалось подготовить ${failedTextsCount}. Осталось ${remainingMissingTextsCount} материалов. Проверьте карточки материалов.`;
+    if (failedTextsCount > 0) {
+      notice = `Тексты подготовлены: ${createdTextsCount + skippedTextsCount} из ${plan.plannedContentItems.length}. Не удалось подготовить ${failedTextsCount} текстов. Повторите подготовку в Materials.`;
     }
 
     await markGenerationJobCompleted(
       generationJob.id,
       `Создано ${createdTextsCount} текстов, пропущено ${skippedTextsCount}, ошибок ${failedTextsCount}.`,
     );
+
+    return {
+      blueprintId: plan.blueprintId,
+      monthlyPlanId: plan.id,
+      notice,
+      hasFailures: failedTextsCount > 0,
+    };
   } catch {
-    const message = "Не удалось завершить автоподготовку месяца. Проверьте настройки AI и попробуйте ещё раз.";
+    const message = "Не удалось автоматически подготовить тексты месяца. Повторите подготовку в Materials.";
     await markGenerationJobFailedSafely(generationJob.id, message);
-    monthlyPlanErrorRedirect(plan.blueprintId, plan.id, message, "drafts");
+
+    return {
+      blueprintId: plan.blueprintId,
+      monthlyPlanId: plan.id,
+      notice: message,
+      hasFailures: true,
+    };
+  }
+}
+
+export async function prepareMonthAutopilot(formData: FormData) {
+  const monthlyPlanId = formText(formData, "monthlyPlanId");
+
+  if (!monthlyPlanId) {
+    errorRedirect("Не выбран месячный план для автоподготовки.", "drafts");
+  }
+
+  const result = await prepareMissingTextsForMonthlyPlan(monthlyPlanId);
+
+  if (!result.blueprintId) {
+    errorRedirect(result.notice, "drafts");
   }
 
   revalidatePath("/");
   redirect(workspaceLocation("drafts", {
-    blueprintId: plan.blueprintId,
-    planId: plan.id,
-    ...(hasItemFailures ? { error: notice } : { notice }),
+    blueprintId: result.blueprintId,
+    planId: result.monthlyPlanId,
+    ...(result.hasFailures ? { error: result.notice } : { notice: result.notice }),
   }));
 }
 
@@ -2605,6 +2623,48 @@ export async function rejectDraft(formData: FormData) {
     action: "rejected",
     notice: "Материал отклонён.",
   });
+}
+
+export async function addDraftManagerComment(formData: FormData) {
+  const contentDraftId = formText(formData, "contentDraftId");
+  const comment = formText(formData, "comment");
+
+  if (!contentDraftId) {
+    errorRedirect("Не выбран материал.", "approvals");
+  }
+
+  if (!comment) {
+    errorRedirect("Напишите ответ клиенту.", "approvals");
+  }
+
+  const draft = await prisma.contentDraft.findUnique({
+    where: { id: contentDraftId },
+    select: {
+      id: true,
+      blueprintId: true,
+      monthlyPlanId: true,
+    },
+  });
+
+  if (!draft) {
+    errorRedirect("Материал не найден.", "approvals");
+  }
+
+  await prisma.contentDraftReviewEvent.create({
+    data: {
+      contentDraftId: draft.id,
+      actorType: "manager",
+      action: "comment_added",
+      comment,
+    },
+  });
+
+  revalidatePath("/");
+  redirect(workspaceLocation("approvals", {
+    blueprintId: draft.blueprintId,
+    planId: draft.monthlyPlanId,
+    notice: "Ответ по правке сохранён.",
+  }));
 }
 
 export async function markDraftReadyToSchedule(formData: FormData) {

@@ -421,6 +421,13 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Month-level preparation now surfaces text, brief, visual, and monthly package actions in one compact area.
 - Client approval is treated as a future monthly package step, not the default per-post action inside Materials.
 
+## Product/UI-12C Revisions And Automatic Texts
+
+- Approvals were reframed as `Правки`, a client revision inbox for comments and requested changes.
+- Materials remains the primary production studio for text, creative briefs, visuals, and monthly package readiness.
+- Monthly plan generation now starts automatic text draft preparation for planned materials, with safe batching and retry copy when items remain.
+- The separate Creatives workspace is hidden from primary navigation because creative briefs and visuals are handled inside Materials.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.

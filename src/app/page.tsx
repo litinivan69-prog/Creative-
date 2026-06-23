@@ -1,4 +1,5 @@
 import {
+  addDraftManagerComment,
   addClientBrief,
   approveDraft,
   approveCreativeVariant,
@@ -162,7 +163,7 @@ const viewTitles: Record<WorkspaceView, string> = {
   overview: "Обзор",
   clients: "Клиенты",
   client_setup: "Настройка клиента",
-  approvals: "Согласования",
+  approvals: "Правки",
   calendar: "Календарь",
   drafts: "Материалы",
   assets: "Креативы",
@@ -624,7 +625,15 @@ function OverviewDashboard({
 }) {
   const clientName = latestBlueprint?.client.name ?? "Клиент";
   const focus =
-    integrationTaskCount > 0
+    waitingForClientCount > 0
+      ? {
+          title: "Правки клиента",
+          value: waitingForClientCount,
+          copy: "Новая правка от клиента.",
+          href: workspaceLinks.approvals,
+          action: "Открыть правки",
+        }
+      : integrationTaskCount > 0
       ? {
           title: "Заблокировано",
           value: integrationTaskCount,
@@ -645,8 +654,8 @@ function OverviewDashboard({
               title: "Нужны визуалы",
               value: missingVisualCount,
               copy: "Подготовьте ТЗ или визуал.",
-              href: workspaceLinks.assets,
-              action: "Открыть креативы",
+              href: workspaceLinks.drafts,
+              action: "Открыть материалы",
             }
           : {
               title: "Фокус",
@@ -693,10 +702,10 @@ function OverviewDashboard({
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <OverviewMetricCard label="Требует проверки" value={needsManagerReviewCount} detail="Внутренняя очередь" href={workspaceLinks.approvals} icon="review" />
-        <OverviewMetricCard label="У клиента" value={waitingForClientCount} detail="Ждём решение" href={workspaceLinks.client_portal} icon="client" />
-        <OverviewMetricCard label="Согласовано" value={approvedDraftCount} detail="Можно продолжать" href={workspaceLinks.approvals} icon="check" />
-        <OverviewMetricCard label="Готово к планированию" value={readyToScheduleCount} detail="Следующий шаг" href={workspaceLinks.calendar} icon="calendar" />
+        <OverviewMetricCard label="Материалов" value={plannedContentCount} detail="В месячном плане" href={workspaceLinks.drafts} icon="calendar" />
+        <OverviewMetricCard label="На проверке" value={needsManagerReviewCount} detail="Внутренняя очередь" href={workspaceLinks.drafts} icon="review" />
+        <OverviewMetricCard label="Готово в пакет" value={readyToScheduleCount} detail="Можно собирать" href={workspaceLinks.reports} icon="check" />
+        <OverviewMetricCard label="Правки клиента" value={waitingForClientCount} detail="Нужно ответить" href={workspaceLinks.approvals} icon="client" />
       </div>
 
       <div className="mt-3 grid gap-3 lg:grid-cols-12">
@@ -734,7 +743,7 @@ function OverviewDashboard({
           <div className="mt-3 grid gap-2">
             {[
               ["Проверка", needsManagerReviewCount],
-              ["Клиент", waitingForClientCount],
+              ["Правки", waitingForClientCount],
               ["Визуалы", missingVisualCount],
               ["Доступы", integrationTaskCount],
             ].map(([label, value]) => (
@@ -860,15 +869,15 @@ function formatStatus(value: string) {
     open: "Открыто",
     draft: "Текст готов",
     needs_review: "Требует проверки",
-    sent_to_client: "У клиента",
+    sent_to_client: "В работе",
     client_changes_requested: "Запрошены правки",
-    approved: "Согласовано",
+    approved: "Готово в пакет",
     rejected: "Отклонено",
-    ready_to_schedule: "Готово к планированию",
+    ready_to_schedule: "Готово в пакет",
     created: "Создано",
     submitted_for_review: "Отправлено на проверку",
     changes_requested: "Запрошены правки",
-    marked_ready_to_schedule: "Готово к планированию",
+    marked_ready_to_schedule: "Готово в пакет",
     request_more_brief_data: "Запросить дополнительные данные для брифа",
     approve_blueprint: "Согласовать Blueprint",
     connect_integrations: "Подключить интеграции",
@@ -916,11 +925,11 @@ function formatDraftStatus(status: string) {
   const labels: Record<string, string> = {
     draft: "Текст готов",
     needs_review: "Требует проверки",
-    sent_to_client: "У клиента",
+    sent_to_client: "В работе",
     client_changes_requested: "Запрошены правки",
-    approved: "Согласовано",
+    approved: "Готово в пакет",
     rejected: "Отклонено",
-    ready_to_schedule: "Готово к планированию",
+    ready_to_schedule: "Готово в пакет",
   };
 
   return labels[status] ?? formatStatus(status);
@@ -932,11 +941,11 @@ function formatMaterialTextStatus(draft?: { status: string } | null) {
   const labels: Record<string, string> = {
     draft: "Текст готов",
     needs_review: "На проверке",
-    sent_to_client: "У клиента",
+    sent_to_client: "Есть правки",
     client_changes_requested: "Запрошены правки",
-    approved: "Согласован",
+    approved: "Готово в пакет",
     rejected: "Отклонён",
-    ready_to_schedule: "Согласован",
+    ready_to_schedule: "Готово в пакет",
   };
 
   return labels[draft.status] ?? formatDraftStatus(draft.status);
@@ -1010,9 +1019,10 @@ function materialNextActionLabel(item: { contentDraft: { status: string } | null
   const draftStatus = item.contentDraft?.status;
 
   if (!item.contentDraft) return "Нужен текст";
-  if (draftStatus === "sent_to_client") return "У клиента";
-  if (draftStatus === "approved") return "Согласовано";
-  if (draftStatus === "ready_to_schedule" || publication?.status === "ready") return "Готово";
+  if (draftStatus === "client_changes_requested") return "Есть правки";
+  if (draftStatus === "sent_to_client") return "На проверке";
+  if (draftStatus === "approved") return "Готово в пакет";
+  if (draftStatus === "ready_to_schedule" || publication?.status === "ready") return "В пакете";
   if (!asset) return "Нужно ТЗ";
   if (asset.generatedVariants.length === 0) return "Нужен визуал";
   if (draftStatus === "draft" || draftStatus === "needs_review") return "На проверке";
@@ -1020,9 +1030,8 @@ function materialNextActionLabel(item: { contentDraft: { status: string } | null
 }
 
 function nextActionBadgeClass(label: string) {
-  if (["Согласовано", "Готово", "Готово в пакет", "В месячном пакете"].includes(label)) return "bg-emerald-50 text-emerald-700";
-  if (["Нужен текст", "Нужно ТЗ", "Нужен визуал", "На проверке", "Проверить"].includes(label)) return "bg-amber-50 text-amber-700";
-  if (label === "У клиента") return "bg-violet-50 text-violet-700";
+  if (["Согласовано", "Готово", "Готово в пакет", "В месячном пакете", "В пакете"].includes(label)) return "bg-emerald-50 text-emerald-700";
+  if (["Нужен текст", "Нужно ТЗ", "Нужен визуал", "На проверке", "Проверить", "Есть правки"].includes(label)) return "bg-amber-50 text-amber-700";
   return "bg-slate-100 text-slate-500";
 }
 
@@ -1042,7 +1051,7 @@ function formatReviewAction(action: string) {
     submitted_for_review: "Отправлен на проверку",
     sent_to_client: "Отправлен клиенту",
     changes_requested: "Запрошены правки",
-    approved: "Согласован",
+    approved: "Готово в пакет",
     rejected: "Отклонён",
     marked_ready_to_schedule: "Готов к планированию",
     comment_added: "Добавлен комментарий",
@@ -1066,6 +1075,7 @@ type DraftReviewEventPreview = {
 
 type DraftQueueItem = {
   id: string;
+  plannedContentItemId: string;
   platformName: string;
   format: string;
   topic: string;
@@ -1331,13 +1341,12 @@ function GenerationJobsPanel({ jobs }: { jobs: GenerationJobPreview[] }) {
 }
 
 const draftStatusGroups = [
-  { status: "needs_review", label: "Требует проверки менеджера" },
-  { status: "sent_to_client", label: "Ждём клиента" },
-  { status: "client_changes_requested", label: "Запрошены правки" },
-  { status: "approved", label: "Согласовано" },
-  { status: "ready_to_schedule", label: "Готово к планированию" },
-  { status: "rejected", label: "Отклонено" },
+  { status: "client_changes_requested", label: "Правки клиента" },
+  { status: "needs_review", label: "На внутренней проверке" },
   { status: "draft", label: "Тексты готовы" },
+  { status: "approved", label: "Готово в пакет" },
+  { status: "ready_to_schedule", label: "В месячном пакете" },
+  { status: "rejected", label: "Отклонено" },
 ];
 
 function groupDraftsByStatus(items: Array<{ contentDraft: DraftQueueItem | null }>) {
@@ -1401,7 +1410,7 @@ function DraftWorkflowControls({ draft, calendarHref, returnView }: { draft: Dra
   if (draft.status === "ready_to_schedule") {
     return (
       <div className="flex flex-wrap items-center gap-2">
-        <StatusBadge tone="green">Готово к планированию</StatusBadge>
+        <StatusBadge tone="green">Готово в пакет</StatusBadge>
         <a href={calendarHref} className="text-xs font-bold text-teal-700 transition hover:text-teal-900">
           Перейти к планированию
         </a>
@@ -1430,7 +1439,7 @@ function DraftWorkflowControls({ draft, calendarHref, returnView }: { draft: Dra
           <DraftWorkflowForm
             action={sendDraftToClient}
             contentDraftId={draft.id}
-            label="Отправить клиенту"
+            label="Оставить в правках"
             pendingLabel="Отправляем..."
             returnView={returnView}
           />
@@ -1449,7 +1458,7 @@ function DraftWorkflowControls({ draft, calendarHref, returnView }: { draft: Dra
             action={approveDraft}
             contentDraftId={draft.id}
             actorType="client"
-            label="Клиент согласовал"
+            label="Готово в пакет"
             pendingLabel="Согласовываем..."
             returnView={returnView}
             tone="primary"
@@ -1459,7 +1468,7 @@ function DraftWorkflowControls({ draft, calendarHref, returnView }: { draft: Dra
           <DraftWorkflowForm
             action={markDraftReadyToSchedule}
             contentDraftId={draft.id}
-            label="Готово к планированию"
+            label="Готово в пакет"
             pendingLabel="Обновляем..."
             returnView={returnView}
             tone="primary"
@@ -1497,7 +1506,7 @@ function ReviewEventTimeline({ events }: { events: DraftReviewEventPreview[] }) 
   return (
     <details className="rounded-md border border-stone-200 bg-stone-50/70">
       <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-stone-700">
-        История согласования ({events.length})
+        История правок ({events.length})
       </summary>
       <div className="grid gap-2 border-t border-stone-200 px-3 py-3">
         {events.length > 0 ? (
@@ -1512,82 +1521,146 @@ function ReviewEventTimeline({ events }: { events: DraftReviewEventPreview[] }) 
             </div>
           ))
         ) : (
-          <p className="text-xs text-stone-400">История согласования пока пуста.</p>
+          <p className="text-xs text-stone-400">История правок пока пуста.</p>
         )}
       </div>
     </details>
   );
 }
 
-function ReviewQueue({ groups, calendarHref }: { groups: ReturnType<typeof groupDraftsByStatus>; calendarHref: string }) {
-  const draftCount = groups.reduce((total, group) => total + group.drafts.length, 0);
+type ClientRevisionItem = {
+  id: string;
+  status: "new" | "in_progress" | "fixed" | "closed";
+  statusLabel: string;
+  draft: DraftQueueItem;
+  materialId: string;
+  platformName: string;
+  format: string;
+  topic: string;
+  comment: string;
+  createdAt: Date;
+  event?: DraftReviewEventPreview;
+};
+
+function clientRevisionStatus(draft: DraftQueueItem): ClientRevisionItem["status"] {
+  if (draft.status === "client_changes_requested") return "new";
+  if (draft.status === "needs_review" || draft.status === "draft" || draft.status === "sent_to_client") return "in_progress";
+  if (draft.status === "approved" || draft.status === "ready_to_schedule") return "fixed";
+  return "closed";
+}
+
+function clientRevisionStatusLabel(status: ClientRevisionItem["status"]) {
+  const labels: Record<ClientRevisionItem["status"], string> = {
+    new: "Новый",
+    in_progress: "В работе",
+    fixed: "Исправлено",
+    closed: "Закрыто",
+  };
+
+  return labels[status];
+}
+
+function clientRevisionTone(status: ClientRevisionItem["status"]): "neutral" | "teal" | "amber" | "rose" | "green" {
+  if (status === "new") return "amber";
+  if (status === "in_progress") return "teal";
+  if (status === "fixed") return "green";
+  return "neutral";
+}
+
+function buildClientRevisions(items: MaterialPlannedItem[]): ClientRevisionItem[] {
+  return items.flatMap((item) => {
+    const draft = item.contentDraft;
+    if (!draft) return [];
+
+    const clientEvents = draft.reviewEvents.filter(
+      (event) =>
+        event.actorType === "client" ||
+        (event.action === "changes_requested" && Boolean(event.comment)),
+    );
+    const latestClientEvent = clientEvents.at(-1);
+
+    if (!latestClientEvent && draft.status !== "client_changes_requested") return [];
+
+    const status = clientRevisionStatus(draft);
+
+    return [{
+      id: latestClientEvent?.id ?? draft.id,
+      status,
+      statusLabel: clientRevisionStatusLabel(status),
+      draft,
+      materialId: item.id,
+      platformName: item.platformName,
+      format: item.format,
+      topic: item.topic,
+      comment: latestClientEvent?.comment || "Клиент запросил правки по материалу.",
+      createdAt: latestClientEvent?.createdAt ?? new Date(),
+      event: latestClientEvent,
+    }];
+  }).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+}
+
+function ReviewQueue({ revisions, draftsHref }: { revisions: ClientRevisionItem[]; draftsHref: string }) {
+  const openRevisionCount = revisions.filter((revision) => revision.status === "new" || revision.status === "in_progress").length;
 
   return (
     <section id="review-queue" className={sectionClass}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Процесс согласования</p>
-          <h2 className="mt-1 text-xl font-semibold text-stone-950">Очередь согласований</h2>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">Комментарии клиента</p>
+          <h2 className="mt-1 text-xl font-semibold text-stone-950">Правки</h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
-            Здесь тексты публикаций проходят проверку менеджера, согласование с клиентом и подготовку к планированию.
+            Входящие комментарии и запросы клиента по месячному пакету. Обычная внутренняя подготовка материалов остаётся в Production Studio.
           </p>
         </div>
-        <StatusBadge tone={draftCount > 0 ? "teal" : "neutral"}>{draftCount} материалов</StatusBadge>
+        <StatusBadge tone={openRevisionCount > 0 ? "amber" : "green"}>{openRevisionCount} открытых</StatusBadge>
       </div>
 
-      {draftCount > 0 ? (
+      {revisions.length > 0 ? (
         <div className="mt-5 grid gap-4">
-          {groups.filter((group) => group.drafts.length > 0).map((group) => (
-            <div key={group.status}>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-semibold text-stone-950">{group.label}</h3>
-                <StatusBadge tone={draftStatusTone(group.status)}>{group.drafts.length}</StatusBadge>
+          {revisions.map((revision) => (
+            <article key={revision.id} className="rounded-[18px] border border-slate-200 bg-white p-4 shadow-[0_10px_28px_rgba(88,75,135,0.05)]">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge tone={clientRevisionTone(revision.status)}>{revision.statusLabel}</StatusBadge>
+                    <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">{revision.platformName}</span>
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">{revision.format}</span>
+                  </div>
+                  <h3 className="mt-3 line-clamp-2 text-base font-semibold leading-6 text-slate-950">{revision.topic}</h3>
+                  <p className="mt-2 rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-900">
+                    {revision.comment}
+                  </p>
+                  <p className="mt-2 text-xs text-slate-400">
+                    {revision.createdAt.toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" })}
+                    {revision.event ? ` · ${formatReviewAction(revision.event.action)}` : ""}
+                  </p>
+                </div>
+                <a href={materialWorkspaceHref(draftsHref, revision.materialId)} className="inline-flex justify-center rounded-full bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700">
+                  Открыть материал
+                </a>
               </div>
-              <div className="mt-2 grid gap-3 xl:grid-cols-2">
-                {group.drafts.map((draft) => {
-                  const latestEvent = draft.reviewEvents.at(-1);
-
-                  return (
-                    <article key={draft.id} className="min-w-0 rounded-lg border border-stone-200 bg-stone-50/50 p-3">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold uppercase tracking-[0.08em] text-teal-700">{draft.platformName} &middot; {draft.format}</p>
-                          <h4 className="mt-2 line-clamp-2 font-semibold leading-6 text-stone-950">{draft.draftTitle}</h4>
-                          <p className="mt-1 line-clamp-1 text-xs leading-5 text-stone-400">{draft.topic}</p>
-                        </div>
-                        <StatusBadge tone={draftStatusTone(draft.status)}>{formatDraftStatus(draft.status)}</StatusBadge>
-                      </div>
-                      <p className="mt-3 text-xs leading-5 text-stone-500">
-                        Риск: <span className="font-semibold text-stone-700">{formatStatus(draft.riskLevel)}</span>
-                        {draft.approvalRequired ? " · нужно согласование" : " · согласование необязательно"}
-                      </p>
-                      <p className="mt-2 line-clamp-2 whitespace-pre-wrap text-sm leading-6 text-stone-600">{draft.draftBody}</p>
-                      <details className="mt-2">
-                        <summary className="cursor-pointer text-xs font-bold text-teal-700">Показать текст</summary>
-                        <p className="mt-2 whitespace-pre-wrap rounded-md border border-stone-200 bg-white p-3 text-sm leading-6 text-stone-600">{draft.draftBody}</p>
-                      </details>
-                      {latestEvent ? (
-                        <p className="mt-3 line-clamp-2 rounded-md border border-stone-200 bg-white px-3 py-2 text-xs leading-5 text-stone-500">
-                          Последнее событие: <span className="font-bold text-stone-700">{formatReviewAction(latestEvent.action)}</span>. Участник: {formatReviewActor(latestEvent.actorType)}
-                          {latestEvent.comment ? ` - ${latestEvent.comment}` : ""}
-                        </p>
-                      ) : null}
-                      <div className="mt-3">
-                        <ReviewEventTimeline events={draft.reviewEvents} />
-                      </div>
-                      <div className="mt-3 border-t border-stone-200 pt-3">
-                        <DraftWorkflowControls draft={draft} calendarHref={calendarHref} />
-                      </div>
-                    </article>
-                  );
-                })}
+              <div className="mt-4 grid gap-3 border-t border-slate-100 pt-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+                <form action={addDraftManagerComment} className="flex flex-col gap-2 sm:flex-row">
+                  <input type="hidden" name="contentDraftId" value={revision.draft.id} />
+                  <input type="text" name="comment" className={`${inputClass} flex-1`} placeholder="Ответ менеджера по правке" />
+                  <PendingSubmitButton pendingLabel="Сохраняем..." className={secondaryButtonClass}>Ответить</PendingSubmitButton>
+                </form>
+                {revision.status === "new" || revision.status === "in_progress" ? (
+                  <form action={submitDraftForReview}>
+                    <input type="hidden" name="contentDraftId" value={revision.draft.id} />
+                    <PendingSubmitButton pendingLabel="Обновляем..." className={secondaryButtonClass}>Отметить исправленным</PendingSubmitButton>
+                  </form>
+                ) : null}
               </div>
-            </div>
+              <div className="mt-3">
+                <ReviewEventTimeline events={revision.draft.reviewEvents} />
+              </div>
+            </article>
           ))}
         </div>
       ) : (
         <div className="mt-5">
-          <EmptyState>Сгенерируйте тексты публикаций из запланированных материалов, чтобы запустить процесс согласования.</EmptyState>
+          <EmptyState>Новых правок нет.</EmptyState>
         </div>
       )}
     </section>
@@ -1777,7 +1850,7 @@ function SchedulingLayer({
                     <StatusBadge tone="green">Готово к размещению</StatusBadge>
                   )}
                   <a href={assetsHref} className="inline-flex items-center text-xs font-bold text-teal-800 transition hover:text-teal-950">
-                    Открыть креативы
+                    Открыть ТЗ и визуалы
                   </a>
                 </div>
 
@@ -2307,7 +2380,7 @@ function MonthlyClientReport({
         <WorkspaceViewHeader
           eyebrow="Отчётность"
           title="Отчёт по подготовке материалов"
-          description="Сводка по текстам, визуалам, согласованиям и календарю публикаций."
+          description="Сводка по текстам, визуалам, правкам клиента и календарю публикаций."
         />
         <div className="mt-5"><EmptyState>Выберите месячный план, чтобы собрать отчёт.</EmptyState></div>
       </section>
@@ -2378,7 +2451,7 @@ function MonthlyClientReport({
           : nextAction === "Проверить и согласовать"
             ? "Материал ждёт проверки или решения клиента."
             : nextAction === "Запланировать"
-              ? "Согласованный материал ещё не добавлен в календарь."
+              ? "Готовый материал ещё не добавлен в календарь."
               : nextAction === "Сгенерировать ТЗ"
                 ? "Для запланированного материала нет ТЗ на визуал."
                 : nextAction === "Сгенерировать визуал"
@@ -2394,7 +2467,7 @@ function MonthlyClientReport({
     })),
   ].slice(0, 10);
   const clientNextStep = waitingForClient > 0
-    ? "Проверить материалы, которые ожидают согласования."
+    ? "Проверить новые правки клиента."
     : changesNeeded > 0
       ? "Команда внесёт правки и подготовит обновлённые материалы."
       : "Команда продолжает подготовку материалов по календарю.";
@@ -2405,7 +2478,7 @@ function MonthlyClientReport({
         <WorkspaceViewHeader
           eyebrow="Отчётность"
           title="Отчёт по подготовке материалов"
-          description="Сводка по текстам, визуалам, согласованиям и календарю публикаций."
+          description="Сводка по текстам, визуалам, правкам клиента и календарю публикаций."
         />
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge tone="teal">MVP-отчёт</StatusBadge>
@@ -2426,7 +2499,7 @@ function MonthlyClientReport({
           <MetricCard label="Всего материалов" value={totalMaterials} detail="В плане" />
           <MetricCard label="Тексты подготовлены" value={textsPrepared} detail="Есть текст" tone="teal" />
           <MetricCard label="Визуалы подготовлены" value={visualsPrepared} detail="Есть вариант" tone="teal" />
-          <MetricCard label="Согласовано клиентом" value={approvedMaterials} detail="Можно двигать дальше" />
+          <MetricCard label="Готово в пакет" value={approvedMaterials} detail="Можно двигать дальше" />
           <MetricCard label="Нужны правки" value={changesNeeded} detail="Вернулись в работу" tone={changesNeeded > 0 ? "amber" : "stone"} />
           <MetricCard label="Запланировано" value={scheduledMaterials} detail="Есть дата" tone="teal" />
           <MetricCard label="В работе" value={inProgress} detail="Есть следующий шаг" tone={inProgress > 0 ? "amber" : "stone"} />
@@ -2438,7 +2511,7 @@ function MonthlyClientReport({
         <article className={`${panelClass} p-5`}>
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Краткий итог</p>
           <p className="mt-3 text-sm leading-7 text-stone-700">
-            За месяц запланировано {totalMaterials} материалов. Тексты подготовлены для {textsPrepared}, визуалы готовы для {visualsPrepared}, согласовано {approvedMaterials}.
+            За месяц запланировано {totalMaterials} материалов. Тексты подготовлены для {textsPrepared}, визуалы готовы для {visualsPrepared}, готово в пакет {approvedMaterials}.
           </p>
           <p className="mt-2 text-sm leading-7 text-stone-700">
             Основные зоны внимания: {missingTexts} материалов без текста, {missingVisuals} материалов без визуала, {changesNeeded} материалов ждут правок.
@@ -2448,7 +2521,7 @@ function MonthlyClientReport({
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Клиентская сводка</p>
           <div className="mt-3 grid gap-1.5 text-sm leading-6 text-stone-700">
             <p>В этом месяце подготовлено: <span className="font-semibold">{textsPrepared} материалов.</span></p>
-            <p>Согласовано: <span className="font-semibold">{approvedMaterials}.</span></p>
+            <p>Готово в пакет: <span className="font-semibold">{approvedMaterials}.</span></p>
             <p>Ожидают вашего решения: <span className="font-semibold">{waitingForClient}.</span></p>
             <p>В работе у команды: <span className="font-semibold">{inProgress}.</span></p>
             <p className="mt-2 text-stone-500">Следующий шаг: {clientNextStep}</p>
@@ -2475,7 +2548,7 @@ function MonthlyClientReport({
                 {visualPrepared ? "Визуал готов" : visualRequired ? "Нет визуала" : "Не требуется / не определено"}
               </StatusBadge>
               <StatusBadge tone={approved ? "green" : needsChanges ? "rose" : draft?.status === "sent_to_client" ? "amber" : "neutral"}>
-                {approved ? "Согласовано" : needsChanges ? "Нужны правки" : draft?.status === "sent_to_client" ? "Ждёт клиента" : "В работе"}
+                {approved ? "Готово в пакет" : needsChanges ? "Нужны правки" : draft?.status === "sent_to_client" ? "В работе" : "В работе"}
               </StatusBadge>
               <StatusBadge tone={scheduled ? "teal" : "neutral"}>{scheduled ? "Запланировано" : "Не запланировано"}</StatusBadge>
               <p className="text-xs font-semibold leading-5 text-stone-600">{nextAction}</p>
@@ -2728,16 +2801,17 @@ function BrandAssetsView({ client, requestedStep, workspaceContext }: { client: 
 function WorkspaceSwitcher({
   activeView,
   links,
+  revisionCount = 0,
 }: {
   activeView: WorkspaceView;
   links: Record<WorkspaceView, string>;
+  revisionCount?: number;
 }) {
   const items = [
     { label: "Обзор", view: "overview" as const },
-    { label: "Согласования", view: "approvals" as const },
+    { label: "Правки", view: "approvals" as const },
     { label: "Календарь", view: "calendar" as const },
     { label: "Материалы", view: "drafts" as const },
-    { label: "Креативы", view: "assets" as const },
     { label: "Бренд", view: "brand_assets" as const },
     { label: "Клиентский вид", view: "client_portal" as const },
     { label: "Отчёт", view: "reports" as const },
@@ -2756,7 +2830,10 @@ function WorkspaceSwitcher({
                 : "border-transparent text-slate-500 hover:text-slate-900"
             }`}
           >
-            {item.label}
+            <span>{item.label}</span>
+            {item.view === "approvals" && revisionCount > 0 ? (
+              <span className="ml-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">{revisionCount}</span>
+            ) : null}
           </a>
         ))}
       </div>
@@ -2777,9 +2854,8 @@ function OverviewPreviews({
   jobs: GenerationJobPreview[];
   links: Record<WorkspaceView, string>;
 }) {
-  const reviewDrafts = drafts.filter((draft) => ["draft", "needs_review", "sent_to_client", "client_changes_requested"].includes(draft.status)).slice(0, 3);
+  const reviewDrafts = drafts.filter((draft) => ["draft", "needs_review", "client_changes_requested"].includes(draft.status)).slice(0, 3);
   const calendarPublications = publications.slice(0, 3);
-  const creativeAssets = assets.filter((asset) => asset.status !== "approved").slice(0, 3);
   const productionJobs = jobs.filter((job) => ["running", "failed"].includes(job.status)).slice(0, 3);
 
   return (
@@ -2787,8 +2863,8 @@ function OverviewPreviews({
       <article className={`${panelClass} min-w-0 p-4`}>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-teal-700">Согласования</p>
-            <h3 className="mt-1 font-semibold text-stone-950">Короткая очередь</h3>
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-violet-700">Правки</p>
+            <h3 className="mt-1 font-semibold text-stone-950">Клиентский inbox</h3>
           </div>
           <StatusBadge tone={reviewDrafts.length > 0 ? "amber" : "green"}>{reviewDrafts.length}</StatusBadge>
         </div>
@@ -2802,7 +2878,7 @@ function OverviewPreviews({
           ))}
           {reviewDrafts.length === 0 ? <p className={mutedTextClass}>Нет материалов, требующих внимания.</p> : null}
         </div>
-        <a href={links.approvals} className="mt-4 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">Открыть согласования</a>
+        <a href={links.approvals} className="mt-4 inline-flex text-xs font-bold text-violet-700 transition hover:text-violet-900">Открыть правки</a>
       </article>
 
       <article className={`${panelClass} min-w-0 p-4`}>
@@ -2823,28 +2899,7 @@ function OverviewPreviews({
           ))}
           {calendarPublications.length === 0 ? <p className={mutedTextClass}>Публикации с датой пока не запланированы.</p> : null}
         </div>
-        <a href={links.calendar} className="mt-4 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">Открыть календарь</a>
-      </article>
-
-      <article className={`${panelClass} min-w-0 p-4`}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-teal-700">Креативы</p>
-            <h3 className="mt-1 font-semibold text-stone-950">Материалы в работе</h3>
-          </div>
-          <StatusBadge tone={creativeAssets.length > 0 ? "amber" : "green"}>{creativeAssets.length}</StatusBadge>
-        </div>
-        <div className="mt-3 grid gap-2">
-          {creativeAssets.map((asset) => (
-            <div key={asset.id} className="min-w-0 rounded-md border border-stone-200 bg-stone-50/70 p-3">
-              <p className="truncate text-[11px] font-bold uppercase tracking-[0.08em] text-teal-700">{asset.scheduledPublication.platformName} &middot; {formatStatus(asset.assetType)}</p>
-              <p className="mt-1 line-clamp-1 text-sm font-semibold text-stone-900">{asset.title}</p>
-              <p className="mt-1 text-xs text-stone-500">{formatStatus(asset.status)}</p>
-            </div>
-          ))}
-          {creativeAssets.length === 0 ? <p className={mutedTextClass}>Нет креативов, требующих внимания.</p> : null}
-        </div>
-        <a href={links.assets} className="mt-4 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">Открыть креативы</a>
+        <a href={links.calendar} className="mt-4 inline-flex text-xs font-bold text-violet-700 transition hover:text-violet-900">Открыть календарь</a>
       </article>
 
       <article className={`${panelClass} min-w-0 p-4`}>
@@ -2930,7 +2985,7 @@ function materialNextStep(item: MaterialPlannedItem, publication?: ScheduledPubl
     return { kind: "approve_visual" as const, label: "Согласуйте выбранный визуал" };
   }
 
-  return { kind: "ready" as const, label: "Материал готов к клиентскому согласованию или публикации" };
+  return { kind: "ready" as const, label: "Материал готов к месячному пакету" };
 }
 
 function MaterialPrimaryAction({
@@ -3173,7 +3228,7 @@ function manualPlanProtectionLabels(item: MaterialPlannedItem, publication?: Sch
     item.creativeAssets.some((asset) => asset.generatedVariants.length > 0);
 
   if (draftStatus && ["approved", "ready_to_schedule", "sent_to_client", "client_approved"].includes(draftStatus)) {
-    labels.push({ label: "Согласовано", tone: "green" });
+    labels.push({ label: "Готово в пакет", tone: "green" });
   } else if (draftStatus) {
     labels.push({ label: "В работе", tone: "amber" });
   }
@@ -3422,6 +3477,9 @@ function DraftsView({
   const selectedPublication = selectedItem ? publicationByItemId.get(selectedItem.id) : undefined;
   const selectedAsset = selectedItem?.creativeAssets[0] ?? selectedPublication?.creativeAssets[0];
   const selectedVisual = selectedAsset?.generatedVariants[0] ?? selectedItem?.generatedCreativeVariants[0];
+  const selectedClientRevision = selectedItem?.contentDraft?.reviewEvents
+    .filter((event) => event.actorType === "client" || (event.action === "changes_requested" && Boolean(event.comment)))
+    .at(-1);
   const packageReady = selectedItem?.contentDraft?.status === "ready_to_schedule" || selectedPublication?.status === "ready";
   const visualSource = selectedVisual ? getGeneratedVariantImageSrc(selectedVisual) : null;
   const statusForMaterial = (item: MaterialPlannedItem) => {
@@ -3431,6 +3489,7 @@ function DraftsView({
     const draftStatus = item.contentDraft?.status;
 
     if (!item.contentDraft) return "Нужен текст";
+    if (draftStatus === "client_changes_requested") return "Есть правки";
     if (!asset) return "Нужно ТЗ";
     if (!hasVisual) return "Нужен визуал";
     if (publication?.status === "ready") return "В месячном пакете";
@@ -3519,7 +3578,7 @@ function DraftsView({
                 <h3 className="mt-1 text-lg font-semibold text-slate-950">Месячный пакет</h3>
               </div>
               <div className="grid gap-2 sm:grid-cols-4 xl:min-w-[620px]">
-                <MetricCard label="Тексты" value={`${textsCreatedCount}/${totalMaterialsCount}`} detail="готовность" />
+	                <MetricCard label="Тексты" value={missingTextsCount === 0 ? "готовы" : `${missingTextsCount} без текста`} detail={missingTextsCount === 0 ? "подготовлены" : "исключение"} tone={missingTextsCount === 0 ? "teal" : "amber"} />
                 <MetricCard label="ТЗ" value={`${briefsReadyCount}/${totalMaterialsCount}`} detail="креатив" />
                 <MetricCard label="Визуалы" value={`${visualsReadyCount}/${totalMaterialsCount}`} detail="производство" />
                 <MetricCard label="В пакет" value={`${readyForPackageCount}/${totalMaterialsCount}`} detail="готово" />
@@ -3594,6 +3653,12 @@ function DraftsView({
                       </div>
                       <h3 className="mt-3 text-xl font-semibold leading-7 text-slate-950">{selectedItem.topic}</h3>
                       <p className="mt-1 text-sm leading-6 text-slate-500">{selectedItem.goal}</p>
+                      {selectedClientRevision ? (
+                        <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-900">
+                          <span className="font-semibold">Есть правка: </span>
+                          {selectedClientRevision.comment || "Клиент оставил комментарий к материалу."}
+                        </div>
+                      ) : null}
                     </div>
                     <span className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${nextActionBadgeClass(selectedActionLabel)}`}>
                       {selectedActionLabel}
@@ -3848,7 +3913,7 @@ function OperationsOverview({
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Операционный обзор</p>
           <h2 className="mt-1 text-xl font-semibold text-stone-950">Состояние работы на месяц</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-500">
-            Рабочий индикатор прогресса: готовность текстов, нагрузка на согласование и состояние интеграций.
+	            Готовность производства, правки клиента и состояние интеграций.
           </p>
         </div>
         <StatusBadge tone={integrationTaskCount > 0 ? "amber" : "green"}>
@@ -3885,7 +3950,7 @@ function OperationsOverview({
       </div>
       <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Готовые тексты" value={draftCount} detail="Можно проверять" tone="teal" />
-        <MetricCard label="Требует внимания" value={attentionCount} detail="Нагрузка на согласование" tone="amber" />
+	        <MetricCard label="Требует внимания" value={attentionCount} detail="Проверка и правки" tone="amber" />
         <MetricCard label="Задачи по интеграциям" value={integrationTaskCount} detail="До запуска" tone={integrationTaskCount > 0 ? "rose" : "stone"} />
         <MetricCard label="Нужны визуалы" value={creativeAssetAttentionCount} detail="ТЗ и материалы в работе" tone={creativeAssetAttentionCount > 0 ? "amber" : "stone"} />
       </div>
@@ -4114,9 +4179,9 @@ function ContentCalendar({
     { id: "missing_text", label: "Без текста" },
     { id: "missing_visual", label: "Без визуала" },
     { id: "review", label: "На проверке" },
-    { id: "client", label: "У клиента" },
-    { id: "approved", label: "Согласовано" },
-    { id: "ready", label: "Готово" },
+    { id: "revisions", label: "Есть правки" },
+    { id: "ready", label: "Готово в пакет" },
+    { id: "package", label: "В пакете" },
   ];
   const currentFilter = activeFilter && filters.some((filter) => filter.id === activeFilter) ? activeFilter : "all";
   const calendarViews = [
@@ -4148,9 +4213,9 @@ function ContentCalendar({
     if (currentFilter === "missing_text") return !item.contentDraft;
     if (currentFilter === "missing_visual") return Boolean(publication) && (!asset || asset.generatedVariants.length === 0);
     if (currentFilter === "review") return draftStatus === "draft" || draftStatus === "needs_review";
-    if (currentFilter === "client") return draftStatus === "sent_to_client";
-    if (currentFilter === "approved") return draftStatus === "approved";
+    if (currentFilter === "revisions") return draftStatus === "client_changes_requested";
     if (currentFilter === "ready") return draftStatus === "ready_to_schedule" || publication?.status === "ready";
+    if (currentFilter === "package") return publication?.status === "ready";
     return true;
   };
   const visibleItems = items.filter(itemMatchesFilter);
@@ -4727,7 +4792,7 @@ function ClientSetupWizard({
             <SectionTitle
               eyebrow="Шаг 4"
               title="Сгенерировать месячный план"
-              description="Месячный план превращает Blueprint в календарь материалов, площадок, задач и правил согласования."
+              description="Месячный план превращает Blueprint в календарь материалов, площадок, задач и правил подготовки пакета."
             />
             {!blueprint ? (
               <div className="mt-5"><EmptyState>Blueprint появится после генерации на основе брифа.</EmptyState></div>
@@ -5119,6 +5184,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
   const calendarGroups = groupCalendarItems(selectedMonthlyPlan?.plannedContentItems ?? []);
   const reviewQueueGroups = groupDraftsByStatus(selectedMonthlyPlan?.plannedContentItems ?? []);
   const contentDrafts = reviewQueueGroups.flatMap((group) => group.drafts);
+  const clientRevisions = buildClientRevisions(selectedMonthlyPlan?.plannedContentItems ?? []);
+  const openClientRevisionCount = clientRevisions.filter((revision) => revision.status === "new" || revision.status === "in_progress").length;
   const needsManagerReviewCount =
     contentDrafts.filter((draft) => draft.status === "draft" || draft.status === "needs_review").length;
   const waitingForClientCount =
@@ -5280,7 +5347,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
               </div>
             ) : null}
 
-            {activeView !== "clients" ? <WorkspaceSwitcher activeView={activeView} links={workspaceLinks} /> : null}
+            {activeView !== "clients" ? <WorkspaceSwitcher activeView={activeView} links={workspaceLinks} revisionCount={openClientRevisionCount} /> : null}
 
             {activeView === "overview" ? (
               <OverviewDashboard
@@ -5288,7 +5355,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 workspaceLinks={workspaceLinks}
                 latestBlueprint={latestBlueprint}
                 needsManagerReviewCount={needsManagerReviewCount}
-                waitingForClientCount={waitingForClientCount}
+                waitingForClientCount={openClientRevisionCount}
                 approvedDraftCount={approvedDraftCount}
                 readyToScheduleCount={readyToScheduleCount}
                 approvalQueueCount={approvalQueueCount}
@@ -5307,11 +5374,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
             {activeView === "approvals" ? (
               <>
                 <WorkspaceViewHeader
-                  eyebrow="Проверка материалов"
-                  title="Согласования"
-                  description="Полная рабочая очередь для менеджера: внутренняя проверка, отправка клиенту, комментарии и подготовка к планированию."
+                  eyebrow="Комментарии клиента"
+                  title="Правки"
+                  description="Клиентские комментарии и запросы по материалам и месячному пакету. Внутренняя подготовка остаётся в Materials."
                 />
-                <ReviewQueue groups={reviewQueueGroups} calendarHref={workspaceLinks.calendar} />
+                <ReviewQueue revisions={clientRevisions} draftsHref={workspaceLinks.drafts} />
               </>
             ) : null}
 
