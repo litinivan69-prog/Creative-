@@ -366,6 +366,13 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - The lower Overview area now focuses on one action card, queue counts, and three recent activity items.
 - The lavender SaaS direction remains, with fewer competing colors and less explanatory copy.
 
+## UI-10A Materials Calendar Workbench
+
+- Materials was redesigned into a calendar-based production workbench.
+- Managers can scan planned materials by week/date, use compact filters, and open a selected material inspector.
+- The inspector shows text, creative brief, visual, approval status, next action, and manual plan controls in one place.
+- The old endless Materials page is reduced to a compact fallback list and advanced sections.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.

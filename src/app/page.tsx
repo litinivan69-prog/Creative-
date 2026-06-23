@@ -72,6 +72,8 @@ type SearchParams = Promise<{
   error?: string;
   notice?: string;
   portalLink?: string;
+  material?: string;
+  filter?: string;
 }>;
 
 const workspaceViews = [
@@ -733,8 +735,8 @@ type CalendarPreviewItem = {
   } | null;
 };
 
-function groupCalendarItems(items: CalendarPreviewItem[]) {
-  const groups = new Map<string, CalendarPreviewItem[]>();
+function groupCalendarItems<T extends CalendarPreviewItem>(items: T[]) {
+  const groups = new Map<string, T[]>();
 
   for (const item of items) {
     const group = item.week?.trim() || item.plannedDate;
@@ -3134,6 +3136,11 @@ function DraftsView({
   jobs,
   monthlyPlanId,
   blueprintId,
+  clientName,
+  month,
+  planStatus,
+  selectedMaterialId,
+  activeFilter,
   approvalsHref,
   calendarHref,
   assetsHref,
@@ -3147,6 +3154,11 @@ function DraftsView({
   jobs: GenerationJobPreview[];
   monthlyPlanId?: string;
   blueprintId?: string;
+  clientName?: string;
+  month?: string;
+  planStatus?: string;
+  selectedMaterialId?: string;
+  activeFilter?: string;
   approvalsHref: string;
   calendarHref: string;
   assetsHref: string;
@@ -3160,282 +3172,374 @@ function DraftsView({
   const missingTextsCount = totalMaterialsCount - textsCreatedCount;
   const approvedTextsCount = items.filter((item) => item.contentDraft && ["approved", "ready_to_schedule"].includes(item.contentDraft.status)).length;
   const scheduledCount = publications.length;
-  const missingBriefsCount = publications.filter((publication) => publication.creativeAssets.length === 0).length;
   const missingVisualsCount = publications.filter((publication) =>
     publication.creativeAssets.some((asset) => asset.generatedVariants.length === 0),
   ).length;
   const allTextsReady = totalMaterialsCount > 0 && missingTextsCount === 0;
   const autopilotBatchLimit = getAutopilotTextBatchLimit();
+  const filters = [
+    { id: "all", label: "Все" },
+    { id: "missing_text", label: "Без текста" },
+    { id: "missing_visual", label: "Без визуала" },
+    { id: "review", label: "На проверке" },
+    { id: "client", label: "У клиента" },
+    { id: "approved", label: "Согласовано" },
+    { id: "ready", label: "Готово" },
+  ];
+  const currentFilter = activeFilter && filters.some((filter) => filter.id === activeFilter) ? activeFilter : "all";
+  const materialHref = (materialId?: string, filter = currentFilter) => {
+    const searchParams = new URLSearchParams({ view: "drafts" });
+    if (blueprintId) searchParams.set("blueprint", blueprintId);
+    if (monthlyPlanId) searchParams.set("plan", monthlyPlanId);
+    if (materialId) searchParams.set("material", materialId);
+    if (filter !== "all") searchParams.set("filter", filter);
+    return `/?${searchParams.toString()}`;
+  };
+  const publicationByItemId = new Map(publications.map((publication) => [publication.plannedContentItemId, publication]));
+  const itemMatchesFilter = (item: MaterialPlannedItem) => {
+    const publication = publicationByItemId.get(item.id);
+    const asset = publication?.creativeAssets[0];
+    const draftStatus = item.contentDraft?.status;
+
+    if (currentFilter === "missing_text") return !item.contentDraft;
+    if (currentFilter === "missing_visual") return Boolean(publication) && (!asset || asset.generatedVariants.length === 0);
+    if (currentFilter === "review") return draftStatus === "draft" || draftStatus === "needs_review";
+    if (currentFilter === "client") return draftStatus === "sent_to_client";
+    if (currentFilter === "approved") return draftStatus === "approved";
+    if (currentFilter === "ready") return draftStatus === "ready_to_schedule" || publication?.status === "ready";
+    return true;
+  };
+  const visibleItems = items.filter(itemMatchesFilter);
+  const selectedItem =
+    visibleItems.find((item) => item.id === selectedMaterialId) ??
+    items.find((item) => item.id === selectedMaterialId) ??
+    visibleItems[0] ??
+    items[0] ??
+    null;
+  const selectedPublication = selectedItem ? publicationByItemId.get(selectedItem.id) : undefined;
+  const selectedAsset = selectedPublication?.creativeAssets[0];
+  const selectedVisual = selectedAsset?.generatedVariants[0] ?? selectedItem?.generatedCreativeVariants[0];
+  const calendarGroups = groupCalendarItems(visibleItems);
+  const compactStatusTone = (tone: "done" | "attention" | "active" | "missing") => {
+    if (tone === "done") return "bg-emerald-50 text-emerald-700";
+    if (tone === "attention") return "bg-amber-50 text-amber-700";
+    if (tone === "active") return "bg-violet-50 text-violet-700";
+    return "bg-slate-100 text-slate-500";
+  };
+  const materialStatusChips = (item: MaterialPlannedItem) => {
+    const publication = publicationByItemId.get(item.id);
+    const asset = publication?.creativeAssets[0];
+    return [
+      { label: "Текст", tone: item.contentDraft ? "done" as const : "missing" as const },
+      { label: "ТЗ", tone: asset ? "done" as const : "missing" as const },
+      { label: "Визуал", tone: asset?.generatedVariants.length ? "done" as const : "missing" as const },
+      {
+        label: item.contentDraft?.status === "sent_to_client" ? "Клиент" : "Проверка",
+        tone: item.contentDraft?.status === "sent_to_client" ? "active" as const : item.contentDraft ? "attention" as const : "missing" as const,
+      },
+    ];
+  };
 
   return (
-    <section>
-      <WorkspaceViewHeader
-        eyebrow="Контент-производство"
-        title="Материалы публикаций"
-        description="Каждая публикация собрана в одной рабочей карточке: текст, согласование, дата, ТЗ и визуал. Начните со следующего рекомендованного действия."
-      />
-      <div className="mt-4 flex flex-wrap gap-2">
-        <a href={clientPortalHref} className={secondaryButtonClass}>Открыть клиентский вид</a>
-        <a href={reportsHref} className={secondaryButtonClass}>Открыть отчёт</a>
-      </div>
-      <p className={`mt-3 rounded-md border px-3 py-2 text-xs leading-5 ${brandProfileReady ? "border-teal-200 bg-teal-50 text-teal-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
-        {brandProfileReady ? "AI использует контекст бренда клиента." : "Заполните библиотеку бренда, чтобы тексты и визуалы были точнее."}
-      </p>
-      <ManualMonthlyPlanEditor monthlyPlanId={monthlyPlanId} items={items} publications={publications} />
-      <article className={`${panelClass} mt-5 overflow-hidden border-teal-200`}>
-        <div className="grid gap-5 bg-teal-50/60 p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Production Autopilot</p>
-            <h3 className="mt-1 text-lg font-semibold text-stone-950">Автоподготовка месяца</h3>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">
-              Система создаст недостающие тексты публикаций для текущего месячного плана. ТЗ, визуалы и согласования останутся под контролем менеджера.
-            </p>
-            <p className="mt-2 text-xs leading-5 text-stone-500">
-              За один запуск готовится до {autopilotBatchLimit} материалов, чтобы не перегружать генерацию.
-            </p>
+    <section className="rounded-[28px] bg-[#f7f5fb] p-4 text-slate-900 sm:p-5">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Материалы</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            {clientName ?? "Клиент не выбран"} · {month ?? "Месячный план не выбран"}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <span className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-500 shadow-sm">{planStatus ? formatStatus(planStatus) : "Нет плана"}</span>
+            <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${brandProfileReady ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+              {brandProfileReady ? "Бренд готов" : "Нужен бренд"}
+            </span>
           </div>
-          {missingTextsCount > 0 && monthlyPlanId ? (
-            <form action={prepareMonthAutopilot}>
-              <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} />
-              {blueprintId ? <input type="hidden" name="blueprintId" value={blueprintId} /> : null}
-              <PendingSubmitButton pendingLabel="Готовим материалы..." className={primaryButtonClass}>
-                Подготовить месяц
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <details className="rounded-full border border-violet-200 bg-white px-4 py-2 text-sm font-semibold text-violet-700 shadow-sm">
+            <summary className="cursor-pointer">Добавить материал</summary>
+            <form action={createPlannedContentItemManual} className="absolute right-5 z-10 mt-3 grid w-[min(92vw,560px)] gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-[0_18px_50px_rgba(88,75,135,0.16)]">
+              {monthlyPlanId ? <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} /> : null}
+              <ManualPlanFields />
+              <PendingSubmitButton pendingLabel="Добавляем..." disabled={!monthlyPlanId} className="rounded-full bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:bg-slate-300">
+                Добавить материал в план
               </PendingSubmitButton>
             </form>
-          ) : (
-            <StatusBadge tone={allTextsReady ? "green" : "neutral"}>{allTextsReady ? "Тексты готовы" : "Нужен месячный план"}</StatusBadge>
-          )}
+          </details>
+          <a href={clientPortalHref} className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:text-violet-700">Клиентский вид</a>
+          <a href={reportsHref} className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:text-violet-700">Отчёт</a>
         </div>
-      </article>
-      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-        <MetricCard label="Всего материалов" value={totalMaterialsCount} detail="В текущем плане" />
-        <MetricCard label="Тексты созданы" value={textsCreatedCount} detail="Можно проверять" tone="teal" />
-        <MetricCard label="Тексты не созданы" value={missingTextsCount} detail="Подготовит автопилот" tone={missingTextsCount > 0 ? "amber" : "stone"} />
-        <MetricCard label="Согласованы" value={approvedTextsCount} detail="Текст прошёл проверку" />
-        <MetricCard label="Запланированы" value={scheduledCount} detail="Есть дата публикации" tone="teal" />
-        <MetricCard label="Нужны ТЗ" value={missingBriefsCount} detail="После планирования" tone={missingBriefsCount > 0 ? "amber" : "stone"} />
-        <MetricCard label="Нужны визуалы" value={missingVisualsCount} detail="ТЗ уже подготовлено" tone={missingVisualsCount > 0 ? "amber" : "stone"} />
       </div>
-      <GenerationJobsPanel jobs={jobs} />
-      {allTextsReady ? (
-        <div className="mt-5 rounded-lg border border-teal-200 bg-teal-50/70 px-4 py-3 text-sm leading-6 text-teal-900">
-          <span className="font-semibold">Все тексты созданы.</span> Откройте материал, чтобы редактировать, согласовать или подготовить визуал.
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex rounded-full bg-white p-1 shadow-sm">
+          <span className="rounded-full bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700">Календарь</span>
+          <a href="#materials-list" className="rounded-full px-3 py-1.5 text-xs font-semibold text-slate-500 transition hover:text-violet-700">Список</a>
+          <span className="rounded-full px-3 py-1.5 text-xs font-semibold text-slate-300">Канбан</span>
         </div>
-      ) : null}
-      <div className="mt-5 grid gap-4">
-        {items.map((item) => {
-          const draft = item.contentDraft;
-          const publication = publications.find((candidate) => candidate.plannedContentItemId === item.id);
-          const asset = publication?.creativeAssets[0];
-          const nextStep = materialNextStep(item, publication);
-          const latestEvent = draft?.reviewEvents.at(-1);
-          const latestJob = jobs.find((job) => job.plannedContentItemId === item.id);
-          const latestVisualJob = asset
-            ? jobs.find((job) => job.creativeAssetId === asset.id && ["generate_visual", "regenerate_visual"].includes(job.jobType))
-            : undefined;
+        <div className="flex flex-wrap gap-1.5">
+          {filters.map((filter) => (
+            <a
+              key={filter.id}
+              href={materialHref(undefined, filter.id)}
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                currentFilter === filter.id ? "bg-violet-50 text-violet-700" : "bg-white text-slate-500 hover:text-violet-700"
+              }`}
+            >
+              {filter.label}
+            </a>
+          ))}
+        </div>
+      </div>
 
-          return (
-            <article id={`material-${item.id}`} key={item.id} className={`${panelClass} min-w-0 scroll-mt-24 p-4 sm:p-5`}>
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap gap-1.5">
-                    <StatusBadge tone="teal">{item.platformName}</StatusBadge>
-                    <StatusBadge>{item.format}</StatusBadge>
-                    <StatusBadge>{publication ? `${publication.scheduledDate}${publication.scheduledTime ? `, ${publication.scheduledTime}` : ""}` : item.week || item.plannedDate}</StatusBadge>
-                  </div>
-                  <h3 className="mt-3 text-lg font-semibold leading-7 text-stone-950">{item.topic}</h3>
-                  <p className="mt-1 text-sm leading-6 text-stone-500">{item.goal}</p>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  <StatusBadge tone={materialTextStatusTone(draft)}>{formatMaterialTextStatus(draft)}</StatusBadge>
-                  {publication ? <StatusBadge tone={scheduledPublicationTone(publication.status)}>{formatStatus(publication.status)}</StatusBadge> : <StatusBadge>Нет даты</StatusBadge>}
-                  {asset ? <CreativeAssetVisualStatus variants={asset.generatedVariants} /> : <StatusBadge tone="neutral">Визуал не создан</StatusBadge>}
-                </div>
-              </div>
-              {latestJob ? <div className="mt-3"><GenerationJobIndicator job={latestJob} /></div> : null}
+      {!monthlyPlanId ? (
+        <div className="mt-4 rounded-[22px] border border-slate-200 bg-white p-5 text-sm text-slate-500 shadow-[0_10px_28px_rgba(88,75,135,0.055)]">
+          Выберите месячный план, чтобы открыть материалы.
+        </div>
+      ) : items.length === 0 ? (
+        <div className="mt-4 rounded-[22px] border border-slate-200 bg-white p-5 text-sm text-slate-500 shadow-[0_10px_28px_rgba(88,75,135,0.055)]">
+          В плане пока нет материалов. Добавьте первый материал или сгенерируйте месячный план.
+        </div>
+      ) : (
+        <div className="mt-4 grid min-h-[620px] gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+          <div className="rounded-[24px] border border-slate-200/80 bg-white p-4 shadow-[0_10px_28px_rgba(88,75,135,0.055)]">
+            <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <MetricCard label="Материалов" value={totalMaterialsCount} detail="В плане" />
+              <MetricCard label="Без текста" value={missingTextsCount} detail="Ждут подготовки" />
+              <MetricCard label="Согласованы" value={approvedTextsCount} detail="Можно планировать" />
+              <MetricCard label="Запланированы" value={scheduledCount} detail="Есть дата" />
+            </div>
 
-              <div className="mt-4 rounded-lg border border-teal-200 bg-teal-50/70 p-4">
-                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-teal-700">Следующий шаг</p>
-                <p className="mt-1 text-sm font-semibold leading-6 text-teal-950">{nextStep.label}</p>
-                <div className="mt-3">
-                  <MaterialPrimaryAction item={item} publication={publication} approvalsHref={approvalsHref} calendarHref={calendarHref} assetsHref={assetsHref} />
-                </div>
-              </div>
-
-              <details
-                id={`material-details-${item.id}`}
-                open={["review_text", "schedule", "check_visual", "approve_visual"].includes(nextStep.kind)}
-                className="mt-4 rounded-lg border border-stone-200 bg-stone-50/70"
-              >
-                <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-stone-800">Открыть материал</summary>
-                <div className="grid gap-5 border-t border-stone-200 p-4">
-                  <section>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <h4 className="text-sm font-semibold text-stone-950">Текст публикации</h4>
-                      {draft ? <StatusBadge tone={draftStatusTone(draft.status)}>{formatDraftStatus(draft.status)}</StatusBadge> : <StatusBadge>Не создан</StatusBadge>}
+            <div className="max-h-[calc(100vh-320px)] min-h-[420px] overflow-auto pr-1">
+              <div className="grid gap-3">
+                {calendarGroups.map((group) => (
+                  <section key={group.label} className="rounded-[20px] border border-slate-200 bg-slate-50/70 p-3">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <h3 className="text-sm font-semibold text-slate-950">{group.label}</h3>
+                      <span className="text-xs font-semibold text-slate-400">{group.items.length} материалов</span>
                     </div>
-                    {draft ? (
+                    <div className="grid gap-2 md:grid-cols-2 2xl:grid-cols-3">
+                      {group.items.map((item) => {
+                        const publication = publicationByItemId.get(item.id);
+                        const nextStep = materialNextStep(item, publication);
+                        const active = selectedItem?.id === item.id;
+
+                        return (
+                          <a
+                            key={item.id}
+                            href={materialHref(item.id)}
+                            className={`rounded-2xl border bg-white p-3 transition hover:border-violet-200 hover:shadow-[0_8px_24px_rgba(88,75,135,0.08)] ${
+                              active ? "border-violet-300 ring-2 ring-violet-100" : "border-slate-200"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex min-w-0 gap-1.5">
+                                <span className="truncate rounded-full bg-violet-50 px-2 py-1 text-[11px] font-semibold text-violet-700">{item.platformName}</span>
+                                <span className="truncate rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-500">{item.format}</span>
+                              </div>
+                              <span className="h-2 w-2 shrink-0 rounded-full bg-violet-500" />
+                            </div>
+                            <p className="mt-3 line-clamp-2 text-sm font-semibold leading-5 text-slate-950">{item.topic}</p>
+                            <p className="mt-2 truncate text-[11px] font-semibold text-slate-400">{publication?.scheduledDate ?? item.plannedDate}</p>
+                            <div className="mt-3 flex flex-wrap gap-1">
+                              {materialStatusChips(item).map((chip) => (
+                                <span key={chip.label} className={`rounded-full px-2 py-1 text-[10px] font-semibold ${compactStatusTone(chip.tone)}`}>
+                                  {chip.label}
+                                </span>
+                              ))}
+                            </div>
+                            <p className="mt-3 truncate text-[11px] font-semibold text-violet-700">{nextStep.label}</p>
+                          </a>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
+                {visibleItems.length === 0 ? (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                    По этому фильтру материалов нет.
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          <aside className="rounded-[24px] border border-slate-200/80 bg-white p-4 shadow-[0_10px_28px_rgba(88,75,135,0.055)] xl:sticky xl:top-24 xl:max-h-[calc(100vh-132px)] xl:overflow-auto">
+            {!selectedItem ? (
+              <p className="text-sm leading-6 text-slate-500">Выберите материал в календаре, чтобы открыть текст, ТЗ и визуал.</p>
+            ) : (
+              <div>
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">{selectedItem.platformName}</span>
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">{selectedItem.format}</span>
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">{selectedPublication?.scheduledDate ?? selectedItem.week ?? selectedItem.plannedDate}</span>
+                </div>
+                <h3 className="mt-3 text-lg font-semibold leading-7 text-slate-950">{selectedItem.topic}</h3>
+                <p className="mt-1 line-clamp-3 text-sm leading-6 text-slate-500">{selectedItem.goal}</p>
+                <div className="mt-4 rounded-2xl bg-violet-50 p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-violet-700">Следующее действие</p>
+                  <p className="mt-1 text-sm font-semibold text-violet-950">{materialNextStep(selectedItem, selectedPublication).label}</p>
+                  <div className="mt-3">
+                    <MaterialPrimaryAction item={selectedItem} publication={selectedPublication} approvalsHref={approvalsHref} calendarHref={calendarHref} assetsHref={assetsHref} />
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-3">
+                  <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <h4 className="text-sm font-semibold text-slate-950">Текст</h4>
+                      <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${compactStatusTone(selectedItem.contentDraft ? "done" : "missing")}`}>
+                        {selectedItem.contentDraft ? formatDraftStatus(selectedItem.contentDraft.status) : "Не создан"}
+                      </span>
+                    </div>
+                    {selectedItem.contentDraft ? (
                       <>
-                        <form action={updatePublicationText} className="mt-3 grid gap-2">
-                          <input type="hidden" name="contentDraftId" value={draft.id} />
-                          <label className="grid gap-1 text-xs font-bold text-stone-600">
-                            Заголовок
-                            <input type="text" name="draftTitle" required defaultValue={draft.draftTitle} className={inputClass} />
-                          </label>
-                          <label className="grid gap-1 text-xs font-bold text-stone-600">
-                            Текст публикации
-                            <textarea name="draftBody" required rows={8} defaultValue={draft.draftBody} className={inputClass} />
-                          </label>
-                          <label className="grid gap-1 text-xs font-bold text-stone-600">
-                            Комментарий к правке
-                            <input type="text" name="comment" className={inputClass} placeholder="Необязательно" />
-                          </label>
-                          <p className="text-xs leading-5 text-stone-500">Если текст уже был согласован, после правки он снова вернётся на проверку.</p>
-                          <div className="flex flex-wrap gap-2">
-                            <PendingSubmitButton pendingLabel="Сохраняем правки..." className={primaryButtonClass}>Сохранить правки</PendingSubmitButton>
-                          </div>
-                        </form>
-                        <form action={regenerateContentDraftForItem} className="mt-3">
-                          <input type="hidden" name="plannedContentItemId" value={item.id} />
-                          <PendingSubmitButton pendingLabel="Перегенерируем текст..." className={secondaryButtonClass}>
-                            Перегенерировать текст через AI
-                          </PendingSubmitButton>
-                        </form>
-                        {latestEvent ? (
-                          <p className="mt-3 rounded-md border border-stone-200 bg-white px-3 py-2 text-xs leading-5 text-stone-500">
-                            Последнее событие: <span className="font-bold text-stone-700">{formatReviewAction(latestEvent.action)}</span> · {formatReviewActor(latestEvent.actorType)}
-                          </p>
-                        ) : null}
-                        <div className="mt-3"><ReviewEventTimeline events={draft.reviewEvents} /></div>
-                        <div className="mt-3 border-t border-stone-200 pt-3">
-                          <DraftWorkflowControls draft={draft} calendarHref={calendarHref} returnView="drafts" />
+                        <p className="mt-2 line-clamp-3 text-xs leading-5 text-slate-500">{selectedItem.contentDraft.draftBody}</p>
+                        <details className="mt-3">
+                          <summary className="cursor-pointer text-xs font-semibold text-violet-700">Открыть / редактировать</summary>
+                          <form action={updatePublicationText} className="mt-3 grid gap-2">
+                            <input type="hidden" name="contentDraftId" value={selectedItem.contentDraft.id} />
+                            <input type="text" name="draftTitle" required defaultValue={selectedItem.contentDraft.draftTitle} className={inputClass} />
+                            <textarea name="draftBody" required rows={6} defaultValue={selectedItem.contentDraft.draftBody} className={inputClass} />
+                            <input type="text" name="comment" className={inputClass} placeholder="Комментарий к правке" />
+                            <PendingSubmitButton pendingLabel="Сохраняем..." className={primaryButtonClass}>Сохранить текст</PendingSubmitButton>
+                          </form>
+                        </details>
+                        <div className="mt-3">
+                          <DraftWorkflowControls draft={selectedItem.contentDraft} calendarHref={calendarHref} returnView="drafts" />
                         </div>
                       </>
                     ) : (
                       <form action={generateContentDraftForItem} className="mt-3">
-                        <input type="hidden" name="plannedContentItemId" value={item.id} />
-                        <PendingSubmitButton pendingLabel="Генерируем текст..." className={primaryButtonClass}>
-                          Сгенерировать текст публикации
+                        <input type="hidden" name="plannedContentItemId" value={selectedItem.id} />
+                        <PendingSubmitButton pendingLabel="Генерируем текст..." className="rounded-full bg-violet-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-violet-700">
+                          Сгенерировать текст
                         </PendingSubmitButton>
                       </form>
                     )}
                   </section>
 
-                  <section id={`schedule-${item.id}`} className="border-t border-stone-200 pt-4">
-                    <h4 className="text-sm font-semibold text-stone-950">Календарь публикации</h4>
-                    {publication ? (
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <StatusBadge tone={scheduledPublicationTone(publication.status)}>{formatStatus(publication.status)}</StatusBadge>
-                        <StatusBadge>{publication.scheduledDate}{publication.scheduledTime ? `, ${publication.scheduledTime}` : ""}</StatusBadge>
-                        <a href={calendarHref} className="text-xs font-bold text-teal-800 transition hover:text-teal-950">Открыть календарь</a>
-                      </div>
-                    ) : draft && ["approved", "ready_to_schedule"].includes(draft.status) ? (
-                      <form action={scheduleContentDraft} className="mt-3 grid gap-2 sm:grid-cols-2">
-                        <input type="hidden" name="contentDraftId" value={draft.id} />
+                  <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <h4 className="text-sm font-semibold text-slate-950">ТЗ</h4>
+                      <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${compactStatusTone(selectedAsset ? "done" : "missing")}`}>
+                        {selectedAsset ? formatStatus(selectedAsset.status) : "Нет ТЗ"}
+                      </span>
+                    </div>
+                    {selectedAsset ? (
+                      <>
+                        <p className="mt-2 line-clamp-3 text-xs leading-5 text-slate-500">{selectedAsset.brief}</p>
+                        <a href={assetsHref} className="mt-3 inline-flex text-xs font-semibold text-violet-700">Открыть ТЗ</a>
+                      </>
+                    ) : selectedPublication ? (
+                      <form action={generateCreativeAssetBriefForPublication} className="mt-3">
+                        <input type="hidden" name="scheduledPublicationId" value={selectedPublication.id} />
                         <input type="hidden" name="returnView" value="drafts" />
-                        <label className="grid gap-1 text-xs font-bold text-stone-600">Дата<input type="date" name="scheduledDate" required className={inputClass} /></label>
-                        <label className="grid gap-1 text-xs font-bold text-stone-600">Время<input type="time" name="scheduledTime" className={inputClass} /></label>
-                        <label className="grid gap-1 text-xs font-bold text-stone-600 sm:col-span-2">Заметка<input type="text" name="notes" className={inputClass} placeholder="Необязательно" /></label>
-                        <PendingSubmitButton pendingLabel="Планируем..." className={`${primaryButtonClass} sm:col-span-2`}>Запланировать</PendingSubmitButton>
+                        <PendingSubmitButton pendingLabel="Генерируем ТЗ..." className="rounded-full bg-violet-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-violet-700">
+                          Сгенерировать ТЗ
+                        </PendingSubmitButton>
                       </form>
                     ) : (
-                      <p className="mt-2 text-sm leading-6 text-stone-500">Сначала согласуйте текст публикации. После этого появится форма планирования.</p>
+                      <p className="mt-2 text-xs leading-5 text-slate-500">Запланируйте материал, чтобы создать ТЗ.</p>
                     )}
                   </section>
 
-                  <section className="border-t border-stone-200 pt-4">
-                    <h4 className="text-sm font-semibold text-stone-950">Креатив и визуал</h4>
-                    {!publication ? (
-                      <p className="mt-2 text-sm leading-6 text-stone-500">Сначала запланируйте публикацию, чтобы создать ТЗ и визуал. Визуал появится после планирования публикации.</p>
-                    ) : !asset ? (
-                      <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/70 p-4">
-                        <p className="text-sm font-semibold text-amber-950">Нет ТЗ на креатив</p>
-                        <p className="mt-1 text-xs leading-5 text-amber-800">AI соберёт ТЗ по тексту, площадке, формату и теме публикации.</p>
-                        <form action={generateCreativeAssetBriefForPublication} className="mt-3">
-                          <input type="hidden" name="scheduledPublicationId" value={publication.id} />
-                          <input type="hidden" name="returnView" value="drafts" />
-                          <PendingSubmitButton pendingLabel="Генерируем ТЗ..." className={primaryButtonClass}>Сгенерировать ТЗ через AI</PendingSubmitButton>
-                        </form>
-                        <a href={assetsHref} className="mt-3 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">Создать ТЗ вручную</a>
+                  <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <h4 className="text-sm font-semibold text-slate-950">Визуал</h4>
+                      <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${compactStatusTone(selectedVisual ? "done" : "missing")}`}>
+                        {selectedVisual ? formatStatus(selectedVisual.status) : "Не создан"}
+                      </span>
+                    </div>
+                    {selectedVisual ? (
+                      <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                        <GeneratedVisualImage variant={selectedVisual} alt={selectedVisual.variantTitle} className="aspect-video w-full bg-slate-100 object-contain" />
                       </div>
-                    ) : (
-                      <div className="mt-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <StatusBadge tone="teal">{formatStatus(asset.assetType)}</StatusBadge>
-                          <CreativeAssetSourceBadge source={asset.source} />
-                          <StatusBadge tone={creativeAssetTone(asset.status)}>{formatStatus(asset.status)}</StatusBadge>
-                        </div>
-                        <p className="mt-3 font-semibold text-stone-900">{asset.title}</p>
-                        <p className="mt-1 line-clamp-3 text-sm leading-6 text-stone-600">{asset.brief}</p>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <form action={regenerateCreativeAssetBrief}>
-                            <input type="hidden" name="creativeAssetId" value={asset.id} />
-                            <input type="hidden" name="returnView" value="drafts" />
-                            <PendingSubmitButton pendingLabel="Перегенерируем ТЗ..." className={secondaryButtonClass}>Перегенерировать ТЗ через AI</PendingSubmitButton>
-                          </form>
-                          <a href={assetsHref} className={secondaryButtonClass}>Открыть полное ТЗ</a>
-                        </div>
-                        <div id={`visuals-${asset.id}`} className="mt-4 border-t border-stone-200 pt-4">
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <p className="text-sm font-semibold text-stone-950">Варианты визуала</p>
-                            <form action={generateCreativeVisualVariantForAsset}>
-                              <input type="hidden" name="creativeAssetId" value={asset.id} />
-                              <input type="hidden" name="returnView" value="drafts" />
-                              <PendingSubmitButton pendingLabel="Генерируем визуал..." className={primaryButtonClass}>
-                                {asset.generatedVariants.length > 0 ? "Сгенерировать ещё вариант" : "Сгенерировать премиум-визуал"}
-                              </PendingSubmitButton>
-                            </form>
-                          </div>
-                          <p className="mt-2 text-xs leading-5 text-teal-700">
-                            Генерация может занять 30–90 секунд. Задача появится в производственных задачах.
-                          </p>
-                          {latestVisualJob ? <div className="mt-3"><GenerationJobIndicator job={latestVisualJob} /></div> : null}
-                          {asset.generatedVariants.length > 0 ? (
-                            <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                              {asset.generatedVariants.map((variant) => (
-                                <article key={variant.id} className="overflow-hidden rounded-lg border border-stone-200 bg-white">
-                                  <GeneratedVisualImage variant={variant} alt={variant.variantTitle} className="aspect-square max-h-72 w-full bg-stone-100 object-contain" />
-                                  <div className="p-3">
-                                    <div className="flex flex-wrap gap-1.5">
-                                      <StatusBadge tone={creativeVariantTone(variant.status)}>{formatStatus(variant.status)}</StatusBadge>
-                                      <StatusBadge tone={creativeVariantQualityTone(variant.qualityStatus)}>{formatStatus(variant.qualityStatus)}</StatusBadge>
-                                      <StatusBadge>{formatGeneratedVisualStorage(variant.storageProvider)}</StatusBadge>
-                                      {formatGeneratedVisualFileSize(variant.fileSize) ? <StatusBadge>{formatGeneratedVisualFileSize(variant.fileSize)}</StatusBadge> : null}
-                                    </div>
-                                    <p className="mt-2 text-sm font-semibold text-stone-900">{variant.variantTitle}</p>
-                                    <div className="mt-3 flex flex-wrap gap-2">
-                                      <CreativeVariantAction action={markCreativeVariantQualityPassed} variantId={variant.id} returnView="drafts" tone="green">Качество ок</CreativeVariantAction>
-                                      <CreativeVariantAction action={approveCreativeVariant} variantId={variant.id} returnView="drafts" tone="green">Согласовать</CreativeVariantAction>
-                                      <CreativeVariantAction action={rejectCreativeVariant} variantId={variant.id} returnView="drafts" tone="rose">Отклонить</CreativeVariantAction>
-                                    </div>
-                                    <form action={markCreativeVariantQualityFailed} className="mt-2 flex min-w-0 flex-wrap gap-2">
-                                      <input type="hidden" name="creativeVariantId" value={variant.id} />
-                                      <input type="hidden" name="returnView" value="drafts" />
-                                      <input type="text" name="qualityNotes" className="min-w-44 flex-1 rounded-md border border-stone-200 bg-white px-2.5 py-1.5 text-xs text-stone-700 outline-none focus:border-teal-500" placeholder="Комментарий к проблеме" />
-                                      <PendingSubmitButton pendingLabel="Сохраняем..." className={destructiveButtonClass}>Есть проблемы</PendingSubmitButton>
-                                    </form>
-                                  </div>
-                                </article>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="mt-3 text-sm leading-6 text-stone-500">Визуал пока не создан. Запустите Premium Visual Engine для первого варианта.</p>
-                          )}
-                        </div>
-                      </div>
-                    )}
+                    ) : null}
+                    {selectedAsset ? (
+                      <form action={generateCreativeVisualVariantForAsset} className="mt-3">
+                        <input type="hidden" name="creativeAssetId" value={selectedAsset.id} />
+                        <input type="hidden" name="returnView" value="drafts" />
+                        <PendingSubmitButton pendingLabel="Генерируем визуал..." className="rounded-full bg-violet-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-violet-700">
+                          {selectedVisual ? "Перегенерировать" : "Сгенерировать визуал"}
+                        </PendingSubmitButton>
+                      </form>
+                    ) : null}
+                  </section>
+
+                  <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <h4 className="text-sm font-semibold text-slate-950">План</h4>
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-500">Ручное управление</span>
+                    </div>
+                    <details className="mt-3">
+                      <summary className="cursor-pointer text-xs font-semibold text-violet-700">Изменить</summary>
+                      <form action={updatePlannedContentItemManual} className="mt-3 grid gap-3">
+                        <input type="hidden" name="plannedContentItemId" value={selectedItem.id} />
+                        <ManualPlanFields item={selectedItem} />
+                        <PendingSubmitButton pendingLabel="Сохраняем..." className={primaryButtonClass}>Сохранить изменения</PendingSubmitButton>
+                      </form>
+                    </details>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <form action={duplicatePlannedContentItemManual}>
+                        <input type="hidden" name="plannedContentItemId" value={selectedItem.id} />
+                        <PendingSubmitButton pendingLabel="Дублируем..." className={secondaryButtonClass}>Дублировать</PendingSubmitButton>
+                      </form>
+                      <form action={deletePlannedContentItemManual}>
+                        <input type="hidden" name="plannedContentItemId" value={selectedItem.id} />
+                        <PendingSubmitButton pendingLabel="Удаляем..." className={destructiveButtonClass}>Удалить</PendingSubmitButton>
+                      </form>
+                    </div>
                   </section>
                 </div>
-              </details>
-            </article>
-          );
-        })}
-        {items.length === 0 ? <EmptyState>Сгенерируйте месячный план, чтобы публикационные материалы появились в этом разделе.</EmptyState> : null}
+              </div>
+            )}
+          </aside>
+        </div>
+      )}
+
+      <details id="materials-list" className="mt-4 rounded-[22px] border border-slate-200 bg-white p-4 shadow-[0_10px_28px_rgba(88,75,135,0.055)]">
+        <summary className="cursor-pointer text-sm font-semibold text-slate-800">Открыть полный список</summary>
+        <div className="mt-3 grid gap-2">
+          {items.map((item) => (
+            <a key={item.id} href={materialHref(item.id)} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-2 text-sm transition hover:border-violet-200">
+              <span className="min-w-0 truncate font-semibold text-slate-900">{item.topic}</span>
+              <span className="shrink-0 text-xs text-slate-400">{item.platformName} · {item.format}</span>
+            </a>
+          ))}
+        </div>
+      </details>
+
+      <article className="mt-4 rounded-[22px] border border-slate-200 bg-white p-4 shadow-[0_10px_28px_rgba(88,75,135,0.055)]">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold text-slate-400">Production Autopilot</p>
+            <h3 className="mt-1 text-sm font-semibold text-slate-950">Автоподготовка месяца</h3>
+            <p className="mt-1 text-xs text-slate-500">До {autopilotBatchLimit} текстов за запуск.</p>
+          </div>
+          {missingTextsCount > 0 && monthlyPlanId ? (
+            <form action={prepareMonthAutopilot}>
+              <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} />
+              {blueprintId ? <input type="hidden" name="blueprintId" value={blueprintId} /> : null}
+              <PendingSubmitButton pendingLabel="Готовим материалы..." className="rounded-full bg-violet-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-violet-700">
+                Подготовить месяц
+              </PendingSubmitButton>
+            </form>
+          ) : (
+            <span className="rounded-full bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-500">
+              {allTextsReady ? "Тексты готовы" : "Нужен месячный план"}
+            </span>
+          )}
+        </div>
+      </article>
+
+      <div className="mt-4">
+        <details>
+          <summary className="cursor-pointer text-xs font-semibold text-slate-400">Экспериментально: AI-помощник по плану</summary>
+          <MonthlyPlanRevisionCopilot monthlyPlanId={monthlyPlanId} proposal={latestRevisionProposal} />
+        </details>
       </div>
-      <div className="mt-5">
-        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-stone-400">Экспериментально</p>
-        <MonthlyPlanRevisionCopilot monthlyPlanId={monthlyPlanId} proposal={latestRevisionProposal} />
-      </div>
+      <GenerationJobsPanel jobs={jobs} />
     </section>
   );
 }
@@ -4811,6 +4915,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 jobs={generationJobs}
                 monthlyPlanId={selectedMonthlyPlan?.id}
                 blueprintId={latestBlueprint?.id}
+                clientName={latestBlueprint?.client.name}
+                month={selectedMonthlyPlan?.month}
+                planStatus={selectedMonthlyPlan?.status}
+                selectedMaterialId={params.material}
+                activeFilter={params.filter}
                 approvalsHref={workspaceLinks.approvals}
                 calendarHref={workspaceLinks.calendar}
                 assetsHref={workspaceLinks.assets}
