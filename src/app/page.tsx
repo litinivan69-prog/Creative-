@@ -10,6 +10,7 @@ import {
   createClientPortalLink,
   createCreativeAssetBrief,
   createClient,
+  duplicateClientForTesting,
   createPlannedContentItemManual,
   deleteCreativeVariant,
   deletePlannedContentItemManual,
@@ -40,6 +41,7 @@ import {
   rejectDraft,
   rejectCreativeVariant,
   rejectMonthlyPlanRevisionProposal,
+  rebuildMonthProduction,
   retryFailedProductionTasks,
   retryMaterialProductionStep,
   requestDraftChanges,
@@ -3795,14 +3797,28 @@ function DraftsView({
 	              </div>
             </div>
 	            <div className="mt-4 flex flex-wrap gap-2">
-	              <form action={prepareMonthProductionEngine}>
-	                <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} />
-	                {blueprintId ? <input type="hidden" name="blueprintId" value={blueprintId} /> : null}
-	                <PendingSubmitButton pendingLabel="Готовим месяц..." className="rounded-full bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:bg-slate-300">
-	                  Подготовить месяц
-	                </PendingSubmitButton>
-	              </form>
-	              <form action={prepareMonthAutopilot}>
+		              <form action={prepareMonthProductionEngine}>
+		                <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} />
+		                {blueprintId ? <input type="hidden" name="blueprintId" value={blueprintId} /> : null}
+		                <PendingSubmitButton pendingLabel="Готовим месяц..." className="rounded-full bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:bg-slate-300">
+		                  Подготовить месяц
+		                </PendingSubmitButton>
+		              </form>
+		              <details className="rounded-full border border-violet-100 bg-white px-3 py-2 text-xs font-semibold text-violet-700">
+		                <summary className="cursor-pointer">Переделать месяц</summary>
+		                <form action={rebuildMonthProduction} className="absolute z-10 mt-3 grid w-[min(92vw,440px)] gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left text-sm shadow-[0_18px_50px_rgba(88,75,135,0.16)]">
+		                  <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} />
+		                  <p className="font-semibold text-slate-950">Переделать месяц?</p>
+		                  <p className="text-slate-500">Текущий план сохранится как предыдущая версия. Новый месяц будет собран заново по текущему scope.</p>
+		                  <div className="flex flex-wrap gap-2">
+		                    <span className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-500">Отмена — закройте блок</span>
+		                    <PendingSubmitButton pendingLabel="Пересобираем..." className="rounded-full bg-violet-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-violet-700">
+		                      Переделать месяц
+		                    </PendingSubmitButton>
+		                  </div>
+		                </form>
+		              </details>
+		              <form action={prepareMonthAutopilot}>
 	                <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} />
 	                {blueprintId ? <input type="hidden" name="blueprintId" value={blueprintId} /> : null}
                 <PendingSubmitButton pendingLabel="Готовим тексты..." disabled={missingTextsCount === 0} className="rounded-full bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:bg-slate-300">
@@ -4873,8 +4889,38 @@ function ClientSetupWizard({
               {selectedClient ? selectedClient.industry || "Сфера бизнеса не указана" : "Сначала создайте клиента или выберите существующего."}
             </p>
           </div>
-          <a href={clientSetupHref("create_client", context)} className={secondaryButtonClass}>Создать нового клиента</a>
-        </div>
+	          <div className="flex flex-wrap gap-2">
+	            <a href={clientSetupHref("create_client", context)} className={secondaryButtonClass}>Создать нового клиента</a>
+	            {selectedClient ? (
+	              <form action={duplicateClientForTesting}>
+	                <input type="hidden" name="clientId" value={selectedClient.id} />
+	                <PendingSubmitButton pendingLabel="Копируем..." className={secondaryButtonClass}>
+	                  Дублировать для теста
+	                </PendingSubmitButton>
+	              </form>
+	            ) : null}
+	            {monthlyPlan ? (
+	              <details className="rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-800">
+	                <summary className="cursor-pointer">Переделать месяц</summary>
+	                <form action={rebuildMonthProduction} className="absolute z-10 mt-3 grid w-[min(92vw,440px)] gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left text-sm shadow-[0_18px_50px_rgba(88,75,135,0.16)]">
+	                  <input type="hidden" name="monthlyPlanId" value={monthlyPlan.id} />
+	                  <p className="font-semibold text-slate-950">Переделать месяц?</p>
+	                  <p className="text-slate-500">Текущий план сохранится как предыдущая версия. Новый месяц будет собран заново по текущему scope.</p>
+	                  <PendingSubmitButton pendingLabel="Пересобираем..." className="rounded-md bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:bg-slate-300">
+	                    Переделать месяц
+	                  </PendingSubmitButton>
+	                </form>
+	              </details>
+	            ) : blueprint ? (
+	              <form action={prepareMonthProductionEngine}>
+	                <input type="hidden" name="blueprintId" value={blueprint.id} />
+	                <PendingSubmitButton pendingLabel="Готовим месяц..." disabled={blueprint.nextRecommendedAction === "request_more_brief_data"} className="rounded-md bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:bg-slate-300">
+	                  Подготовить месяц
+	                </PendingSubmitButton>
+	              </form>
+	            ) : null}
+	          </div>
+	        </div>
         {clients.length > 0 ? (
           <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
             {clients.slice(0, 6).map((client) => {
@@ -5193,13 +5239,21 @@ function ClientsBasePage({
                 </div>
               </div>
 
-              <a
-                href={workspaceHref("client_setup", { ...workspaceContext, client: client.id, blueprint: clientBlueprint?.id })}
-                className="mt-4 inline-flex w-full items-center justify-center rounded-full border border-violet-100 bg-violet-50 px-4 py-2.5 text-sm font-semibold text-violet-700 transition hover:border-violet-200 hover:bg-violet-100"
-              >
-                Открыть настройку клиента
-              </a>
-            </article>
+	              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+	                <a
+	                  href={workspaceHref("client_setup", { ...workspaceContext, client: client.id, blueprint: clientBlueprint?.id })}
+	                  className="inline-flex items-center justify-center rounded-full bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700"
+	                >
+	                  Открыть
+	                </a>
+	                <form action={duplicateClientForTesting}>
+	                  <input type="hidden" name="clientId" value={client.id} />
+	                  <PendingSubmitButton pendingLabel="Копируем..." className="w-full rounded-full border border-violet-100 bg-white px-4 py-2.5 text-sm font-semibold text-violet-700 transition hover:border-violet-200 hover:bg-violet-50">
+	                    Дублировать для теста
+	                  </PendingSubmitButton>
+	                </form>
+	              </div>
+	            </article>
           );
         })}
       </div>
@@ -5449,7 +5503,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
     : null;
 
   const currentMonthlyPlan =
-    latestBlueprint?.monthlyPlans.find((plan) => plan.month === currentMonth()) ?? null;
+    latestBlueprint?.monthlyPlans.find((plan) => plan.month === currentMonth() && !["archived", "replaced"].includes(plan.status)) ?? null;
   const selectedMonthlyPlan =
     latestBlueprint?.monthlyPlans.find((plan) => plan.id === params.plan) ??
     currentMonthlyPlan ??

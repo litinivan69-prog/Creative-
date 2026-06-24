@@ -26,6 +26,7 @@ import {
   enforceProductionScope,
   normalizeScopeToken,
   productionScopeFromFormData,
+  type MonthlyProductionScope,
 } from "@/lib/production-scope";
 import { getAutopilotTextBatchLimit } from "@/lib/autopilot";
 import {
@@ -82,6 +83,10 @@ function workspaceLocation(
   if (options.portalLink) searchParams.set("portalLink", options.portalLink);
 
   return `/?${searchParams.toString()}`;
+}
+
+function jsonInput(value: Prisma.JsonValue): Prisma.InputJsonValue {
+  return value as Prisma.InputJsonValue;
 }
 
 function portalLocation(token: string, options: { error?: string; notice?: string } = {}) {
@@ -490,6 +495,210 @@ export async function createClient(formData: FormData) {
   redirect(workspaceLocation("client_setup", { clientId: client.id, setupStep: "brief", notice: "Клиент создан. Теперь добавьте бриф." }));
 }
 
+async function nextTestClientName(baseName: string) {
+  const testBase = `${baseName} · test`;
+  const existing = await prisma.client.findMany({
+    where: {
+      name: {
+        startsWith: testBase,
+      },
+    },
+    select: { name: true },
+  });
+  const names = new Set(existing.map((client) => client.name));
+  if (!names.has(testBase)) return testBase;
+
+  let index = 2;
+  while (names.has(`${testBase} ${index}`)) index += 1;
+  return `${testBase} ${index}`;
+}
+
+export async function duplicateClientForTesting(formData: FormData) {
+  const clientId = formText(formData, "clientId");
+  if (!clientId) errorRedirect("Выберите клиента для тестовой копии.", "clients");
+
+  const source = await prisma.client.findUnique({
+    where: { id: clientId },
+    include: {
+      briefs: {
+        orderBy: { createdAt: "desc" },
+        include: {
+          blueprint: {
+            include: {
+              selectedModules: true,
+              platformRecommendations: true,
+              automationPlans: true,
+              riskRules: true,
+            },
+          },
+        },
+      },
+      brandProfile: true,
+      brandAssets: {
+        where: { status: { not: "archived" } },
+      },
+      monthlyPlans: {
+        orderBy: { createdAt: "desc" },
+        select: { rawPlanJson: true },
+      },
+    },
+  });
+
+  if (!source) errorRedirect("Клиент для копирования не найден.", "clients");
+
+  const latestBrief = source.briefs[0];
+  const sourceBlueprint = latestBrief?.blueprint;
+  const copiedProductionScope = source.monthlyPlans
+    .map((plan) => productionScopeFromRawPlanJson(plan.rawPlanJson))
+    .find((scope): scope is MonthlyProductionScope => Boolean(scope));
+  const testName = await nextTestClientName(source.name);
+
+  const created = await prisma.$transaction(async (tx) => {
+    const client = await tx.client.create({
+      data: {
+        name: testName,
+        website: source.website,
+        industry: source.industry,
+      },
+    });
+
+    let brief = null;
+    if (latestBrief) {
+      brief = await tx.clientBrief.create({
+        data: {
+          clientId: client.id,
+          rawBrief: latestBrief.rawBrief,
+        },
+      });
+    }
+
+    if (brief && sourceBlueprint) {
+      await tx.clientPresenceBlueprint.create({
+        data: {
+          clientId: client.id,
+          briefId: brief.id,
+          clientSummary: sourceBlueprint.clientSummary,
+          businessGoals: jsonInput(sourceBlueprint.businessGoals),
+          missingBriefFields: jsonInput(sourceBlueprint.missingBriefFields),
+          assumptions: jsonInput(sourceBlueprint.assumptions),
+          confidenceScore: sourceBlueprint.confidenceScore,
+          nextRecommendedAction: sourceBlueprint.nextRecommendedAction,
+          notRecommendedPlatforms: jsonInput(sourceBlueprint.notRecommendedPlatforms),
+          recommendedMonthlyContentScope: jsonInput(sourceBlueprint.recommendedMonthlyContentScope),
+          totalContentUnitsMin: sourceBlueprint.totalContentUnitsMin,
+          totalContentUnitsMax: sourceBlueprint.totalContentUnitsMax,
+          publishingFrequency: jsonInput(sourceBlueprint.publishingFrequency),
+          integrationRequirements: jsonInput(sourceBlueprint.integrationRequirements),
+          humanReviewPolicy: jsonInput(sourceBlueprint.humanReviewPolicy),
+          approvalMode: sourceBlueprint.approvalMode,
+          managerAttentionLevel: sourceBlueprint.managerAttentionLevel,
+          rawBlueprintJson: jsonInput(copiedProductionScope
+            ? { ...jsonObject(sourceBlueprint.rawBlueprintJson), productionScope: copiedProductionScope }
+            : sourceBlueprint.rawBlueprintJson),
+          selectedModules: {
+            create: sourceBlueprint.selectedModules.map((module) => ({
+              moduleType: module.moduleType,
+              name: module.name,
+              purpose: module.purpose,
+              rationale: module.rationale,
+              priority: module.priority,
+              monthlyContentScope: jsonInput(module.monthlyContentScope),
+            })),
+          },
+          platformRecommendations: {
+            create: sourceBlueprint.platformRecommendations.map((platform) => ({
+              platformName: platform.platformName,
+              platformType: platform.platformType,
+              recommendation: platform.recommendation,
+              priority: platform.priority,
+              automationStatus: platform.automationStatus,
+              requiredCredentials: jsonInput(platform.requiredCredentials),
+              permissionsNeeded: jsonInput(platform.permissionsNeeded),
+              contentFormats: jsonInput(platform.contentFormats),
+              rationale: platform.rationale,
+              contentRole: platform.contentRole,
+              suggestedFrequency: platform.suggestedFrequency,
+              automationOpportunity: platform.automationOpportunity,
+            })),
+          },
+          automationPlans: {
+            create: sourceBlueprint.automationPlans.map((plan) => ({
+              name: plan.name,
+              trigger: plan.trigger,
+              action: plan.action,
+              humanCheckpoint: plan.humanCheckpoint,
+              toolCategory: plan.toolCategory,
+              priority: plan.priority,
+            })),
+          },
+          riskRules: {
+            create: sourceBlueprint.riskRules.map((rule) => ({
+              ruleName: rule.ruleName,
+              riskDescription: rule.riskDescription,
+              preventionAction: rule.preventionAction,
+              severity: rule.severity,
+              approvalRequired: rule.approvalRequired,
+            })),
+          },
+        },
+      });
+    }
+
+    if (source.brandProfile) {
+      await tx.clientBrandProfile.create({
+        data: {
+          clientId: client.id,
+          toneOfVoice: source.brandProfile.toneOfVoice,
+          keyMessages: source.brandProfile.keyMessages,
+          targetAudienceNotes: source.brandProfile.targetAudienceNotes,
+          brandColors: source.brandProfile.brandColors,
+          fonts: source.brandProfile.fonts,
+          visualStyle: source.brandProfile.visualStyle,
+          forbiddenTopics: source.brandProfile.forbiddenTopics,
+          requiredDisclaimers: source.brandProfile.requiredDisclaimers,
+          legalNotes: source.brandProfile.legalNotes,
+          productServiceNotes: source.brandProfile.productServiceNotes,
+        },
+      });
+    }
+
+    if (source.brandAssets.length > 0) {
+      await tx.clientBrandAsset.createMany({
+        data: source.brandAssets.map((asset) => ({
+          clientId: client.id,
+          assetType: asset.assetType,
+          title: asset.title,
+          description: asset.description,
+          fileUrl: asset.fileUrl,
+          storageKey: asset.storageKey,
+          storageProvider: asset.storageProvider,
+          mimeType: asset.mimeType,
+          fileSize: asset.fileSize,
+          textContent: asset.textContent,
+          sourceUrl: asset.sourceUrl,
+          status: asset.status,
+        })),
+      });
+    }
+
+    return client;
+  });
+
+  const copiedBlueprint = await prisma.clientPresenceBlueprint.findFirst({
+    where: { clientId: created.id },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+
+  revalidatePath("/");
+  redirect(workspaceLocation("client_setup", {
+    clientId: created.id,
+    blueprintId: copiedBlueprint?.id,
+    setupStep: copiedBlueprint ? "monthly_plan" : latestBrief ? "blueprint" : "brief",
+    notice: "Тестовая копия клиента создана.",
+  }));
+}
+
 export async function updateClientBrandProfile(formData: FormData) {
   const clientId = formText(formData, "clientId");
   if (!clientId) errorRedirect("Выберите клиента.", "brand_assets");
@@ -750,7 +959,15 @@ export async function generateBlueprint(formData: FormData) {
   redirect(workspaceLocation("client_setup", { blueprintId: createdId, clientId: brief.clientId, setupStep: "monthly_plan", notice: "Blueprint сгенерирован. Следующий шаг — месячный план." }));
 }
 
-async function createMonthlyPlanForBlueprint(blueprintId: string, formData: FormData) {
+async function createMonthlyPlanForBlueprint(
+  blueprintId: string,
+  formData: FormData,
+  options: {
+    forceNewVersion?: boolean;
+    prepareTextsAfterCreate?: boolean;
+    productionScopeOverride?: MonthlyProductionScope;
+  } = {},
+) {
   const blueprint = await prisma.clientPresenceBlueprint.findUnique({
     where: { id: blueprintId },
     include: {
@@ -776,9 +993,11 @@ async function createMonthlyPlanForBlueprint(blueprintId: string, formData: Form
   }
 
   const month = currentMonth();
-  const existingPlan = blueprint.monthlyPlans.find((plan) => plan.month === month);
+  const existingPlan = blueprint.monthlyPlans.find(
+    (plan) => plan.month === month && !["archived", "replaced"].includes(plan.status),
+  );
 
-  if (existingPlan) {
+  if (existingPlan && !options.forceNewVersion) {
     return {
       blueprintId: blueprint.id,
       monthlyPlanId: existingPlan.id,
@@ -794,10 +1013,20 @@ async function createMonthlyPlanForBlueprint(blueprintId: string, formData: Form
   const recommendedScope = jsonObject(blueprint.recommendedMonthlyContentScope) as {
     scopeByModule?: Array<{ unitType?: unknown }>;
   };
-  const productionScope = productionScopeFromFormData(formData, {
-    recommendedPlatforms,
-    scopeByModule: Array.isArray(recommendedScope.scopeByModule) ? recommendedScope.scopeByModule : [],
-  });
+  const hasScopeInput = [
+    "scopeAllowedPlatforms",
+    "scopeAllowedDeliverables",
+    "scopeForbiddenDeliverables",
+    "scopeCadenceRules",
+    "scopeStrategicThemes",
+    "scopeReputationTasks",
+  ].some((key) => Boolean(formText(formData, key)));
+  const formProductionScope = productionScopeFromFormData(formData, {
+      recommendedPlatforms,
+      scopeByModule: Array.isArray(recommendedScope.scopeByModule) ? recommendedScope.scopeByModule : [],
+    });
+  const productionScope = options.productionScopeOverride ??
+    (hasScopeInput ? formProductionScope : productionScopeFromRawPlanJson(blueprint.rawBlueprintJson) ?? formProductionScope);
   const allowedPlatformNames = recommendedPlatforms
     .map((platform) => platform.platformName)
     .filter((platformName) => productionScope.allowedPlatforms.length === 0 ||
@@ -840,6 +1069,21 @@ async function createMonthlyPlanForBlueprint(blueprintId: string, formData: Form
   let textPreparationNotice = "";
 
   try {
+    const nextVersion = options.forceNewVersion
+      ? Math.max(0, ...blueprint.monthlyPlans.filter((plan) => plan.month === month).map((plan) => plan.version)) + 1
+      : 1;
+
+    if (options.forceNewVersion) {
+      await prisma.monthlyOperatingPlan.updateMany({
+        where: {
+          blueprintId: blueprint.id,
+          month,
+          status: { notIn: ["archived", "replaced"] },
+        },
+        data: { status: "replaced" },
+      });
+    }
+
     const generated = await generateMonthlyOperatingPlan({
       clientName: blueprint.client.name,
       month,
@@ -871,6 +1115,7 @@ async function createMonthlyPlanForBlueprint(blueprintId: string, formData: Form
         clientId: blueprint.clientId,
         blueprintId: blueprint.id,
         month: plan.month,
+        version: nextVersion,
         status: plan.status,
         summary: plan.summary,
         totalPlannedUnits: plan.totalPlannedUnits,
@@ -937,8 +1182,10 @@ async function createMonthlyPlanForBlueprint(blueprintId: string, formData: Form
     });
 
     createdId = created.id;
-    const textPreparation = await prepareMissingTextsForMonthlyPlan(created.id);
-    textPreparationNotice = textPreparation.notice;
+    if (options.prepareTextsAfterCreate !== false) {
+      const textPreparation = await prepareMissingTextsForMonthlyPlan(created.id);
+      textPreparationNotice = textPreparation.notice;
+    }
   } catch (error) {
     const message =
       error instanceof Error
@@ -952,7 +1199,7 @@ async function createMonthlyPlanForBlueprint(blueprintId: string, formData: Form
     monthlyPlanId: createdId,
     clientId: blueprint.clientId,
     created: true,
-    notice: `Месячный план сгенерирован. ${textPreparationNotice || "Тексты будут подготовлены в Materials."}`,
+    notice: `${options.forceNewVersion ? "Месяц пересобран." : "Месячный план сгенерирован."} ${textPreparationNotice || "Тексты будут подготовлены в Materials."}`,
   };
 }
 
@@ -2890,6 +3137,55 @@ async function createMonthProductionRun(monthlyPlanId: string) {
   return refreshMonthProductionRunCounters(run.id);
 }
 
+function productionScopeFromRawPlanJson(value: Prisma.JsonValue): MonthlyProductionScope | undefined {
+  const raw = jsonObject(value) as { productionScope?: unknown };
+  const scope = raw.productionScope && typeof raw.productionScope === "object" && !Array.isArray(raw.productionScope)
+    ? raw.productionScope as Record<string, unknown>
+    : null;
+
+  if (!scope) return undefined;
+
+  return {
+    allowedPlatforms: stringArray(scope.allowedPlatforms),
+    allowedDeliverables: stringArray(scope.allowedDeliverables),
+    forbiddenDeliverables: stringArray(scope.forbiddenDeliverables),
+    cadenceRules: stringArray(scope.cadenceRules),
+    strategicThemes: stringArray(scope.strategicThemes),
+    reputationTasks: stringArray(scope.reputationTasks),
+  };
+}
+
+export async function rebuildMonthProduction(formData: FormData) {
+  const monthlyPlanId = formText(formData, "monthlyPlanId");
+  if (!monthlyPlanId) errorRedirect("Выберите месяц для пересборки.", "drafts");
+
+  const currentPlan = await prisma.monthlyOperatingPlan.findUnique({
+    where: { id: monthlyPlanId },
+    select: {
+      id: true,
+      blueprintId: true,
+      rawPlanJson: true,
+    },
+  });
+
+  if (!currentPlan) errorRedirect("Текущий месячный план не найден.", "drafts");
+
+  const created = await createMonthlyPlanForBlueprint(currentPlan.blueprintId, formData, {
+    forceNewVersion: true,
+    prepareTextsAfterCreate: false,
+    productionScopeOverride: productionScopeFromRawPlanJson(currentPlan.rawPlanJson),
+  });
+  await normalizeDatesForMonthlyPlan(created.monthlyPlanId);
+  const run = await createMonthProductionRun(created.monthlyPlanId);
+
+  revalidatePath("/");
+  redirect(workspaceLocation("drafts", {
+    blueprintId: created.blueprintId,
+    planId: created.monthlyPlanId,
+    notice: `Месяц пересобран как новая версия. Текущий план сохранён как предыдущая версия. Run: ${run.id}.`,
+  }));
+}
+
 async function scheduledPublicationForProductionItem(plannedContentItemId: string) {
   const item = await prisma.plannedContentItem.findUnique({
     where: { id: plannedContentItemId },
@@ -3078,7 +3374,9 @@ export async function prepareMonthProductionEngine(formData: FormData) {
       errorRedirect("Выберите Blueprint или месячный план для подготовки месяца.", "drafts");
     }
 
-    const created = await createMonthlyPlanForBlueprint(blueprintId, formData);
+    const created = await createMonthlyPlanForBlueprint(blueprintId, formData, {
+      prepareTextsAfterCreate: false,
+    });
     monthlyPlanId = created.monthlyPlanId;
     blueprintId = created.blueprintId;
   } else if (!blueprintId) {

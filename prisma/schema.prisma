@@ -128,6 +128,7 @@ model MonthlyOperatingPlan {
   clientId           String
   blueprintId        String
   month              String
+  version            Int                   @default(1)
   status             String
   summary            String
   totalPlannedUnits  Int
@@ -155,7 +156,8 @@ model MonthlyOperatingPlan {
 
   @@index([clientId])
   @@index([blueprintId])
-  @@unique([blueprintId, month])
+  @@index([month])
+  @@index([blueprintId, month])
 }
 
 model MonthlyPlanRevisionProposal {

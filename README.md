@@ -446,6 +446,14 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Materials shows the current production run, progress counters, current task, errors, and per-material retry controls.
 - Progress survives refresh and browser close; nothing is sent to the client automatically.
 
+## Hotfix/Product Client Test Duplication And Month Rebuild
+
+- Clients can be duplicated for testing with `Дублировать для теста`.
+- Test duplicates copy the client basics, latest brief, Blueprint configuration, brand profile, brand asset metadata/references, and saved production scope when available.
+- Test duplicates do not copy monthly plans, generated texts, visuals, scheduled publications, or client portal links.
+- `Переделать месяц` creates a new monthly plan version for the same client/month, marks the previous active plan as `replaced`, starts a fresh production run, and preserves old work.
+- The dashboard selects the latest non-replaced month by default, so managers can test or rebuild without manually re-entering the original brief.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.
