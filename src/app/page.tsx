@@ -31,6 +31,7 @@ import {
   markScheduledPublicationSkipped,
   prepareMonthCreativeBriefs,
   prepareMonthAutopilot,
+  prepareMonthProductionEngine,
   prepareMonthVisuals,
   proposeMonthlyPlanRevision,
   reviseMonthlyPlanWithCopilot,
@@ -3310,6 +3311,61 @@ function ManualPlanFields({ item }: { item?: MaterialPlannedItem }) {
   );
 }
 
+function MonthScopeFields({
+  defaultPlatforms = "VK\nTelegram\nДзен\nYandex Maps",
+  compact = false,
+}: {
+  defaultPlatforms?: string;
+  compact?: boolean;
+}) {
+  const textareaClass = `${inputClass} min-h-24 resize-y`;
+
+  return (
+    <section className={`rounded-2xl border border-violet-100 bg-violet-50/40 p-4 ${compact ? "text-xs" : ""}`}>
+      <div className="flex flex-col gap-1">
+        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">Scope месяца</p>
+        <p className="text-sm text-slate-500">AI будет работать только внутри этих площадок, форматов и запретов.</p>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <label className="grid gap-1.5 text-xs font-bold text-slate-600">
+          Активные каналы
+          <textarea name="scopeAllowedPlatforms" rows={4} defaultValue={defaultPlatforms} className={textareaClass} />
+        </label>
+        <label className="grid gap-1.5 text-xs font-bold text-slate-600">
+          Что делаем в этом месяце
+          <textarea
+            name="scopeAllowedDeliverables"
+            rows={4}
+            defaultValue={"VK post\nTelegram post\nДзен article\nPost visual\nArticle visual\nYandex Maps review reply draft"}
+            className={textareaClass}
+          />
+        </label>
+        <label className="grid gap-1.5 text-xs font-bold text-slate-600">
+          Что НЕ делаем
+          <textarea
+            name="scopeForbiddenDeliverables"
+            rows={4}
+            defaultValue={"рекламные макеты\nсайт бренда\nOzon Seller\nemail\nлендинг\nнаружная реклама"}
+            className={textareaClass}
+          />
+        </label>
+        <label className="grid gap-1.5 text-xs font-bold text-slate-600">
+          Темы месяца
+          <textarea name="scopeStrategicThemes" rows={4} placeholder="Yuhan, Cleanical, SPF, чувствительная кожа..." className={textareaClass} />
+        </label>
+        <label className="grid gap-1.5 text-xs font-bold text-slate-600">
+          Частота
+          <textarea name="scopeCadenceRules" rows={3} placeholder="VK: 2 поста/неделю&#10;Telegram: 3 поста/неделю" className={textareaClass} />
+        </label>
+        <label className="grid gap-1.5 text-xs font-bold text-slate-600">
+          Репутационные задачи
+          <textarea name="scopeReputationTasks" rows={3} placeholder="Yandex Maps: ответы на новые отзывы при наличии текста отзыва" className={textareaClass} />
+        </label>
+      </div>
+    </section>
+  );
+}
+
 function ManualMonthlyPlanEditor({
   monthlyPlanId,
   items,
@@ -3590,17 +3646,24 @@ function DraftsView({
                 <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">Подготовка месяца</p>
                 <h3 className="mt-1 text-lg font-semibold text-slate-950">Месячный пакет</h3>
               </div>
-              <div className="grid gap-2 sm:grid-cols-4 xl:min-w-[620px]">
-	                <MetricCard label="Тексты" value={missingTextsCount === 0 ? "готовы" : `${missingTextsCount} без текста`} detail={missingTextsCount === 0 ? "подготовлены" : "исключение"} tone={missingTextsCount === 0 ? "teal" : "amber"} />
-                <MetricCard label="ТЗ" value={`${briefsReadyCount}/${totalMaterialsCount}`} detail="креатив" />
-                <MetricCard label="Визуалы" value={`${visualsReadyCount}/${totalMaterialsCount}`} detail="производство" />
-                <MetricCard label="В пакет" value={`${readyForPackageCount}/${totalMaterialsCount}`} detail="готово" />
-              </div>
+	              <div className="grid gap-2 sm:grid-cols-4 xl:min-w-[620px]">
+	                <MetricCard label="Тексты" value={missingTextsCount === 0 ? "подготовлены" : `${missingTextsCount} ждут`} detail={missingTextsCount === 0 ? "готовы к проверке" : "нужно подготовить"} tone={missingTextsCount === 0 ? "teal" : "amber"} />
+	                <MetricCard label="ТЗ" value={briefsReadyCount >= totalMaterialsCount ? "готовы" : `${Math.max(totalMaterialsCount - briefsReadyCount, 0)} осталось`} detail="креатив" />
+	                <MetricCard label="Визуалы" value={visualsReadyCount >= briefsReadyCount && briefsReadyCount > 0 ? "готовы" : `${Math.max(briefsReadyCount - visualsReadyCount, 0)} в работе`} detail="производство" />
+	                <MetricCard label="В пакет" value={`${readyForPackageCount}`} detail="готово" />
+	              </div>
             </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <form action={prepareMonthAutopilot}>
-                <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} />
-                {blueprintId ? <input type="hidden" name="blueprintId" value={blueprintId} /> : null}
+	            <div className="mt-4 flex flex-wrap gap-2">
+	              <form action={prepareMonthProductionEngine}>
+	                <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} />
+	                {blueprintId ? <input type="hidden" name="blueprintId" value={blueprintId} /> : null}
+	                <PendingSubmitButton pendingLabel="Готовим месяц..." className="rounded-full bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:bg-slate-300">
+	                  Подготовить месяц
+	                </PendingSubmitButton>
+	              </form>
+	              <form action={prepareMonthAutopilot}>
+	                <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} />
+	                {blueprintId ? <input type="hidden" name="blueprintId" value={blueprintId} /> : null}
                 <PendingSubmitButton pendingLabel="Готовим тексты..." disabled={missingTextsCount === 0} className="rounded-full bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:bg-slate-300">
                   Подготовить тексты
                 </PendingSubmitButton>
@@ -4521,7 +4584,7 @@ type ClientSetupBlueprint = {
     industry: string | null;
   };
   selectedModules: Array<{ id: string }>;
-  platformRecommendations: Array<{ id: string; recommendation: string }>;
+  platformRecommendations: Array<{ id: string; platformName: string; recommendation: string }>;
   monthlyPlans: Array<{
     id: string;
     month: string;
@@ -4845,16 +4908,22 @@ function ClientSetupWizard({
                   <p className="text-sm font-semibold text-stone-950">{blueprint.client.name}</p>
                   <p className="mt-2 line-clamp-3 text-sm leading-6 text-stone-600">{blueprint.clientSummary}</p>
                 </article>
-                <form action={generateMonthlyPlan} className="grid max-w-sm gap-3">
-                  <input type="hidden" name="blueprintId" value={blueprint.id} />
-                  <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
-                    Месяц
-                    <input name="month" readOnly value={currentMonth()} className={inputClass} />
-                  </label>
-                  <PendingSubmitButton pendingLabel="Генерируем месячный план..." disabled={blueprint.nextRecommendedAction === "request_more_brief_data"} className={primaryButtonClass}>
-                    Сгенерировать месячный план
-                  </PendingSubmitButton>
-                </form>
+	                <form action={generateMonthlyPlan} className="grid gap-4">
+	                  <input type="hidden" name="blueprintId" value={blueprint.id} />
+	                  <div className="grid max-w-sm gap-3">
+	                    <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
+	                      Месяц
+	                      <input name="month" readOnly value={currentMonth()} className={inputClass} />
+	                    </label>
+	                  </div>
+	                  <MonthScopeFields defaultPlatforms={blueprint.platformRecommendations
+	                    .filter((platform) => platform.recommendation === "recommended")
+	                    .map((platform) => platform.platformName)
+	                    .join("\n") || undefined} />
+	                  <PendingSubmitButton pendingLabel="Генерируем месячный план..." disabled={blueprint.nextRecommendedAction === "request_more_brief_data"} className={primaryButtonClass}>
+	                    Сгенерировать месячный план
+	                  </PendingSubmitButton>
+	                </form>
                 {blueprint.nextRecommendedAction === "request_more_brief_data" ? (
                   <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-900">
                     Месячный план нельзя сгенерировать, пока не заполнены недостающие данные брифа.

@@ -428,6 +428,15 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Monthly plan generation now starts automatic text draft preparation for planned materials, with safe batching and retry copy when items remain.
 - The separate Creatives workspace is hidden from primary navigation because creative briefs and visuals are handled inside Materials.
 
+## Core-14 Month Production Engine
+
+- Month Production Engine prepares the monthly package from a strict production scope.
+- `Scope месяца` defines allowed platforms, allowed deliverables, forbidden deliverables, cadence, strategic themes, and reputation tasks.
+- Monthly plan generation sends this scope to OpenAI and then applies deterministic guardrails before saving.
+- AI is constrained by allowed platforms and deliverables; forbidden items such as advertising mockups, site/landing work, Ozon Seller tasks, and email campaigns are removed or blocked unless explicitly allowed.
+- `Подготовить месяц` runs the production chain for the selected plan: exact dates, text drafts, scheduled publication records, creative briefs, and a safe visual-generation chunk.
+- Client approval remains package-level later; nothing is sent to the client automatically.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.

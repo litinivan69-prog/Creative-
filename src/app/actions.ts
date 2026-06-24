@@ -22,6 +22,11 @@ import { CreativeAssetBriefSchema } from "@/lib/creative-asset-schema";
 import { normalizeMonthlyPlanDates, parseExactPlanDate } from "@/lib/monthly-plan-dates";
 import { validateMonthlyPlanForBlueprint } from "@/lib/monthly-plan-schema";
 import { MonthlyPlanRevisionProposalSchema } from "@/lib/monthly-plan-revision-schema";
+import {
+  enforceProductionScope,
+  normalizeScopeToken,
+  productionScopeFromFormData,
+} from "@/lib/production-scope";
 import { getAutopilotTextBatchLimit } from "@/lib/autopilot";
 import {
   createGenerationJob,
@@ -745,9 +750,7 @@ export async function generateBlueprint(formData: FormData) {
   redirect(workspaceLocation("client_setup", { blueprintId: createdId, clientId: brief.clientId, setupStep: "monthly_plan", notice: "Blueprint сгенерирован. Следующий шаг — месячный план." }));
 }
 
-export async function generateMonthlyPlan(formData: FormData) {
-  const blueprintId = formText(formData, "blueprintId");
-
+async function createMonthlyPlanForBlueprint(blueprintId: string, formData: FormData) {
   const blueprint = await prisma.clientPresenceBlueprint.findUnique({
     where: { id: blueprintId },
     include: {
@@ -776,12 +779,33 @@ export async function generateMonthlyPlan(formData: FormData) {
   const existingPlan = blueprint.monthlyPlans.find((plan) => plan.month === month);
 
   if (existingPlan) {
-    redirect(workspaceLocation("client_setup", { blueprintId: blueprint.id, planId: existingPlan.id, clientId: blueprint.clientId, setupStep: "brand", notice: "Месячный план за этот период уже существует." }));
+    return {
+      blueprintId: blueprint.id,
+      monthlyPlanId: existingPlan.id,
+      clientId: blueprint.clientId,
+      created: false,
+      notice: "Месячный план за этот период уже существует.",
+    };
   }
 
   const recommendedPlatforms = blueprint.platformRecommendations.filter(
     (platform) => platform.recommendation === "recommended",
   );
+  const recommendedScope = jsonObject(blueprint.recommendedMonthlyContentScope) as {
+    scopeByModule?: Array<{ unitType?: unknown }>;
+  };
+  const productionScope = productionScopeFromFormData(formData, {
+    recommendedPlatforms,
+    scopeByModule: Array.isArray(recommendedScope.scopeByModule) ? recommendedScope.scopeByModule : [],
+  });
+  const allowedPlatformNames = recommendedPlatforms
+    .map((platform) => platform.platformName)
+    .filter((platformName) => productionScope.allowedPlatforms.length === 0 ||
+      productionScope.allowedPlatforms.map(normalizeScopeToken).includes(normalizeScopeToken(platformName)));
+
+  if (allowedPlatformNames.length === 0) {
+    blueprintErrorRedirect(blueprint.id, "Scope месяца не содержит ни одной разрешённой площадки из Blueprint.");
+  }
 
   const humanReviewPolicy = jsonObject(blueprint.humanReviewPolicy) as {
     canAutopublish?: unknown;
@@ -819,14 +843,15 @@ export async function generateMonthlyPlan(formData: FormData) {
     const generated = await generateMonthlyOperatingPlan({
       clientName: blueprint.client.name,
       month,
-      allowedPlatformNames: recommendedPlatforms.map((platform) => platform.platformName),
+      allowedPlatformNames,
+      productionScope,
       blueprint: blueprintPayload,
       brandContext: await getClientBrandContext(blueprint.clientId),
     });
 
     const plan = validateMonthlyPlanForBlueprint(generated, {
       selectedModuleTypes: blueprint.selectedModules.map((module) => module.moduleType),
-      recommendedPlatformNames: recommendedPlatforms.map((platform) => platform.platformName),
+      recommendedPlatformNames: allowedPlatformNames,
       humanReviewPolicy: {
         defaultMode: humanReviewPolicy.defaultMode,
         canAutopublish: stringArray(humanReviewPolicy.canAutopublish),
@@ -838,6 +863,7 @@ export async function generateMonthlyPlan(formData: FormData) {
         approvalRequired: rule.approvalRequired,
       })),
     });
+    const scopeGuardrails = enforceProductionScope(plan, productionScope);
     normalizeMonthlyPlanDates(plan.plannedContentItems, plan.month);
 
     const created = await prisma.monthlyOperatingPlan.create({
@@ -851,7 +877,13 @@ export async function generateMonthlyPlan(formData: FormData) {
         approvalStrategy: plan.approvalStrategy,
         autopublishStrategy: plan.autopublishStrategy,
         riskSummary: plan.riskSummary,
-        rawPlanJson: plan as unknown as Prisma.InputJsonValue,
+        rawPlanJson: {
+          ...plan,
+          productionScope,
+          scopeGuardrails: {
+            removedReasons: scopeGuardrails.removedReasons,
+          },
+        } as unknown as Prisma.InputJsonValue,
         modules: {
           create: plan.activeModules.map((module) => ({
             moduleType: module.moduleType,
@@ -915,13 +947,26 @@ export async function generateMonthlyPlan(formData: FormData) {
     blueprintErrorRedirect(blueprint.id, `Не удалось сгенерировать месячный план: ${message}`);
   }
 
+  return {
+    blueprintId: blueprint.id,
+    monthlyPlanId: createdId,
+    clientId: blueprint.clientId,
+    created: true,
+    notice: `Месячный план сгенерирован. ${textPreparationNotice || "Тексты будут подготовлены в Materials."}`,
+  };
+}
+
+export async function generateMonthlyPlan(formData: FormData) {
+  const blueprintId = formText(formData, "blueprintId");
+  const result = await createMonthlyPlanForBlueprint(blueprintId, formData);
+
   revalidatePath("/");
   redirect(workspaceLocation("client_setup", {
-    blueprintId: blueprint.id,
-    planId: createdId,
-    clientId: blueprint.clientId,
+    blueprintId: result.blueprintId,
+    planId: result.monthlyPlanId,
+    clientId: result.clientId,
     setupStep: "brand",
-    notice: `Месячный план сгенерирован. ${textPreparationNotice || "Тексты будут подготовлены в Materials."} Теперь заполните библиотеку бренда.`,
+    notice: `${result.notice} Теперь заполните библиотеку бренда.`,
   }));
 }
 
@@ -2207,6 +2252,147 @@ async function prepareMissingTextsForMonthlyPlan(monthlyPlanId: string) {
   }
 }
 
+async function ensureScheduledPublicationsForMonthlyPlan(monthlyPlanId: string) {
+  const plan = await prisma.monthlyOperatingPlan.findUnique({
+    where: { id: monthlyPlanId },
+    include: {
+      plannedContentItems: {
+        include: {
+          contentDraft: true,
+          scheduledPublications: {
+            where: {
+              status: { not: "published" },
+            },
+            select: { id: true },
+          },
+        },
+      },
+    },
+  });
+
+  if (!plan) {
+    return {
+      blueprintId: "",
+      monthlyPlanId,
+      createdCount: 0,
+      skippedCount: 0,
+      notice: "Месячный план для календаря не найден.",
+      hasFailures: true,
+    };
+  }
+
+  let createdCount = 0;
+  let skippedCount = 0;
+
+  for (const item of plan.plannedContentItems) {
+    if (!item.contentDraft || item.scheduledPublications.length > 0) {
+      skippedCount += 1;
+      continue;
+    }
+
+    await prisma.scheduledPublication.create({
+      data: {
+        clientId: plan.clientId,
+        blueprintId: plan.blueprintId,
+        monthlyPlanId: plan.id,
+        plannedContentItemId: item.id,
+        contentDraftId: item.contentDraft.id,
+        platformName: item.platformName,
+        format: item.format,
+        topic: item.topic,
+        scheduledDate: item.plannedDate,
+        scheduledTime: null,
+        timezone: null,
+        status: "scheduled",
+        publishMode: "manual",
+        notes: null,
+      },
+    });
+    createdCount += 1;
+  }
+
+  return {
+    blueprintId: plan.blueprintId,
+    monthlyPlanId: plan.id,
+    createdCount,
+    skippedCount,
+    notice: createdCount > 0
+      ? `Календарь заполнен: ${createdCount} материалов поставлено в расписание.`
+      : "Все материалы уже есть в календаре.",
+    hasFailures: false,
+  };
+}
+
+async function normalizeDatesForMonthlyPlan(monthlyPlanId: string) {
+  const monthlyPlan = await prisma.monthlyOperatingPlan.findUnique({
+    where: { id: monthlyPlanId },
+    select: {
+      id: true,
+      month: true,
+      blueprintId: true,
+      plannedContentItems: {
+        orderBy: { id: "asc" },
+        select: {
+          id: true,
+          plannedDate: true,
+          week: true,
+          platformName: true,
+          format: true,
+        },
+      },
+    },
+  });
+
+  if (!monthlyPlan) {
+    return {
+      blueprintId: "",
+      monthlyPlanId,
+      changedCount: 0,
+      notice: "Месячный план для расстановки дат не найден.",
+      hasFailures: true,
+    };
+  }
+
+  const items = monthlyPlan.plannedContentItems.map((item) => ({ ...item }));
+  const datesBefore = new Map(items.map((item) => [item.id, item.plannedDate]));
+  normalizeMonthlyPlanDates(items, monthlyPlan.month);
+  const changedItems = items.filter((item) => datesBefore.get(item.id) !== item.plannedDate);
+
+  if (changedItems.length > 0) {
+    await prisma.$transaction(async (tx) => {
+      for (const item of changedItems) {
+        await tx.plannedContentItem.update({
+          where: { id: item.id },
+          data: {
+            plannedDate: item.plannedDate,
+            week: item.week,
+          },
+        });
+
+        await tx.scheduledPublication.updateMany({
+          where: {
+            plannedContentItemId: item.id,
+            status: { not: "published" },
+          },
+          data: {
+            scheduledDate: item.plannedDate,
+          },
+        });
+      }
+    });
+  }
+
+  return {
+    blueprintId: monthlyPlan.blueprintId,
+    monthlyPlanId: monthlyPlan.id,
+    changedCount: changedItems.length,
+    notice: changedItems.length > 0
+      ? `Даты расставлены: ${changedItems.length} материалов.`
+      : "Даты уже расставлены.",
+    hasFailures: false,
+  };
+}
+
 export async function prepareMonthAutopilot(formData: FormData) {
   const monthlyPlanId = formText(formData, "monthlyPlanId");
 
@@ -2228,11 +2414,10 @@ export async function prepareMonthAutopilot(formData: FormData) {
   }));
 }
 
-export async function prepareMonthCreativeBriefs(formData: FormData) {
-  const monthlyPlanId = formText(formData, "monthlyPlanId");
-
-  if (!monthlyPlanId) {
-    errorRedirect("Не выбран месячный план для подготовки ТЗ.", "drafts");
+async function prepareMissingCreativeBriefsForMonthlyPlan(monthlyPlanId: string) {
+  const schedulePreparation = await ensureScheduledPublicationsForMonthlyPlan(monthlyPlanId);
+  if (schedulePreparation.hasFailures) {
+    return schedulePreparation;
   }
 
   const plan = await prisma.monthlyOperatingPlan.findUnique({
@@ -2256,7 +2441,12 @@ export async function prepareMonthCreativeBriefs(formData: FormData) {
   });
 
   if (!plan) {
-    errorRedirect("Месячный план для подготовки ТЗ не найден.", "drafts");
+    return {
+      blueprintId: "",
+      monthlyPlanId,
+      notice: "Месячный план для подготовки ТЗ не найден.",
+      hasFailures: true,
+    };
   }
 
   const candidates = plan.scheduledPublications
@@ -2328,11 +2518,32 @@ export async function prepareMonthCreativeBriefs(formData: FormData) {
   ).length - createdCount;
   const notice = `Подготовлено ${createdCount} ТЗ, пропущено ${Math.max(skippedCount, 0)}. Осталось ${Math.max(remainingCount, 0)}.`;
 
+  return {
+    blueprintId: plan.blueprintId,
+    monthlyPlanId: plan.id,
+    notice,
+    hasFailures: failedCount > 0,
+  };
+}
+
+export async function prepareMonthCreativeBriefs(formData: FormData) {
+  const monthlyPlanId = formText(formData, "monthlyPlanId");
+
+  if (!monthlyPlanId) {
+    errorRedirect("Не выбран месячный план для подготовки ТЗ.", "drafts");
+  }
+
+  const result = await prepareMissingCreativeBriefsForMonthlyPlan(monthlyPlanId);
+
+  if (!result.blueprintId) {
+    errorRedirect(result.notice, "drafts");
+  }
+
   revalidatePath("/");
   redirect(workspaceLocation("drafts", {
-    blueprintId: plan.blueprintId,
-    planId: plan.id,
-    ...(failedCount > 0 ? { error: `${notice} Ошибок: ${failedCount}.` } : { notice }),
+    blueprintId: result.blueprintId,
+    planId: result.monthlyPlanId,
+    ...(result.hasFailures ? { error: result.notice } : { notice: result.notice }),
   }));
 }
 
@@ -2469,13 +2680,7 @@ async function generateVisualForCreativeAssetId(creativeAssetId: string) {
   }
 }
 
-export async function prepareMonthVisuals(formData: FormData) {
-  const monthlyPlanId = formText(formData, "monthlyPlanId");
-
-  if (!monthlyPlanId) {
-    errorRedirect("Не выбран месячный план для подготовки визуалов.", "drafts");
-  }
-
+async function prepareMissingVisualsForMonthlyPlan(monthlyPlanId: string) {
   const plan = await prisma.monthlyOperatingPlan.findUnique({
     where: { id: monthlyPlanId },
     include: {
@@ -2490,7 +2695,12 @@ export async function prepareMonthVisuals(formData: FormData) {
   });
 
   if (!plan) {
-    errorRedirect("Месячный план для подготовки визуалов не найден.", "drafts");
+    return {
+      blueprintId: "",
+      monthlyPlanId,
+      notice: "Месячный план для подготовки визуалов не найден.",
+      hasFailures: true,
+    };
   }
 
   const candidates = plan.creativeAssets.filter((asset) => asset.generatedVariants.length === 0).slice(0, 1);
@@ -2505,11 +2715,88 @@ export async function prepareMonthVisuals(formData: FormData) {
   const remainingCount = Math.max(0, plan.creativeAssets.filter((asset) => asset.generatedVariants.length === 0).length - createdCount);
   const notice = `Подготовлено ${createdCount} визуалов. Осталось ${remainingCount}. В MVP визуалы готовятся по одному за запуск.`;
 
+  return {
+    blueprintId: plan.blueprintId,
+    monthlyPlanId: plan.id,
+    notice,
+    hasFailures: failedCount > 0,
+  };
+}
+
+export async function prepareMonthVisuals(formData: FormData) {
+  const monthlyPlanId = formText(formData, "monthlyPlanId");
+
+  if (!monthlyPlanId) {
+    errorRedirect("Не выбран месячный план для подготовки визуалов.", "drafts");
+  }
+
+  const result = await prepareMissingVisualsForMonthlyPlan(monthlyPlanId);
+
+  if (!result.blueprintId) {
+    errorRedirect(result.notice, "drafts");
+  }
+
   revalidatePath("/");
   redirect(workspaceLocation("drafts", {
-    blueprintId: plan.blueprintId,
-    planId: plan.id,
-    ...(failedCount > 0 ? { error: `${notice} Ошибок: ${failedCount}.` } : { notice }),
+    blueprintId: result.blueprintId,
+    planId: result.monthlyPlanId,
+    ...(result.hasFailures ? { error: result.notice } : { notice: result.notice }),
+  }));
+}
+
+export async function prepareMonthProductionEngine(formData: FormData) {
+  let monthlyPlanId = formText(formData, "monthlyPlanId");
+  let blueprintId = formText(formData, "blueprintId");
+  const notices: string[] = [];
+  const errors: string[] = [];
+
+  if (!monthlyPlanId) {
+    if (!blueprintId) {
+      errorRedirect("Выберите Blueprint или месячный план для подготовки месяца.", "drafts");
+    }
+
+    const created = await createMonthlyPlanForBlueprint(blueprintId, formData);
+    monthlyPlanId = created.monthlyPlanId;
+    blueprintId = created.blueprintId;
+    notices.push(created.notice);
+  } else if (!blueprintId) {
+    const plan = await prisma.monthlyOperatingPlan.findUnique({
+      where: { id: monthlyPlanId },
+      select: { blueprintId: true },
+    });
+    if (!plan) {
+      errorRedirect("Месячный план для подготовки не найден.", "drafts");
+    }
+    blueprintId = plan.blueprintId;
+  }
+
+  const datePreparation = await normalizeDatesForMonthlyPlan(monthlyPlanId);
+  if (datePreparation.hasFailures) errors.push(datePreparation.notice);
+  else notices.push(datePreparation.notice);
+
+  const textPreparation = await prepareMissingTextsForMonthlyPlan(monthlyPlanId);
+  if (textPreparation.hasFailures) errors.push(textPreparation.notice);
+  else notices.push(textPreparation.notice);
+
+  const schedulePreparation = await ensureScheduledPublicationsForMonthlyPlan(monthlyPlanId);
+  if (schedulePreparation.hasFailures) errors.push(schedulePreparation.notice);
+  else notices.push(schedulePreparation.notice);
+
+  const briefPreparation = await prepareMissingCreativeBriefsForMonthlyPlan(monthlyPlanId);
+  if (briefPreparation.hasFailures) errors.push(briefPreparation.notice);
+  else notices.push(briefPreparation.notice);
+
+  const visualPreparation = await prepareMissingVisualsForMonthlyPlan(monthlyPlanId);
+  if (visualPreparation.hasFailures) errors.push(visualPreparation.notice);
+  else notices.push(visualPreparation.notice);
+
+  revalidatePath("/");
+  redirect(workspaceLocation("drafts", {
+    blueprintId,
+    planId: monthlyPlanId,
+    ...(errors.length > 0
+      ? { error: `Подготовка месяца выполнена с ошибками: ${errors.join(" ")}` }
+      : { notice: `Подготовка месяца запущена. ${notices.join(" ")}` }),
   }));
 }
 
