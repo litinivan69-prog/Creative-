@@ -62,6 +62,7 @@ import {
 } from "@/app/actions";
 import { BrandAssetFileInput } from "@/app/brand-asset-file-input";
 import { ClientPortalView } from "@/app/client-portal-view";
+import { MonthProductionAutoRunner } from "@/app/month-production-auto-runner";
 import { PendingSubmitButton } from "@/app/pending-submit-button";
 import { getAutopilotTextBatchLimit } from "@/lib/autopilot";
 import {
@@ -1479,23 +1480,29 @@ function MonthProductionRunPanel({ run, plan }: { run?: MonthProductionRunPrevie
   const briefTasks = run.tasks.filter((task) => task.taskType === "generate_brief");
   const visualTasks = run.tasks.filter((task) => task.taskType === "generate_visual");
   const failedTasks = run.tasks.filter((task) => task.status === "failed");
-  const active = ["queued", "running", "paused", "completed_with_errors"].includes(run.status) && run.completedTasks + run.failedTasks < run.totalTasks;
+  const hasQueuedTasks = run.tasks.some((task) => task.status === "queued");
+  const autoRunning = ["queued", "running"].includes(run.status) && hasQueuedTasks && run.completedTasks + run.failedTasks < run.totalTasks;
+  const canResume = run.status === "paused" && hasQueuedTasks;
   const stageCounts = (tasks: MonthProductionTaskPreview[]) => `${tasks.filter((task) => task.status === "completed").length}/${tasks.length}`;
-  const primaryActionLabel = failedTasks.length > 0 && !active
-    ? "Повторить ошибки"
-    : active
-      ? run.status === "running" ? "Смотреть прогресс" : "Продолжить подготовку"
-      : run.status === "completed" ? "Открыть месяц" : "Проверить состояние";
+  const stateTone = run.status === "completed"
+    ? "green"
+    : run.status === "paused" || run.failedTasks > 0
+      ? "rose"
+      : autoRunning
+        ? "teal"
+        : "neutral";
 
   return (
     <section className="rounded-[24px] border border-violet-100 bg-white p-4 shadow-[0_10px_28px_rgba(88,75,135,0.055)]">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">Производство месяца</p>
-          <h3 className="mt-1 text-lg font-semibold text-slate-950">Подготовка месяца</h3>
-          <p className="mt-1 text-sm text-slate-500">Можно закрыть страницу, прогресс сохранится. Готовые материалы уже доступны.</p>
+          <h3 className="mt-1 text-lg font-semibold text-slate-950">Подготовка месяца · {progress}%</h3>
+          <p className="mt-1 text-sm text-slate-500">
+            Готовые материалы уже доступны. Если закрыть страницу, подготовка продолжится после возвращения.
+          </p>
         </div>
-        <StatusBadge tone={run.status === "completed" ? "green" : run.failedTasks > 0 ? "rose" : active ? "teal" : "neutral"}>
+        <StatusBadge tone={stateTone}>
           {productionStateLabel(state)}
         </StatusBadge>
       </div>
@@ -1525,18 +1532,30 @@ function MonthProductionRunPanel({ run, plan }: { run?: MonthProductionRunPrevie
       )}
       <div className="mt-4 rounded-2xl bg-slate-50 p-3 text-sm text-slate-600">
         {nextTask ? (
-          <p>Сейчас в очереди: <span className="font-semibold text-slate-950">{formatProductionTaskType(nextTask.taskType)}</span> · {nextTask.title}</p>
+          <p>Сейчас создаётся: <span className="font-semibold text-slate-950">{formatProductionTaskType(nextTask.taskType)}</span> · {nextTask.title}</p>
         ) : (
-          <p>{run.failedTasks > 0 ? "Производство завершено с ошибками." : "Производство месяца завершено."}</p>
+          <p>{run.failedTasks > 0 ? "Производство завершено с ошибками. Ошибки можно повторить." : "Месяц подготовлен."}</p>
         )}
         <p className="mt-1 text-xs font-semibold text-slate-400">Стадия: {formatProductionStage(run.currentStage)} · {run.completedTasks}/{run.totalTasks} задач готово</p>
       </div>
+      <MonthProductionAutoRunner
+        productionRunId={run.id}
+        enabled={autoRunning}
+        hasQueuedTasks={hasQueuedTasks}
+        status={run.status}
+        currentStage={run.currentStage}
+      />
       <div className="mt-4 flex flex-wrap gap-2">
-        {active ? (
+        {autoRunning ? (
+          <button disabled className="rounded-full bg-violet-100 px-4 py-2 text-sm font-semibold text-violet-700">
+            Подготовка идёт...
+          </button>
+        ) : null}
+        {canResume ? (
           <form action={processNextMonthProductionTasks}>
             <input type="hidden" name="productionRunId" value={run.id} />
             <PendingSubmitButton pendingLabel="Продолжаем..." className="rounded-full bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700">
-              {primaryActionLabel}
+              Возобновить после остановки
             </PendingSubmitButton>
           </form>
         ) : null}

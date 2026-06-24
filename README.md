@@ -441,7 +441,7 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 
 - `Подготовить месяц` now creates a persisted `MonthProductionRun` and task queue instead of blocking on the whole month in one request.
 - Month production tasks are split by stage: texts, creative briefs, visuals, and AI quality check.
-- `Продолжить подготовку` processes a safe small batch, so ready materials appear progressively while the rest stays queued.
+- The production panel auto-runs safe small batches while the manager watches progress, so ready materials appear progressively without repeated manual clicks.
 - Failed tasks are saved independently and can be retried without rolling back completed texts, briefs, or visuals.
 - Materials shows the current production run, progress counters, current task, errors, and per-material retry controls.
 - Progress survives refresh and browser close; nothing is sent to the client automatically.
@@ -462,6 +462,14 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Materials shows a clear `Подготовка месяца` progress panel with plan status, date status, text/TZ/visual counters, current task, error count, and recovery actions.
 - Raw duplicate-plan and timeout/quota errors are converted into manager-friendly Russian messages.
 - Test clients can safely reset and rebuild the test month without affecting the original client.
+
+## Critical Hotfix Automatic Month Production
+
+- After one click on `Подготовить месяц`, the production panel automatically processes queued batches for texts, creative briefs, visuals, and quality check while the screen is open.
+- The manager no longer has to click `Продолжить` for each batch; normal running state shows `Подготовка идёт...` with percentage progress.
+- Refreshing or reopening the Materials screen resumes unfinished queued work without creating duplicate plans, runs, texts, briefs, or visuals.
+- Critical quota/billing/rate-limit errors pause production with a Russian message; ordinary task failures are saved and can be retried.
+- The MVP uses client-side polling instead of an external queue service; if the browser is closed, preparation continues automatically after the manager returns to the production screen.
 
 ## Automation Sprint 0
 

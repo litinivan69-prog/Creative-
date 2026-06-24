@@ -3030,6 +3030,10 @@ async function refreshMonthProductionRunCounters(productionRunId: string) {
     where: { productionRunId },
     select: { status: true, stage: true },
   });
+  const currentRun = await prisma.monthProductionRun.findUnique({
+    where: { id: productionRunId },
+    select: { status: true },
+  });
   const completedTasks = tasks.filter((task) => task.status === "completed").length;
   const failedTasks = tasks.filter((task) => task.status === "failed").length;
   const runningTask = tasks.find((task) => task.status === "running");
@@ -3040,7 +3044,9 @@ async function refreshMonthProductionRunCounters(productionRunId: string) {
   const currentStage = allDone ? "done" : runningTask?.stage ?? nextQueuedTask?.stage ?? "done";
   const status = allDone
     ? failedTasks > 0 ? "completed_with_errors" : "completed"
-    : runningTask || nextQueuedTask ? "running" : "queued";
+    : currentRun?.status === "paused"
+      ? "paused"
+      : runningTask || nextQueuedTask ? "running" : "queued";
 
   return prisma.monthProductionRun.update({
     where: { id: productionRunId },
@@ -3053,6 +3059,71 @@ async function refreshMonthProductionRunCounters(productionRunId: string) {
       completedAt: allDone ? new Date() : null,
     },
   });
+}
+
+async function monthProductionProgressSnapshot(productionRunId: string) {
+  const run = await prisma.monthProductionRun.findUnique({
+    where: { id: productionRunId },
+    include: {
+      tasks: {
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          plannedContentItemId: true,
+          stage: true,
+          taskType: true,
+          status: true,
+          title: true,
+          errorMessage: true,
+          startedAt: true,
+          completedAt: true,
+        },
+      },
+    },
+  });
+
+  if (!run) {
+    return {
+      ok: false,
+      status: "missing",
+      message: "Production run не найден.",
+      percent: 0,
+      totalTasks: 0,
+      completedTasks: 0,
+      failedTasks: 0,
+      currentStage: "planning",
+      hasQueuedTasks: false,
+    };
+  }
+
+  const percent = run.totalTasks > 0
+    ? Math.floor(((run.completedTasks + run.failedTasks) / run.totalTasks) * 100)
+    : 0;
+  const currentTask = run.tasks.find((task) => task.status === "running") ??
+    run.tasks.find((task) => task.status === "queued") ??
+    null;
+
+  return {
+    ok: true,
+    id: run.id,
+    status: run.status,
+    message: run.errorMessage,
+    percent,
+    totalTasks: run.totalTasks,
+    completedTasks: run.completedTasks,
+    failedTasks: run.failedTasks,
+    currentStage: run.currentStage,
+    currentTask: currentTask
+      ? {
+          id: currentTask.id,
+          title: currentTask.title,
+          taskType: currentTask.taskType,
+          stage: currentTask.stage,
+          status: currentTask.status,
+        }
+      : null,
+    hasQueuedTasks: run.tasks.some((task) => task.status === "queued"),
+  };
 }
 
 async function markStaleProductionTasksRecoverable(productionRunId: string) {
@@ -3477,6 +3548,16 @@ async function processMonthProductionTask(taskId: string) {
       where: { id: task.id },
       data: { status: "failed", errorMessage: message, completedAt: new Date() },
     });
+    if (isCriticalProductionErrorMessage(message)) {
+      await prisma.monthProductionRun.update({
+        where: { id: task.productionRunId },
+        data: {
+          status: "paused",
+          currentStage: task.stage,
+          errorMessage: message,
+        },
+      });
+    }
   }
 }
 
@@ -3503,6 +3584,16 @@ function friendlyProductionErrorMessage(error: unknown) {
   }
 
   return message || "Не удалось выполнить задачу производства. Уже созданные материалы сохранены.";
+}
+
+function isCriticalProductionErrorMessage(message: string) {
+  const lower = message.toLowerCase();
+
+  return lower.includes("api-лимит") ||
+    lower.includes("quota") ||
+    lower.includes("billing") ||
+    lower.includes("rate limit") ||
+    lower.includes("insufficient_quota");
 }
 
 export async function prepareOrContinueMonthProduction(formData: FormData) {
@@ -3548,16 +3639,31 @@ export async function prepareMonthProductionEngine(formData: FormData) {
   return prepareOrContinueMonthProduction(formData);
 }
 
-export async function processNextMonthProductionTasks(formData: FormData) {
-  const productionRunId = formText(formData, "productionRunId");
-  if (!productionRunId) errorRedirect("Production run не выбран.", "drafts");
+async function processNextMonthProductionBatchInternal(productionRunId: string) {
+  if (!productionRunId) {
+    return {
+      ok: false,
+      status: "missing",
+      message: "Production run не выбран.",
+      percent: 0,
+      totalTasks: 0,
+      completedTasks: 0,
+      failedTasks: 0,
+      currentStage: "planning",
+      hasQueuedTasks: false,
+    };
+  }
 
   const run = await prisma.monthProductionRun.findUnique({ where: { id: productionRunId } });
-  if (!run) errorRedirect("Production run не найден.", "drafts");
+  if (!run) return monthProductionProgressSnapshot(productionRunId);
+
+  if (["completed", "completed_with_errors", "paused"].includes(run.status)) {
+    return monthProductionProgressSnapshot(run.id);
+  }
 
   await prisma.monthProductionRun.update({
     where: { id: run.id },
-    data: { status: "running", startedAt: run.startedAt ?? new Date() },
+    data: { status: "running", errorMessage: null, startedAt: run.startedAt ?? new Date() },
   });
   await markStaleProductionTasksRecoverable(run.id);
 
@@ -3573,9 +3679,36 @@ export async function processNextMonthProductionTasks(formData: FormData) {
 
   for (const task of batch) {
     await processMonthProductionTask(task.id);
+    const currentRun = await prisma.monthProductionRun.findUnique({
+      where: { id: run.id },
+      select: { status: true },
+    });
+    if (currentRun?.status === "paused") {
+      await refreshMonthProductionRunCounters(run.id);
+      return monthProductionProgressSnapshot(run.id);
+    }
   }
 
-  const updatedRun = await refreshMonthProductionRunCounters(run.id);
+  await refreshMonthProductionRunCounters(run.id);
+
+  return monthProductionProgressSnapshot(run.id);
+}
+
+export async function processNextMonthProductionBatch(productionRunId: string) {
+  const snapshot = await processNextMonthProductionBatchInternal(productionRunId);
+  revalidatePath("/");
+
+  return snapshot;
+}
+
+export async function processNextMonthProductionTasks(formData: FormData) {
+  const productionRunId = formText(formData, "productionRunId");
+  if (!productionRunId) errorRedirect("Production run не выбран.", "drafts");
+
+  const run = await prisma.monthProductionRun.findUnique({ where: { id: productionRunId } });
+  if (!run) errorRedirect("Production run не найден.", "drafts");
+
+  const updatedRun = await processNextMonthProductionBatchInternal(run.id);
 
   revalidatePath("/");
   redirect(workspaceLocation("drafts", {
@@ -3583,7 +3716,7 @@ export async function processNextMonthProductionTasks(formData: FormData) {
     planId: run.monthlyPlanId,
     ...(updatedRun.status === "completed" || updatedRun.status === "completed_with_errors"
       ? { notice: updatedRun.status === "completed" ? "Подготовка месяца завершена." : "Подготовка месяца завершена с ошибками. Ошибки можно повторить." }
-      : { notice: `Продолжили подготовку месяца: ${updatedRun.completedTasks}/${updatedRun.totalTasks} задач готово.` }),
+      : { notice: `Подготовка месяца продолжается автоматически: ${updatedRun.completedTasks}/${updatedRun.totalTasks} задач готово.` }),
   }));
 }
 
@@ -3604,7 +3737,7 @@ export async function retryFailedProductionTasks(formData: FormData) {
   redirect(workspaceLocation("drafts", {
     blueprintId: run.blueprintId,
     planId: run.monthlyPlanId,
-    notice: "Ошибки возвращены в очередь. Нажмите «Продолжить подготовку».",
+    notice: "Ошибки возвращены в очередь. Подготовка продолжится автоматически, пока открыт экран месяца.",
   }));
 }
 
