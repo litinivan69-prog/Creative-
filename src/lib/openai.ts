@@ -446,6 +446,8 @@ function textRenderingInstruction(input: CreativeVisualVariantInput, mode: Visua
 }
 
 function premiumVisualPrompt(input: CreativeVisualVariantInput, textMode: VisualTextMode) {
+  const isCarouselSlide = input.creativeAsset.assetType === "carousel_slide";
+
   return [
     "Create one premium client-facing social media visual. Act as a senior art director, advertising photographer, and SMM designer.",
     `Client: ${input.clientName}.`,
@@ -468,6 +470,9 @@ function premiumVisualPrompt(input: CreativeVisualVariantInput, textMode: Visual
     input.brandContext ? `Brand context / Контекст бренда клиента:\n${input.brandContext}` : null,
     `Draft title: ${input.contentDraft.draftTitle}.`,
     `Draft context: ${input.contentDraft.draftBody}`,
+    isCarouselSlide
+      ? "Carousel guardrail: generate only this one carousel slide/card. Do not include multiple slides in one image. Do not create a collage, grid, storyboard, or preview of all cards. Focus only on the current slide number and message described in the creative brief title/brief/textOnAsset."
+      : null,
     "Produce a realistic premium advertising photograph or high-end editorial visual appropriate to the asset type. Use an intentional focal point, clean composition, restrained color discipline, thoughtful lighting, and platform-native framing.",
     "Avoid cheap stock-photo aesthetics, generic AI poster composition, decorative clutter, fake clinic or company names, fake logos, fake text, fake certificates, fake reviews, unsupported medical claims, guarantees, before-and-after comparisons, and unrealistic treatment or business results.",
     "Do not invent a logo. If logo is needed, leave clean space for logo placement unless real logo integration is available.",

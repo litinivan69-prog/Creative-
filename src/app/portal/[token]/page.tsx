@@ -17,7 +17,7 @@ function PortalError({ children }: { children: React.ReactNode }) {
   return (
     <main className="min-h-screen bg-[#f5f7f6] px-4 py-10 sm:px-6">
       <section className="mx-auto max-w-xl rounded-lg border border-rose-200 bg-white p-6 shadow-[0_1px_2px_rgba(28,36,38,0.04)]">
-        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Adaptive Presence OS · by Creative</p>
+        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">Adaptive Presence OS · by Creative</p>
         <h1 className="mt-3 text-2xl font-semibold text-stone-950">Клиентский календарь</h1>
         <p className="mt-4 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold leading-6 text-rose-800">{children}</p>
       </section>

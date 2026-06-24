@@ -322,9 +322,9 @@ const sectionClass = `${panelClass} mt-7 scroll-mt-24 p-5 sm:p-6`;
 const twoColumnLayoutClass = "grid gap-5 xl:grid-cols-2";
 const compactGridClass = "grid gap-3 sm:grid-cols-2 xl:grid-cols-3";
 const inputClass =
-  "rounded-md border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-teal-600 focus:ring-2 focus:ring-teal-100";
+  "rounded-md border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-100";
 const primaryButtonClass =
-  "rounded-md bg-teal-800 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-teal-900 disabled:cursor-not-allowed disabled:bg-stone-300 disabled:text-stone-600";
+  "rounded-md bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-stone-300 disabled:text-stone-600";
 const secondaryButtonClass =
   "rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-800 transition hover:border-stone-400 hover:bg-stone-50 disabled:cursor-wait disabled:text-stone-400";
 const destructiveButtonClass =
@@ -341,7 +341,7 @@ function SectionTitle({
 }) {
   return (
     <div>
-      <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">{eyebrow}</p>
+      <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">{eyebrow}</p>
       <h2 className="mt-1 text-xl font-semibold text-stone-950">{title}</h2>
       {description ? <p className="mt-2 text-sm leading-6 text-stone-500">{description}</p> : null}
     </div>
@@ -357,10 +357,10 @@ function StatusBadge({
 }) {
   const tones = {
     neutral: "border-stone-200 bg-stone-50 text-stone-600",
-    teal: "border-teal-200 bg-teal-50 text-teal-800",
+    teal: "border-violet-200 bg-violet-50 text-violet-700",
     amber: "border-amber-200 bg-amber-50 text-amber-800",
     rose: "border-rose-200 bg-rose-50 text-rose-800",
-    green: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    green: "border-violet-200 bg-violet-50 text-violet-700",
   };
 
   return (
@@ -381,7 +381,7 @@ function operationalStatusTone(status: string): "neutral" | "teal" | "amber" | "
 function ConnectionBadge({ label, active = true }: { label: string; active?: boolean }) {
   return (
     <span className="inline-flex items-center gap-2 text-xs font-medium text-stone-500">
-      <span className={`h-1.5 w-1.5 rounded-full ${active ? "bg-emerald-500" : "bg-slate-300"}`} />
+      <span className={`h-1.5 w-1.5 rounded-full ${active ? "bg-violet-500" : "bg-slate-300"}`} />
       {label}
     </span>
   );
@@ -400,7 +400,7 @@ function MetricCard({
 }) {
   const tones = {
     stone: "border-stone-200 bg-white",
-    teal: "border-teal-200 bg-teal-50/70",
+    teal: "border-violet-200 bg-violet-50/70",
     amber: "border-amber-200 bg-amber-50/70",
     rose: "border-rose-200 bg-rose-50/70",
   };
@@ -907,11 +907,12 @@ function formatStatus(value: string) {
     failed: "Ошибка",
     automation_later: "Автоматизация позже",
     needed: "Нужно",
-    brief_ready: "ТЗ готово",
+    brief_ready: "ТЗ собрано",
     in_production: "В работе",
     visual: "Визуал",
     video: "Видео",
     carousel: "Карусель",
+    carousel_slide: "Карточка карусели",
     story: "Сторис",
     cover: "Обложка",
     review_response_visual: "Визуал для ответа на отзыв",
@@ -1024,7 +1025,7 @@ function shortPlatformName(platform: string) {
 }
 
 function materialNextActionLabel(item: { contentDraft: { status: string } | null }, publication?: { status: string; creativeAssets: Array<{ generatedVariants: GeneratedCreativeVariantPreview[] }> }) {
-  const asset = publication?.creativeAssets[0];
+  const assets = publication?.creativeAssets ?? [];
   const draftStatus = item.contentDraft?.status;
 
   if (!item.contentDraft) return "Нужен текст";
@@ -1032,14 +1033,47 @@ function materialNextActionLabel(item: { contentDraft: { status: string } | null
   if (draftStatus === "sent_to_client") return "На проверке";
   if (draftStatus === "approved") return "Готово в пакет";
   if (draftStatus === "ready_to_schedule" || publication?.status === "ready") return "В пакете";
-  if (!asset) return "Нужно ТЗ";
-  if (asset.generatedVariants.length === 0) return "Нужен визуал";
+  if (assets.length === 0) return "Нужно ТЗ";
+  if (!assets.every(assetHasVisual)) return assets.length > 1 ? `Визуалы: ${assets.filter(assetHasVisual).length}/${assets.length}` : "Нужен визуал";
   if (draftStatus === "draft" || draftStatus === "needs_review") return "На проверке";
   return "Готово";
 }
 
+function assetHasVisual(asset: { generatedVariants: GeneratedCreativeVariantPreview[] }) {
+  return asset.generatedVariants.length > 0;
+}
+
+type VisualAssetBase = { generatedVariants: GeneratedCreativeVariantPreview[] };
+
+function visualAssetsForMaterial<T extends VisualAssetBase>(
+  item: { creativeAssets: T[] },
+  publication?: { creativeAssets: T[] },
+): T[] {
+  return item.creativeAssets.length > 0 ? item.creativeAssets : publication?.creativeAssets ?? [];
+}
+
+function visualProgressLabel(assets: Array<{ generatedVariants: GeneratedCreativeVariantPreview[] }>, fallbackVisuals: GeneratedCreativeVariantPreview[]) {
+  if (assets.length > 1) {
+    return `Визуалы: ${assets.filter(assetHasVisual).length}/${assets.length}`;
+  }
+  if (assets.length === 1) {
+    return assetHasVisual(assets[0]) ? "Визуал готов" : "Нужен визуал";
+  }
+  return fallbackVisuals.length > 0 ? "Визуал готов" : "Нужен визуал";
+}
+
+function materialVisualComplete(
+  item: { creativeAssets: Array<{ generatedVariants: GeneratedCreativeVariantPreview[] }>; generatedCreativeVariants: GeneratedCreativeVariantPreview[] },
+  publication?: { creativeAssets: Array<{ generatedVariants: GeneratedCreativeVariantPreview[] }> },
+) {
+  const assets = visualAssetsForMaterial(item, publication);
+  if (assets.length > 0) return assets.every(assetHasVisual);
+
+  return item.generatedCreativeVariants.length > 0;
+}
+
 function nextActionBadgeClass(label: string) {
-  if (["Согласовано", "Готово", "Готово в пакет", "В месячном пакете", "В пакете"].includes(label)) return "bg-emerald-50 text-emerald-700";
+  if (["Согласовано", "Готово", "Готово в пакет", "В месячном пакете", "В пакете"].includes(label)) return "bg-violet-50 text-violet-700";
   if (["Нужен текст", "Нужно ТЗ", "Нужен визуал", "На проверке", "Проверить", "Есть правки"].includes(label)) return "bg-amber-50 text-amber-700";
   return "bg-slate-100 text-slate-500";
 }
@@ -1375,7 +1409,7 @@ function GenerationJobsPanel({ jobs }: { jobs: GenerationJobPreview[] }) {
     <article className={`${panelClass} mt-5 p-5`}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">AI production</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">AI production</p>
           <h3 className="mt-1 text-lg font-semibold text-stone-950">Производственные задачи</h3>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
             Здесь отображаются генерации текстов, ТЗ и визуалов. Полноценная фоновая очередь будет добавлена позже.
@@ -1638,7 +1672,7 @@ function DraftWorkflowForm({
           type="text"
           name="comment"
           placeholder={commentPlaceholder}
-          className="min-w-44 flex-1 rounded-md border border-stone-300 bg-white px-2.5 py-2 text-xs text-stone-700 outline-none transition placeholder:text-stone-400 focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+          className="min-w-44 flex-1 rounded-md border border-stone-300 bg-white px-2.5 py-2 text-xs text-stone-700 outline-none transition placeholder:text-stone-400 focus:border-violet-600 focus:ring-2 focus:ring-violet-100"
         />
       ) : null}
       <PendingSubmitButton
@@ -1656,7 +1690,7 @@ function DraftWorkflowControls({ draft, calendarHref, returnView }: { draft: Dra
     return (
       <div className="flex flex-wrap items-center gap-2">
         <StatusBadge tone="green">Готово в пакет</StatusBadge>
-        <a href={calendarHref} className="text-xs font-bold text-teal-700 transition hover:text-teal-900">
+        <a href={calendarHref} className="text-xs font-bold text-violet-700 transition hover:text-violet-900">
           Перейти к планированию
         </a>
       </div>
@@ -1929,10 +1963,10 @@ function ScheduledPublicationAction({
 }) {
   const tones = {
     neutral: "border-stone-200 bg-white text-stone-700 hover:bg-stone-50",
-    teal: "border-teal-200 bg-teal-50 text-teal-800 hover:bg-teal-100",
+    teal: "border-violet-200 bg-violet-50 text-violet-800 hover:bg-violet-100",
     amber: "border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100",
     rose: "border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100",
-    green: "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100",
+    green: "border-violet-200 bg-violet-50 text-violet-800 hover:bg-violet-100",
   };
 
   return (
@@ -1970,7 +2004,7 @@ function SchedulingLayer({
     <section id="scheduling" className={sectionClass}>
       <div className={cardHeaderClass}>
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Внутреннее планирование</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">Внутреннее планирование</p>
           <h2 className="mt-1 text-xl font-semibold text-stone-950">Планирование публикаций</h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
             Согласованные материалы можно поставить в ручной план публикаций. Внешние площадки и автоматическая отправка пока не подключены.
@@ -1987,7 +2021,7 @@ function SchedulingLayer({
               <article key={draft.id} className="rounded-lg border border-stone-200 bg-stone-50/60 p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.08em] text-teal-700">{draft.platformName} &middot; {draft.format}</p>
+                    <p className="text-xs font-bold uppercase tracking-[0.08em] text-violet-700">{draft.platformName} &middot; {draft.format}</p>
                     <h4 className="mt-2 font-semibold leading-6 text-stone-950">{draft.draftTitle}</h4>
                     <p className="mt-1 text-xs leading-5 text-stone-400">{draft.topic}</p>
                   </div>
@@ -2028,7 +2062,7 @@ function SchedulingLayer({
               <article key={publication.id} className="rounded-lg border border-stone-200 bg-white p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.08em] text-teal-700">{publication.platformName} &middot; {publication.format}</p>
+                    <p className="text-xs font-bold uppercase tracking-[0.08em] text-violet-700">{publication.platformName} &middot; {publication.format}</p>
                     <h4 className="mt-2 font-semibold leading-6 text-stone-950">{publication.contentDraft.draftTitle}</h4>
                     <p className="mt-1 text-xs leading-5 text-stone-400">{publication.topic}</p>
                   </div>
@@ -2045,7 +2079,7 @@ function SchedulingLayer({
                   <StatusBadge tone={materialTextStatusTone(drafts.find((draft) => draft.id === publication.contentDraftId))}>
                     {formatMaterialTextStatus(drafts.find((draft) => draft.id === publication.contentDraftId))}
                   </StatusBadge>
-                  <a href={draftsHref} className="text-xs font-bold text-teal-800 transition hover:text-teal-950">
+                  <a href={draftsHref} className="text-xs font-bold text-violet-800 transition hover:text-violet-950">
                     Открыть материал
                   </a>
                   <form action={regenerateContentDraftForItem}>
@@ -2072,7 +2106,7 @@ function SchedulingLayer({
                       ) : (
                         <StatusBadge tone="neutral">ТЗ есть, визуал не создан</StatusBadge>
                       )}
-                      <a href={assetsHref} className="inline-flex items-center text-xs font-bold text-teal-800 transition hover:text-teal-950">
+                      <a href={assetsHref} className="inline-flex items-center text-xs font-bold text-violet-800 transition hover:text-violet-950">
                         Открыть ТЗ
                       </a>
                     </>
@@ -2094,7 +2128,7 @@ function SchedulingLayer({
                   ) : (
                     <StatusBadge tone="green">Готово к размещению</StatusBadge>
                   )}
-                  <a href={assetsHref} className="inline-flex items-center text-xs font-bold text-teal-800 transition hover:text-teal-950">
+                  <a href={assetsHref} className="inline-flex items-center text-xs font-bold text-violet-800 transition hover:text-violet-950">
                     Открыть ТЗ и визуалы
                   </a>
                 </div>
@@ -2156,6 +2190,7 @@ const creativeAssetTypes = [
   "visual",
   "video",
   "carousel",
+  "carousel_slide",
   "story",
   "cover",
   "review_response_visual",
@@ -2196,7 +2231,7 @@ function CreativeAssetStatusAction({
       <input type="hidden" name="status" value={status} />
       <PendingSubmitButton
         pendingLabel="Обновляем..."
-        className="rounded-md border border-stone-200 bg-white px-2.5 py-1.5 text-xs font-bold text-stone-700 transition hover:border-teal-300 hover:bg-teal-50 hover:text-teal-900 disabled:cursor-wait disabled:opacity-60"
+        className="rounded-md border border-stone-200 bg-white px-2.5 py-1.5 text-xs font-bold text-stone-700 transition hover:border-violet-300 hover:bg-violet-50 hover:text-violet-900 disabled:cursor-wait disabled:opacity-60"
       >
         {formatStatus(status)}
       </PendingSubmitButton>
@@ -2227,10 +2262,10 @@ function CreativeVariantAction({
 }) {
   const tones = {
     neutral: "border-stone-200 bg-white text-stone-700 hover:bg-stone-50",
-    teal: "border-teal-200 bg-teal-50 text-teal-800 hover:bg-teal-100",
+    teal: "border-violet-200 bg-violet-50 text-violet-800 hover:bg-violet-100",
     amber: "border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100",
     rose: "border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100",
-    green: "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100",
+    green: "border-violet-200 bg-violet-50 text-violet-800 hover:bg-violet-100",
   };
 
   return (
@@ -2302,7 +2337,7 @@ function CreativeAssetLayer({
     <section id="assets" className={sectionClass}>
       <div className={cardHeaderClass}>
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Производство визуалов</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">Производство визуалов</p>
           <h2 className="mt-1 text-xl font-semibold text-stone-950">Креативные материалы</h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
             Создавайте ТЗ на визуалы и видео для публикаций, отслеживайте подготовку и согласование материалов внутри команды.
@@ -2324,7 +2359,7 @@ function CreativeAssetLayer({
               <article key={publication.id} className="rounded-lg border border-amber-200 bg-amber-50/40 p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.08em] text-teal-700">{publication.platformName} &middot; {publication.format}</p>
+                    <p className="text-xs font-bold uppercase tracking-[0.08em] text-violet-700">{publication.platformName} &middot; {publication.format}</p>
                     <h4 className="mt-2 font-semibold leading-6 text-stone-950">{publication.topic}</h4>
                     <p className="mt-1 text-xs leading-5 text-stone-500">Текст публикации: {publication.contentDraft.draftTitle}</p>
                   </div>
@@ -2332,9 +2367,9 @@ function CreativeAssetLayer({
                     {publication.scheduledDate}{publication.scheduledTime ? `, ${publication.scheduledTime}` : ""}
                   </StatusBadge>
                 </div>
-                <div className="mt-4 rounded-lg border border-teal-300 bg-teal-50 p-4 shadow-[0_4px_12px_rgba(13,148,136,0.08)]">
-                  <p className="text-sm font-semibold text-teal-950">Нет ТЗ на креатив</p>
-                  <p className="mt-2 text-sm leading-6 text-teal-800">
+                <div className="mt-4 rounded-lg border border-violet-300 bg-violet-50 p-4 shadow-[0_4px_12px_rgba(13,148,136,0.08)]">
+                  <p className="text-sm font-semibold text-violet-950">Нет ТЗ на креатив</p>
+                  <p className="mt-2 text-sm leading-6 text-violet-800">
                     Можно сгенерировать ТЗ через AI на основе текста, площадки, формата и темы публикации.
                   </p>
                   <form action={generateCreativeAssetBriefForPublication} className="mt-3">
@@ -2381,7 +2416,7 @@ function CreativeAssetLayer({
                       <input type="text" name="notes" className={inputClass} placeholder="Необязательно" />
                     </label>
                     <label className="flex items-center gap-2 text-xs font-bold text-stone-600 sm:col-span-2">
-                      <input type="checkbox" name="approvalRequired" className="h-4 w-4 rounded border-stone-300 accent-teal-700" />
+                      <input type="checkbox" name="approvalRequired" className="h-4 w-4 rounded border-stone-300 accent-violet-700" />
                       Требуется согласование
                     </label>
                     <div className="sm:col-span-2">
@@ -2446,9 +2481,9 @@ function CreativeAssetLayer({
                     ),
                   )}
                 </div>
-                <div className="mt-3 rounded-md border border-teal-200 bg-teal-50/70 p-3">
-                  <p className="text-xs font-bold text-teal-950">Обновить ТЗ через AI</p>
-                  <p className="mt-1 text-xs leading-5 text-teal-800">
+                <div className="mt-3 rounded-md border border-violet-200 bg-violet-50/70 p-3">
+                  <p className="text-xs font-bold text-violet-950">Обновить ТЗ через AI</p>
+                  <p className="mt-1 text-xs leading-5 text-violet-800">
                     AI пересоберёт ТЗ по текущему тексту, площадке и публикации. Старое ТЗ будет заменено.
                   </p>
                   <form action={regenerateCreativeAssetBrief} className="mt-3">
@@ -2480,7 +2515,7 @@ function CreativeAssetLayer({
                       <p className="mt-1 text-xs leading-5 text-stone-500">
                         Premium Visual Engine создаёт клиентские варианты через OpenAI API и может расходовать кредиты.
                       </p>
-                      <p className="mt-1 text-xs leading-5 text-teal-700">
+                      <p className="mt-1 text-xs leading-5 text-violet-700">
                         Генерация может занять 30–90 секунд. Задача появится в производственных задачах.
                       </p>
                       <p className="mt-1 text-xs leading-5 text-stone-400">
@@ -2550,7 +2585,7 @@ function CreativeAssetLayer({
                                     <input
                                       type="text"
                                       name="qualityNotes"
-                                      className="min-w-44 flex-1 rounded-md border border-stone-200 bg-white px-2.5 py-1.5 text-xs text-stone-700 outline-none focus:border-teal-500"
+                                      className="min-w-44 flex-1 rounded-md border border-stone-200 bg-white px-2.5 py-1.5 text-xs text-stone-700 outline-none focus:border-violet-500"
                                       placeholder="Комментарий к проблеме, необязательно"
                                     />
                                     <PendingSubmitButton pendingLabel="Сохраняем..." className={destructiveButtonClass}>
@@ -2565,12 +2600,12 @@ function CreativeAssetLayer({
                       ))}
                     </div>
                   ) : (
-                    <div className="mt-3 rounded-lg border border-dashed border-teal-300 bg-teal-50/70 p-4">
-                      <p className="text-sm font-semibold text-teal-950">Пока нет сгенерированных визуалов.</p>
-                      <p className="mt-1 text-xs leading-5 text-teal-800">
+                    <div className="mt-3 rounded-lg border border-dashed border-violet-300 bg-violet-50/70 p-4">
+                      <p className="text-sm font-semibold text-violet-950">Пока нет сгенерированных визуалов.</p>
+                      <p className="mt-1 text-xs leading-5 text-violet-800">
                         Premium Visual Engine создаст первый вариант по текущему ТЗ. Генерация использует OpenAI API и может расходовать кредиты.
                       </p>
-                      <p className="mt-1 text-xs leading-5 text-teal-700">
+                      <p className="mt-1 text-xs leading-5 text-violet-700">
                         Сейчас используется OpenAI. Поддержка Nano Banana / Gemini Image будет добавлена отдельным провайдером.
                       </p>
                       <form action={generateCreativeVisualVariantForAsset} className="mt-3">
@@ -2734,7 +2769,7 @@ function MonthlyClientReport({
 
       <article className={`${panelClass} mt-5 overflow-hidden`}>
         <div className="border-b border-stone-200 bg-[#f8fbfa] p-5 sm:p-6">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">{clientName || "Клиент"}</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">{clientName || "Клиент"}</p>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-2xl font-semibold text-stone-950">{month}</h2>
             <StatusBadge tone="green">Сводка актуальна</StatusBadge>
@@ -2754,7 +2789,7 @@ function MonthlyClientReport({
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <article className={`${panelClass} p-5`}>
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Краткий итог</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">Краткий итог</p>
           <p className="mt-3 text-sm leading-7 text-stone-700">
             За месяц запланировано {totalMaterials} материалов. Тексты подготовлены для {textsPrepared}, визуалы готовы для {visualsPrepared}, готово в пакет {approvedMaterials}.
           </p>
@@ -2763,7 +2798,7 @@ function MonthlyClientReport({
           </p>
         </article>
         <article className={`${panelClass} p-5`}>
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Клиентская сводка</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">Клиентская сводка</p>
           <div className="mt-3 grid gap-1.5 text-sm leading-6 text-stone-700">
             <p>В этом месяце подготовлено: <span className="font-semibold">{textsPrepared} материалов.</span></p>
             <p>Готово в пакет: <span className="font-semibold">{approvedMaterials}.</span></p>
@@ -2777,7 +2812,7 @@ function MonthlyClientReport({
       <article className={`${panelClass} mt-5 overflow-hidden`}>
         <div className={cardHeaderClass}>
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Материалы</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">Материалы</p>
             <h2 className="mt-1 text-xl font-semibold text-stone-950">Статус материалов</h2>
           </div>
         </div>
@@ -2785,7 +2820,7 @@ function MonthlyClientReport({
           {materials.map(({ item, draft, publication, visualRequired, visualPrepared, approved, needsChanges, scheduled, nextAction }) => (
             <article key={item.id} className="grid gap-3 rounded-md border border-stone-200 bg-stone-50/50 p-3 lg:grid-cols-[minmax(0,1.7fr)_repeat(4,minmax(110px,0.65fr))_minmax(150px,0.9fr)] lg:items-center">
               <div className="min-w-0">
-                <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-teal-700">{publication?.scheduledDate || item.week || item.plannedDate} &middot; {item.platformName} &middot; {item.format}</p>
+                <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-violet-700">{publication?.scheduledDate || item.week || item.plannedDate} &middot; {item.platformName} &middot; {item.format}</p>
                 <p className="mt-1 line-clamp-2 text-sm font-semibold leading-6 text-stone-900">{item.topic}</p>
               </div>
               <StatusBadge tone={draft ? "teal" : "neutral"}>{draft ? "Текст готов" : "Нет текста"}</StatusBadge>
@@ -2816,12 +2851,12 @@ function MonthlyClientReport({
               <div key={attention.id} className="rounded-md border border-stone-200 bg-stone-50/70 p-3">
                 <p className="text-sm font-semibold text-stone-900">{attention.topic}</p>
                 <p className="mt-1 text-xs leading-5 text-stone-500">{attention.problem}</p>
-                <p className="mt-2 text-xs font-bold text-teal-800">{attention.nextAction}</p>
+                <p className="mt-2 text-xs font-bold text-violet-800">{attention.nextAction}</p>
               </div>
             ))}
             {attentionItems.length === 0 ? <p className={mutedTextClass}>Сейчас нет материалов, требующих внимания.</p> : null}
           </div>
-          <a href={draftsHref} className="mt-4 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">Открыть материалы</a>
+          <a href={draftsHref} className="mt-4 inline-flex text-xs font-bold text-violet-800 transition hover:text-violet-950">Открыть материалы</a>
         </article>
 
         <article className={`${panelClass} p-5`}>
@@ -2902,8 +2937,8 @@ function BrandAssetsView({ client, requestedStep, workspaceContext }: { client: 
           <a
             key={step}
             href={brandAssetsHref(step, context)}
-            className={`rounded-lg border p-3 transition hover:border-teal-300 hover:bg-teal-50/50 ${
-              step === activeStep ? "border-teal-300 bg-teal-50/70" : "border-stone-200 bg-white"
+            className={`rounded-lg border p-3 transition hover:border-violet-300 hover:bg-violet-50/50 ${
+              step === activeStep ? "border-violet-300 bg-violet-50/70" : "border-stone-200 bg-white"
             }`}
           >
             <p className="text-xs font-bold text-stone-400">{index + 1}</p>
@@ -2971,7 +3006,7 @@ function BrandAssetsView({ client, requestedStep, workspaceContext }: { client: 
           </form>
           <div className="mt-5 flex flex-wrap gap-2">
             <a href={brandAssetsHref("review", context)} className={secondaryButtonClass}>Перейти к проверке библиотеки</a>
-            <a href={brandAssetsHref("profile", context)} className="inline-flex items-center text-sm font-bold text-teal-800 transition hover:text-teal-950">Вернуться к профилю бренда</a>
+            <a href={brandAssetsHref("profile", context)} className="inline-flex items-center text-sm font-bold text-violet-800 transition hover:text-violet-950">Вернуться к профилю бренда</a>
           </div>
         </article>
       ) : null}
@@ -3021,7 +3056,7 @@ function BrandAssetsView({ client, requestedStep, workspaceContext }: { client: 
                   <div className="flex flex-wrap items-center gap-2"><StatusBadge tone="teal">{formatBrandAssetType(asset.assetType)}</StatusBadge><p className="font-semibold text-stone-900">{asset.title}</p></div>
                   {asset.description ? <p className="mt-2 text-xs leading-5 text-stone-500">{asset.description}</p> : null}
                   {asset.textContent ? <p className="mt-2 line-clamp-3 text-xs leading-5 text-stone-600">{asset.textContent}</p> : null}
-                  <div className="mt-3 flex flex-wrap gap-3 text-xs font-bold text-teal-800">
+                  <div className="mt-3 flex flex-wrap gap-3 text-xs font-bold text-violet-800">
                     {asset.fileUrl ? <a href={asset.fileUrl} target="_blank" rel="noreferrer">Открыть файл</a> : null}
                     {asset.sourceUrl ? <a href={asset.sourceUrl} target="_blank" rel="noreferrer">Открыть источник</a> : null}
                     {asset.fileSize ? <span className="text-stone-400">{formatGeneratedVisualFileSize(asset.fileSize)}</span> : null}
@@ -3116,7 +3151,7 @@ function OverviewPreviews({
         <div className="mt-3 grid gap-2">
           {reviewDrafts.map((draft) => (
             <div key={draft.id} className="min-w-0 rounded-md border border-stone-200 bg-stone-50/70 p-3">
-              <p className="truncate text-[11px] font-bold uppercase tracking-[0.08em] text-teal-700">{draft.platformName} &middot; {draft.format}</p>
+              <p className="truncate text-[11px] font-bold uppercase tracking-[0.08em] text-violet-700">{draft.platformName} &middot; {draft.format}</p>
               <p className="mt-1 line-clamp-1 text-sm font-semibold text-stone-900">{draft.draftTitle}</p>
               <p className="mt-1 text-xs text-stone-500">{formatDraftStatus(draft.status)}</p>
             </div>
@@ -3129,7 +3164,7 @@ function OverviewPreviews({
       <article className={`${panelClass} min-w-0 p-4`}>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-teal-700">Календарь</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-violet-700">Календарь</p>
             <h3 className="mt-1 font-semibold text-stone-950">Ближайшие публикации</h3>
           </div>
           <StatusBadge tone="teal">{calendarPublications.length}</StatusBadge>
@@ -3137,7 +3172,7 @@ function OverviewPreviews({
         <div className="mt-3 grid gap-2">
           {calendarPublications.map((publication) => (
             <div key={publication.id} className="min-w-0 rounded-md border border-stone-200 bg-stone-50/70 p-3">
-              <p className="truncate text-[11px] font-bold uppercase tracking-[0.08em] text-teal-700">{publication.scheduledDate}{publication.scheduledTime ? `, ${publication.scheduledTime}` : ""}</p>
+              <p className="truncate text-[11px] font-bold uppercase tracking-[0.08em] text-violet-700">{publication.scheduledDate}{publication.scheduledTime ? `, ${publication.scheduledTime}` : ""}</p>
               <p className="mt-1 line-clamp-1 text-sm font-semibold text-stone-900">{publication.topic}</p>
               <p className="mt-1 text-xs text-stone-500">{publication.platformName} &middot; {formatStatus(publication.status)}</p>
             </div>
@@ -3150,7 +3185,7 @@ function OverviewPreviews({
       <article className={`${panelClass} min-w-0 p-4`}>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-teal-700">AI production</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-violet-700">AI production</p>
             <h3 className="mt-1 font-semibold text-stone-950">Производственные задачи</h3>
           </div>
           <StatusBadge tone={productionJobs.some((job) => job.status === "failed") ? "rose" : productionJobs.length > 0 ? "teal" : "green"}>
@@ -3163,7 +3198,7 @@ function OverviewPreviews({
           ))}
           {productionJobs.length === 0 ? <p className={mutedTextClass}>Нет активных или проблемных генераций.</p> : null}
         </div>
-        <a href={links.drafts} className="mt-4 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">Открыть материалы</a>
+        <a href={links.drafts} className="mt-4 inline-flex text-xs font-bold text-violet-800 transition hover:text-violet-950">Открыть материалы</a>
       </article>
     </section>
   );
@@ -3180,7 +3215,7 @@ function WorkspaceViewHeader({
 }) {
   return (
     <div>
-      <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-teal-700">{eyebrow}</p>
+      <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-violet-700">{eyebrow}</p>
       <h2 className="mt-2 text-3xl font-semibold text-stone-950">{title}</h2>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">{description}</p>
     </div>
@@ -3348,10 +3383,10 @@ function MonthlyPlanRevisionCopilot({
   ];
 
   return (
-    <article className={`${panelClass} mt-5 overflow-hidden border-teal-200`}>
+    <article className={`${panelClass} mt-5 overflow-hidden border-violet-200`}>
       <div className="grid gap-5 bg-white p-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">AI-помощник</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">AI-помощник</p>
           <h3 className="mt-1 text-lg font-semibold text-stone-950">AI-помощник по плану</h3>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">
             Опишите, что нужно изменить. AI внесёт безопасные правки в план и календарь, не трогая согласованные материалы.
@@ -3399,10 +3434,10 @@ function MonthlyPlanRevisionCopilot({
       </div>
 
       {proposal && changes ? (
-        <div className="border-t border-teal-100 bg-teal-50/50 p-5">
+        <div className="border-t border-violet-100 bg-violet-50/50 p-5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Предложенные правки</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">Предложенные правки</p>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <h4 className="font-semibold text-stone-950">{proposal.summary}</h4>
                 <StatusBadge tone={proposalStatusTone}>{proposalStatusLabel}</StatusBadge>
@@ -3446,8 +3481,8 @@ function MonthlyPlanRevisionCopilot({
                 {changes.updateItems.length === 0 ? <p className="text-xs text-stone-400">Нет обновлений.</p> : null}
               </div>
             </div>
-            <div className="rounded-lg border border-teal-200 bg-white p-4">
-              <p className="text-sm font-semibold text-teal-900">Добавить</p>
+            <div className="rounded-lg border border-violet-200 bg-white p-4">
+              <p className="text-sm font-semibold text-violet-900">Добавить</p>
               <div className="mt-3 grid gap-2">
                 {changes.addItems.map((item) => (
                   <div key={`${item.platform}-${item.topic}`} className="text-xs leading-5 text-stone-600">
@@ -3618,17 +3653,17 @@ function ManualMonthlyPlanEditor({
   publications: ScheduledPublicationPreview[];
 }) {
   return (
-    <article className={`${panelClass} mt-5 overflow-hidden border-teal-200`}>
+    <article className={`${panelClass} mt-5 overflow-hidden border-violet-200`}>
       <div className="grid gap-5 bg-white p-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Ручное управление планом</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">Ручное управление планом</p>
           <h3 className="mt-1 text-lg font-semibold text-stone-950">Редактор месячного плана</h3>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">
             Исправьте площадки, темы и недели до запуска производства. Календарь и связанные рабочие записи обновятся после сохранения.
           </p>
         </div>
-        <details className="rounded-lg border border-teal-200 bg-teal-50/70 p-4">
-          <summary className="cursor-pointer text-sm font-semibold text-teal-950">Добавить материал в план</summary>
+        <details className="rounded-lg border border-violet-200 bg-violet-50/70 p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-violet-950">Добавить материал в план</summary>
           <form action={createPlannedContentItemManual} className="mt-4 grid gap-3">
             {monthlyPlanId ? <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} /> : null}
             <ManualPlanFields />
@@ -3746,8 +3781,9 @@ function DraftsView({
   const textsCreatedCount = items.filter((item) => item.contentDraft).length;
   const missingTextsCount = totalMaterialsCount - textsCreatedCount;
   const briefsReadyCount = items.filter((item) => item.creativeAssets.length > 0).length;
+  const publicationByItemId = new Map(publications.map((publication) => [publication.plannedContentItemId, publication]));
   const visualsReadyCount = items.filter((item) =>
-    item.generatedCreativeVariants.length > 0 || item.creativeAssets.some((asset) => asset.generatedVariants.length > 0),
+    materialVisualComplete(item, publicationByItemId.get(item.id)),
   ).length;
   const readyForPackageCount = items.filter((item) => item.contentDraft?.status === "ready_to_schedule").length;
   const allTextsReady = totalMaterialsCount > 0 && missingTextsCount === 0;
@@ -3770,7 +3806,6 @@ function DraftsView({
     if (filter !== "all") searchParams.set("filter", filter);
     return `/?${searchParams.toString()}`;
   };
-  const publicationByItemId = new Map(publications.map((publication) => [publication.plannedContentItemId, publication]));
   const productionTasksByItemId = new Map<string, MonthProductionTaskPreview[]>();
   for (const task of productionRun?.tasks ?? []) {
     if (!task.plannedContentItemId) continue;
@@ -3780,12 +3815,12 @@ function DraftsView({
   }
   const itemMatchesFilter = (item: MaterialPlannedItem) => {
     const publication = publicationByItemId.get(item.id);
-    const asset = item.creativeAssets[0] ?? publication?.creativeAssets[0];
+    const assets = visualAssetsForMaterial(item, publication);
     const draftStatus = item.contentDraft?.status;
 
     if (currentFilter === "missing_text") return !item.contentDraft;
-    if (currentFilter === "missing_brief") return Boolean(item.contentDraft) && !asset;
-    if (currentFilter === "missing_visual") return Boolean(asset) && asset.generatedVariants.length === 0 && item.generatedCreativeVariants.length === 0;
+    if (currentFilter === "missing_brief") return Boolean(item.contentDraft) && assets.length === 0;
+    if (currentFilter === "missing_visual") return assets.length > 0 && !materialVisualComplete(item, publication);
     if (currentFilter === "review") return draftStatus === "draft" || draftStatus === "needs_review";
     if (currentFilter === "ready") return draftStatus === "ready_to_schedule" || publication?.status === "ready";
     if (currentFilter === "package") return publication?.status === "ready";
@@ -3799,8 +3834,9 @@ function DraftsView({
     items[0] ??
     null;
   const selectedPublication = selectedItem ? publicationByItemId.get(selectedItem.id) : undefined;
-  const selectedAsset = selectedItem?.creativeAssets[0] ?? selectedPublication?.creativeAssets[0];
-  const selectedVisual = selectedAsset?.generatedVariants[0] ?? selectedItem?.generatedCreativeVariants[0];
+  const selectedAssets = selectedItem ? visualAssetsForMaterial(selectedItem, selectedPublication) : [];
+  const selectedAsset = selectedAssets[0];
+  const selectedVisual = selectedAssets.flatMap((asset) => asset.generatedVariants)[0] ?? selectedItem?.generatedCreativeVariants[0];
   const selectedClientRevision = selectedItem?.contentDraft?.reviewEvents
     .filter((event) => event.actorType === "client" || (event.action === "changes_requested" && Boolean(event.comment)))
     .at(-1);
@@ -3814,8 +3850,8 @@ function DraftsView({
     const failedTask = itemTasks.find((task) => task.status === "failed");
     const runningTask = itemTasks.find((task) => task.status === "running" || task.status === "queued");
     const publication = publicationByItemId.get(item.id);
-    const asset = publication?.creativeAssets[0] ?? item.creativeAssets[0];
-    const hasVisual = Boolean(asset?.generatedVariants.length || item.generatedCreativeVariants.length);
+    const assets = visualAssetsForMaterial(item, publication);
+    const hasVisual = materialVisualComplete(item, publication);
     const draftStatus = item.contentDraft?.status;
 
     if (failedTask) return "Ошибка";
@@ -3824,7 +3860,7 @@ function DraftsView({
     if (runningTask?.taskType === "generate_visual") return runningTask.status === "running" ? "Визуал создаётся" : "Визуал в очереди";
     if (!item.contentDraft) return "Нужен текст";
     if (draftStatus === "client_changes_requested") return "Есть правки";
-    if (!asset) return "Нужно ТЗ";
+    if (assets.length === 0) return "Нужно ТЗ";
     if (!hasVisual) return "Нужен визуал";
     if (publication?.status === "ready") return "В месячном пакете";
     if (draftStatus === "ready_to_schedule") return "Готово в пакет";
@@ -3845,22 +3881,18 @@ function DraftsView({
       <a
         key={item.id}
         href={materialHref(item.id)}
-        className={`block rounded-2xl border p-3 text-left transition hover:border-violet-200 hover:bg-white ${
+        className={`block min-w-0 overflow-hidden rounded-2xl border p-3 text-left transition hover:border-violet-200 hover:bg-white ${
           active ? "border-violet-300 bg-violet-50/70 ring-2 ring-violet-100" : "border-slate-200 bg-white"
         }`}
       >
-        <div className="flex items-center justify-between gap-2">
-          <span className="truncate text-[11px] font-semibold text-slate-400">
-            {publication?.scheduledDate ?? item.plannedDate ?? item.week ?? "без даты"}
+        <div className="flex min-w-0 items-center justify-between gap-2">
+          <span className="min-w-0 truncate text-[11px] font-medium text-slate-400">
+            {publication?.scheduledDate ?? item.plannedDate ?? item.week ?? "без даты"} · {shortPlatformName(item.platformName)}
           </span>
           <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${nextActionBadgeClass(action)}`}>{action}</span>
         </div>
         <p className="mt-2 line-clamp-2 text-sm font-semibold leading-5 text-slate-900">{item.topic}</p>
-        <div className="mt-2 flex items-center gap-2 text-[11px] font-semibold text-slate-400">
-          <span>{shortPlatformName(item.platformName)}</span>
-          <span>·</span>
-          <span className="truncate">{item.format}</span>
-        </div>
+        <p className="mt-1 truncate text-[11px] font-medium text-slate-400">{item.format}</p>
       </a>
     );
   };
@@ -3993,8 +4025,8 @@ function DraftsView({
             ))}
           </div>
 
-          <div className="mt-4 grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)_320px]">
-            <aside className="rounded-[24px] border border-slate-200/80 bg-white p-3 shadow-[0_10px_28px_rgba(88,75,135,0.055)] xl:sticky xl:top-24 xl:max-h-[calc(100vh-150px)] xl:overflow-y-auto">
+          <div className="mt-4 grid min-w-0 gap-4 xl:grid-cols-[280px_minmax(0,1fr)_300px] 2xl:grid-cols-[300px_minmax(0,1fr)_320px]">
+            <aside className="min-w-0 overflow-x-hidden rounded-[24px] border border-slate-200/80 bg-white p-3 shadow-[0_10px_28px_rgba(88,75,135,0.055)] xl:sticky xl:top-24 xl:max-h-[calc(100vh-150px)] xl:overflow-y-auto">
               <div className="mb-3 flex items-center justify-between gap-3 px-1">
                 <div>
                   <h3 className="text-sm font-semibold text-slate-950">Материалы</h3>
@@ -4068,7 +4100,7 @@ function DraftsView({
 	                          <form action={updatePublicationText} key={`${selectedItem.contentDraft.id}-${selectedItem.contentDraft.updatedAt.toISOString()}`} className="mt-4 grid gap-3">
 	                            <input type="hidden" name="contentDraftId" value={selectedItem.contentDraft.id} />
 	                            <input type="text" name="draftTitle" required defaultValue={selectedItem.contentDraft.draftTitle} className={inputClass} />
-	                            <textarea name="draftBody" required rows={10} defaultValue={selectedItem.contentDraft.draftBody} className={`${inputClass} resize-y`} />
+	                            <textarea name="draftBody" required rows={14} defaultValue={selectedItem.contentDraft.draftBody} className={`${inputClass} min-h-[360px] w-full resize-y overflow-x-hidden whitespace-pre-wrap break-words leading-6`} />
 	                            <input type="text" name="comment" className={inputClass} placeholder="Комментарий к правке" />
 	                            <div className="flex flex-wrap gap-2">
 	                              <PendingSubmitButton pendingLabel="Сохраняем..." className="rounded-full bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700">Сохранить текст</PendingSubmitButton>
@@ -4102,9 +4134,9 @@ function DraftsView({
                           <input type="hidden" name="creativeAssetId" value={selectedAsset.id} />
                           <input type="hidden" name="returnView" value="drafts" />
                           <input type="text" name="title" required defaultValue={selectedAsset.title} className={inputClass} />
-                          <textarea name="brief" required rows={6} defaultValue={selectedAsset.brief} className={`${inputClass} resize-y`} />
-                          <textarea name="formatRequirements" rows={3} defaultValue={selectedAsset.formatRequirements ?? ""} className={`${inputClass} resize-y`} placeholder="Требования к формату" />
-                          <textarea name="textOnAsset" rows={2} defaultValue={selectedAsset.textOnAsset ?? ""} className={`${inputClass} resize-y`} placeholder="Текст на визуале" />
+                          <textarea name="brief" required rows={8} defaultValue={selectedAsset.brief} className={`${inputClass} min-h-[220px] w-full resize-y overflow-x-hidden whitespace-pre-wrap break-words leading-6`} />
+                          <textarea name="formatRequirements" rows={4} defaultValue={selectedAsset.formatRequirements ?? ""} className={`${inputClass} w-full resize-y overflow-x-hidden whitespace-pre-wrap break-words leading-6`} placeholder="Требования к формату" />
+                          <textarea name="textOnAsset" rows={3} defaultValue={selectedAsset.textOnAsset ?? ""} className={`${inputClass} w-full resize-y overflow-x-hidden whitespace-pre-wrap break-words leading-6`} placeholder="Текст на визуале" />
                           <input type="text" name="references" defaultValue={selectedAsset.references ?? ""} className={inputClass} placeholder="Референсы" />
                           <input type="text" name="notes" defaultValue={selectedAsset.notes ?? ""} className={inputClass} placeholder="Заметки" />
                           <div className="flex flex-wrap gap-2">
@@ -4140,9 +4172,49 @@ function DraftsView({
                     <section className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <h4 className="text-base font-semibold text-slate-950">3. Визуал</h4>
-                        <StatusBadge tone={selectedVisual ? creativeVariantTone(selectedVisual.status) : "neutral"}>{selectedVisual ? formatStatus(selectedVisual.status) : "Визуал не создан"}</StatusBadge>
+                        <StatusBadge tone={selectedVisual ? creativeVariantTone(selectedVisual.status) : "neutral"}>
+                          {selectedAssets.length > 1 ? visualProgressLabel(selectedAssets, selectedItem.generatedCreativeVariants) : selectedVisual ? formatStatus(selectedVisual.status) : "Визуал не создан"}
+                        </StatusBadge>
                       </div>
-                      {selectedVisual ? (
+                      {selectedAssets.length > 1 ? (
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                          {selectedAssets.map((asset, index) => {
+                            const variant = asset.generatedVariants[0];
+
+                            return (
+                              <div key={asset.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                                <div className="border-b border-slate-100 px-3 py-2">
+                                  <p className="text-xs font-semibold text-slate-950">Карточка {index + 1}</p>
+                                  <p className="mt-0.5 truncate text-[11px] text-slate-400">{asset.title}</p>
+                                </div>
+                                {variant ? (
+                                  <GeneratedVisualImage variant={variant} alt={variant.variantTitle} className="aspect-square w-full bg-slate-100 object-contain" />
+                                ) : (
+                                  <div className="grid aspect-square place-items-center bg-slate-50 p-4 text-center text-xs text-slate-400">
+                                    Визуал для карточки ещё не создан.
+                                  </div>
+                                )}
+                                <div className="flex flex-wrap gap-2 p-3">
+                                  <form action={generateCreativeVisualVariantForAsset}>
+                                    <input type="hidden" name="creativeAssetId" value={asset.id} />
+                                    <input type="hidden" name="returnView" value="drafts" />
+                                    <PendingSubmitButton pendingLabel="Генерируем..." className={softButtonClass}>
+                                      {variant ? "Перегенерировать" : "Сгенерировать"}
+                                    </PendingSubmitButton>
+                                  </form>
+                                  {variant ? (
+                                    <form action={approveCreativeVariant}>
+                                      <input type="hidden" name="creativeVariantId" value={variant.id} />
+                                      <input type="hidden" name="returnView" value="drafts" />
+                                      <PendingSubmitButton pendingLabel="Принимаем..." className={softButtonClass}>Принять</PendingSubmitButton>
+                                    </form>
+                                  ) : null}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : selectedVisual ? (
                         <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white">
                           <GeneratedVisualImage variant={selectedVisual} alt={selectedVisual.variantTitle} className="aspect-video w-full bg-slate-100 object-contain" />
                         </div>
@@ -4151,6 +4223,7 @@ function DraftsView({
                           Визуал ещё не создан.
                         </div>
                       )}
+                      {selectedAssets.length <= 1 ? (
                       <div className="mt-3 flex flex-wrap gap-2">
                         {selectedAsset ? (
                           <form action={generateCreativeVisualVariantForAsset}>
@@ -4170,6 +4243,7 @@ function DraftsView({
                         ) : null}
                         {visualSource ? <a href={visualSource} target="_blank" rel="noreferrer" className={softButtonClass}>Открыть крупно</a> : null}
                       </div>
+                      ) : null}
                     </section>
 
                     <section className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -4312,7 +4386,7 @@ function OperationsOverview({
     <article className={`${panelClass} p-5 sm:p-6`}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Операционный обзор</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">Операционный обзор</p>
           <h2 className="mt-1 text-xl font-semibold text-stone-950">Состояние работы на месяц</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-500">
 	            Готовность производства, правки клиента и состояние интеграций.
@@ -4331,10 +4405,10 @@ function OperationsOverview({
         <div>
           <div className="flex h-44 items-end gap-3 rounded-lg border border-stone-200 bg-stone-50 px-5 pb-4 pt-6">
             {[
-              { label: "План", value: 100, tone: "bg-teal-500" },
+              { label: "План", value: 100, tone: "bg-violet-500" },
               { label: "Тексты", value: Math.max(progress, 10), tone: "bg-sky-500" },
               { label: "Проверка", value: attentionCount > 0 ? 58 : 20, tone: "bg-amber-400" },
-              { label: "Готово", value: integrationTaskCount > 0 ? 22 : Math.max(progress - 12, 10), tone: "bg-emerald-500" },
+              { label: "Готово", value: integrationTaskCount > 0 ? 22 : Math.max(progress - 12, 10), tone: "bg-violet-500" },
             ].map((bar) => (
               <div key={bar.label} className="flex flex-1 flex-col items-center justify-end gap-2">
                 <div className={`w-full max-w-14 rounded-t-md ${bar.tone}`} style={{ height: `${bar.value}%` }} />
@@ -4343,7 +4417,7 @@ function OperationsOverview({
             ))}
           </div>
           <div className="mt-3 flex flex-wrap gap-3 text-xs text-stone-500">
-            <span><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-emerald-500" />По плану</span>
+            <span><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-violet-500" />По плану</span>
             <span><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-sky-500" />В работе</span>
             <span><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-amber-400" />Есть риск</span>
             <span><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-rose-500" />Заблокировано</span>
@@ -4384,7 +4458,7 @@ function ClientPortalLinksPanel({
     <section className="mb-5 rounded-lg border border-stone-200 bg-white p-4 shadow-[0_1px_2px_rgba(28,36,38,0.04)] sm:p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Доступ для клиента</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">Доступ для клиента</p>
           <h2 className="mt-1 text-lg font-semibold text-stone-950">Клиентская ссылка</h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
             Ссылка открывает только клиентский календарь выбранного месячного плана. Менеджерская панель недоступна.
@@ -4401,12 +4475,12 @@ function ClientPortalLinksPanel({
           <StatusBadge tone="amber">Выберите месячный план</StatusBadge>
         )}
       </div>
-      <a href={reportsHref} className="mt-4 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950">Открыть отчёт</a>
+      <a href={reportsHref} className="mt-4 inline-flex text-xs font-bold text-violet-800 transition hover:text-violet-950">Открыть отчёт</a>
 
       {newPortalLink ? (
-        <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-3">
-          <p className="text-sm font-semibold text-emerald-900">Скопируйте ссылку для клиента</p>
-          <p className="mt-1 text-xs leading-5 text-emerald-800">Эта ссылка показана после создания. Сырой токен не хранится в базе.</p>
+        <div className="mt-4 rounded-md border border-violet-200 bg-violet-50 p-3">
+          <p className="text-sm font-semibold text-violet-900">Скопируйте ссылку для клиента</p>
+          <p className="mt-1 text-xs leading-5 text-violet-800">Эта ссылка показана после создания. Сырой токен не хранится в базе.</p>
           <input readOnly value={newPortalLink} className={`${inputClass} mt-3 font-mono text-xs`} />
         </div>
       ) : null}
@@ -4481,7 +4555,7 @@ function ScheduledPublicationCalendar({
     <div className="bg-stone-50/50 p-4 sm:p-5">
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Операционный календарь</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">Операционный календарь</p>
           <h3 className="mt-1 text-lg font-semibold text-stone-950">Публикации с подтверждённой датой</h3>
         </div>
         <p className="text-xs leading-5 text-stone-500">Плановые материалы скрыты, пока есть рабочее расписание.</p>
@@ -4493,7 +4567,7 @@ function ScheduledPublicationCalendar({
           return (
             <article
               key={publication.id}
-              className="rounded-lg border border-teal-200 bg-white p-4 shadow-[0_4px_12px_rgba(13,148,136,0.08)]"
+              className="rounded-lg border border-violet-200 bg-white p-4 shadow-[0_4px_12px_rgba(13,148,136,0.08)]"
             >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap gap-1.5">
@@ -4502,7 +4576,7 @@ function ScheduledPublicationCalendar({
               </div>
               <StatusBadge tone={scheduledPublicationTone(publication.status)}>{formatStatus(publication.status)}</StatusBadge>
             </div>
-            <p className="mt-4 text-xs font-bold uppercase tracking-[0.08em] text-teal-700">
+            <p className="mt-4 text-xs font-bold uppercase tracking-[0.08em] text-violet-700">
               {publication.scheduledDate}
               {publication.scheduledTime ? `, ${publication.scheduledTime}` : ""}
             </p>
@@ -4535,7 +4609,7 @@ function ScheduledPublicationCalendar({
             </div>
             <a
               href="#scheduling"
-              className="mt-4 inline-flex text-xs font-bold text-teal-800 transition hover:text-teal-950"
+              className="mt-4 inline-flex text-xs font-bold text-violet-800 transition hover:text-violet-950"
             >
               Управлять публикацией
             </a>
@@ -4609,11 +4683,10 @@ function ContentCalendar({
   const todayHref = calendarHref(currentFilter, currentCalendarView, new Date());
   const itemMatchesFilter = (item: MaterialPlannedItem) => {
     const publication = publicationByItemId.get(item.id);
-    const asset = publication?.creativeAssets[0];
     const draftStatus = item.contentDraft?.status;
 
     if (currentFilter === "missing_text") return !item.contentDraft;
-    if (currentFilter === "missing_visual") return Boolean(publication) && (!asset || asset.generatedVariants.length === 0);
+    if (currentFilter === "missing_visual") return Boolean(publication) && !materialVisualComplete(item, publication);
     if (currentFilter === "review") return draftStatus === "draft" || draftStatus === "needs_review";
     if (currentFilter === "revisions") return draftStatus === "client_changes_requested";
     if (currentFilter === "ready") return draftStatus === "ready_to_schedule" || publication?.status === "ready";
@@ -4654,8 +4727,9 @@ function ContentCalendar({
     [];
   const renderCalendarCard = (item: MaterialPlannedItem, compact = false) => {
     const publication = publicationByItemId.get(item.id);
-    const asset = publication?.creativeAssets[0];
-    const visual = asset?.generatedVariants[0] ?? item.generatedCreativeVariants[0];
+    const assets = visualAssetsForMaterial(item, publication);
+    const visual = assets.flatMap((asset) => asset.generatedVariants)[0] ?? item.generatedCreativeVariants[0];
+    const slideCount = assets.length > 1 ? assets.length : 0;
     const action = materialNextActionLabel(item, publication);
 
     return (
@@ -4678,6 +4752,7 @@ function ContentCalendar({
         <div className="p-2.5">
           <div className="flex items-center justify-between gap-2">
             <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700">{shortPlatformName(item.platformName)}</span>
+            {slideCount > 1 ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">{slideCount} карточки</span> : null}
             <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${nextActionBadgeClass(action)}`}>{action}</span>
           </div>
           <p className="mt-2 line-clamp-2 text-xs font-semibold leading-4 text-slate-950">{item.topic}</p>
@@ -5001,8 +5076,8 @@ function ClientSetupWizard({
           <a
             key={step}
             href={clientSetupHref(step, context)}
-            className={`rounded-lg border p-3 transition hover:border-teal-300 hover:bg-teal-50/50 ${
-              step === activeStep ? "border-teal-300 bg-teal-50/70" : "border-stone-200 bg-white"
+            className={`rounded-lg border p-3 transition hover:border-violet-300 hover:bg-violet-50/50 ${
+              step === activeStep ? "border-violet-300 bg-violet-50/70" : "border-stone-200 bg-white"
             }`}
           >
             <p className="text-xs font-bold text-stone-400">{index + 1}</p>
@@ -5066,8 +5141,8 @@ function ClientSetupWizard({
                 <a
                   key={client.id}
                   href={clientSetupHref("brief", { client: client.id, blueprint: clientBlueprint?.id })}
-                  className={`rounded-lg border p-3 transition hover:border-teal-300 hover:bg-teal-50/60 ${
-                    selectedClient?.id === client.id ? "border-teal-300 bg-teal-50/60" : "border-stone-200 bg-stone-50/60"
+                  className={`rounded-lg border p-3 transition hover:border-violet-300 hover:bg-violet-50/60 ${
+                    selectedClient?.id === client.id ? "border-violet-300 bg-violet-50/60" : "border-stone-200 bg-stone-50/60"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -5127,7 +5202,7 @@ function ClientSetupWizard({
                 <article className="rounded-lg border border-stone-200 bg-stone-50/70 p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
-                      <p className="text-xs font-bold text-teal-700">{selectedClient.name}</p>
+                      <p className="text-xs font-bold text-violet-700">{selectedClient.name}</p>
                       <p className="mt-2 line-clamp-4 text-sm leading-6 text-stone-600">{selectedBrief.rawBrief}</p>
                     </div>
                     <StatusBadge tone="green">Бриф сохранён</StatusBadge>
@@ -5183,7 +5258,7 @@ function ClientSetupWizard({
               <div className="mt-5"><EmptyState>Добавьте бриф, чтобы AI смог собрать Blueprint.</EmptyState></div>
             ) : blueprint ? (
               <div className="mt-5 grid gap-4">
-                <article className="rounded-lg border border-teal-200 bg-teal-50/70 p-4">
+                <article className="rounded-lg border border-violet-200 bg-violet-50/70 p-4">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div>
                       <StatusBadge tone="green">Blueprint готов</StatusBadge>
@@ -5231,7 +5306,7 @@ function ClientSetupWizard({
               <div className="mt-5"><EmptyState>Blueprint появится после генерации на основе брифа.</EmptyState></div>
             ) : monthlyPlan ? (
               <div className="mt-5 grid gap-4">
-                <article className="rounded-lg border border-teal-200 bg-teal-50/70 p-4">
+                <article className="rounded-lg border border-violet-200 bg-violet-50/70 p-4">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div>
                       <StatusBadge tone="green">{formatStatus(monthlyPlan.status)}</StatusBadge>
@@ -5808,7 +5883,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
               </div>
             ) : null}
             {params.notice ? (
-              <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900">
+              <div className="mb-5 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-medium text-violet-900">
                 {params.notice}
               </div>
             ) : null}

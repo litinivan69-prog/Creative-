@@ -46,9 +46,9 @@ export type ClientPortalPublication = {
 };
 
 const inputClass =
-  "w-full rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-100";
+  "w-full rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-100";
 const primaryButtonClass =
-  "inline-flex items-center justify-center rounded-md bg-teal-700 px-3 py-2 text-sm font-bold text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex items-center justify-center rounded-md bg-violet-700 px-3 py-2 text-sm font-bold text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-60";
 const secondaryButtonClass =
   "inline-flex items-center justify-center rounded-md border border-stone-200 bg-white px-3 py-2 text-sm font-bold text-stone-700 transition hover:border-stone-300 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60";
 
@@ -61,10 +61,10 @@ function PortalStatusBadge({
 }) {
   const tones = {
     neutral: "border-stone-200 bg-stone-50 text-stone-600",
-    teal: "border-teal-200 bg-teal-50 text-teal-800",
+    teal: "border-violet-200 bg-violet-50 text-violet-800",
     amber: "border-amber-200 bg-amber-50 text-amber-900",
     rose: "border-rose-200 bg-rose-50 text-rose-800",
-    green: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    green: "border-violet-200 bg-violet-50 text-violet-800",
   };
 
   return <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold ${tones[tone]}`}>{children}</span>;
@@ -81,7 +81,7 @@ function PortalMetric({
 }) {
   const tones = {
     neutral: "border-stone-200 bg-white",
-    teal: "border-teal-200 bg-teal-50/50",
+    teal: "border-violet-200 bg-violet-50/50",
     amber: "border-amber-200 bg-amber-50/50",
     rose: "border-rose-200 bg-rose-50/50",
   };
@@ -182,10 +182,10 @@ export function ClientPortalView({
   if (!month) {
     return (
       <section>
-        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Клиентский портал</p>
+        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">Клиентский портал</p>
         <h1 className="mt-2 text-2xl font-semibold text-stone-950">Клиентский календарь</h1>
         {showPreviewNotice ? (
-          <div className="mt-4 rounded-lg border border-teal-200 bg-teal-50/70 px-4 py-3 text-xs leading-5 text-teal-900">
+          <div className="mt-4 rounded-lg border border-violet-200 bg-violet-50/70 px-4 py-3 text-xs leading-5 text-violet-900">
             Это предварительный клиентский вид. Публичный доступ и авторизация будут добавлены позже.
           </div>
         ) : null}
@@ -230,15 +230,15 @@ export function ClientPortalView({
   return (
     <section>
       {showPreviewNotice ? (
-        <div className="rounded-lg border border-teal-200 bg-teal-50/70 px-4 py-3 text-xs leading-5 text-teal-900">
+        <div className="rounded-lg border border-violet-200 bg-violet-50/70 px-4 py-3 text-xs leading-5 text-violet-900">
           Это предварительный клиентский вид. Публичный доступ и авторизация будут добавлены позже.
         </div>
       ) : null}
-      {notice ? <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">{notice}</div> : null}
+      {notice ? <div className="mb-4 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-semibold text-violet-800">{notice}</div> : null}
       {error ? <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">{error}</div> : null}
       <div className={`${showPreviewNotice ? "mt-5" : ""} overflow-hidden rounded-lg border border-stone-200 bg-white shadow-[0_1px_2px_rgba(28,36,38,0.04)]`}>
         <div className="border-b border-stone-200 bg-[#f8fbfa] px-5 py-6 sm:px-7">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Adaptive Presence OS &middot; by Creative</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">Adaptive Presence OS &middot; by Creative</p>
           <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="text-2xl font-semibold text-stone-950">{clientName || "Клиентский календарь"}</h2>
@@ -281,7 +281,7 @@ export function ClientPortalView({
           </section>
 
           <div className="mt-7">
-            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal-700">Месячный план</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">Месячный план</p>
             <h3 className="mt-1 text-xl font-semibold text-stone-950">Календарь публикаций</h3>
             <div className="mt-4 grid gap-5">
               {groupedMaterials.map((group) => (
@@ -317,7 +317,7 @@ export function ClientPortalView({
                           <h5 className="mt-2 font-semibold leading-6 text-stone-950">{item.topic}</h5>
                           <p className="mt-2 line-clamp-3 text-sm leading-6 text-stone-500">{item.contentDraft?.draftBody || "Текст публикации ещё готовится."}</p>
                           <details className="mt-3 rounded-md border border-stone-200 bg-stone-50/70">
-                            <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-teal-800">Открыть материал</summary>
+                            <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-violet-800">Открыть материал</summary>
                             <div className="border-t border-stone-200 p-3">
                               <p className="text-xs font-bold text-stone-500">Текст публикации</p>
                               <p className="mt-2 text-sm font-semibold leading-6 text-stone-900">{item.contentDraft?.draftTitle || item.topic}</p>
@@ -328,12 +328,12 @@ export function ClientPortalView({
                                 {!item.contentDraft ? (
                                   <p className="mt-2 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs leading-5 text-stone-500">Материал ещё готовится. Согласование появится после подготовки текста и визуала.</p>
                                 ) : status === "approved" ? (
-                                  <p className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold leading-5 text-emerald-800">Материал согласован.</p>
+                                  <p className="mt-2 rounded-md border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold leading-5 text-violet-800">Материал согласован.</p>
                                 ) : status === "changes_requested" ? (
                                   <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-900">Правки отправлены команде.</p>
                                 ) : status === "awaiting_approval" || status === "ready_for_review" ? (
                                   <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                                    <form action={portalToken ? approveDraftFromPortal : approveDraft} className="rounded-md border border-emerald-200 bg-emerald-50/60 p-3">
+                                    <form action={portalToken ? approveDraftFromPortal : approveDraft} className="rounded-md border border-violet-200 bg-violet-50/60 p-3">
                                       <PortalActionFields contentDraftId={item.contentDraft.id} portalToken={portalToken} />
                                       <label className="grid gap-1 text-xs font-bold text-stone-600">
                                         Комментарий

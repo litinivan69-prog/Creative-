@@ -471,6 +471,14 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Critical quota/billing/rate-limit errors pause production with a Russian message; ordinary task failures are saved and can be retried.
 - The MVP uses client-side polling instead of an external queue service; if the browser is closed, preparation continues automatically after the manager returns to the production screen.
 
+## UI/Production Materials Polish And Carousel Visuals
+
+- Materials Studio now uses a calmer lavender/gray visual language instead of green/turquoise accents.
+- The Materials workspace layout is tightened into stable list/editor/preview columns with compact material cards and no horizontal list scrolling.
+- Text and creative brief editing fields are larger and wrap long content naturally.
+- Carousel-style materials can create multiple `carousel_slide` creative assets for one publication, so each card/slide receives its own visual task and generated variant.
+- Calendar cards show the first visual thumbnail for carousel materials plus a compact slide-count label.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.

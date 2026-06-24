@@ -6,6 +6,7 @@ export const CreativeAssetTypeSchema = z.enum([
   "visual",
   "video",
   "carousel",
+  "carousel_slide",
   "story",
   "cover",
   "review_response_visual",
