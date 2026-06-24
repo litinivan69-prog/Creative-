@@ -22,6 +22,8 @@ model Client {
   creativeAssets CreativeAsset[]
   generatedCreativeVariants GeneratedCreativeVariant[]
   generationJobs GenerationJob[]
+  monthProductionRuns MonthProductionRun[]
+  monthProductionTasks MonthProductionTask[]
   clientPortalLinks ClientPortalLink[]
   brandProfile ClientBrandProfile?
   brandAssets ClientBrandAsset[]
@@ -114,6 +116,8 @@ model ClientPresenceBlueprint {
   creativeAssets                 CreativeAsset[]
   generatedCreativeVariants      GeneratedCreativeVariant[]
   generationJobs                 GenerationJob[]
+  monthProductionRuns             MonthProductionRun[]
+  monthProductionTasks            MonthProductionTask[]
   clientPortalLinks               ClientPortalLink[]
 
   @@index([clientId])
@@ -144,6 +148,8 @@ model MonthlyOperatingPlan {
   creativeAssets      CreativeAsset[]
   generatedCreativeVariants GeneratedCreativeVariant[]
   generationJobs            GenerationJob[]
+  productionRuns            MonthProductionRun[]
+  productionTasks           MonthProductionTask[]
   clientPortalLinks          ClientPortalLink[]
   revisionProposals          MonthlyPlanRevisionProposal[]
 
@@ -220,6 +226,7 @@ model PlannedContentItem {
   creativeAssets      CreativeAsset[]
   generatedCreativeVariants GeneratedCreativeVariant[]
   generationJobs              GenerationJob[]
+  productionTasks             MonthProductionTask[]
 
   @@index([monthlyPlanId])
 }
@@ -252,6 +259,7 @@ model ContentDraft {
   creativeAssets       CreativeAsset[]
   generatedCreativeVariants GeneratedCreativeVariant[]
   generationJobs              GenerationJob[]
+  productionTasks             MonthProductionTask[]
 
   @@index([clientId])
   @@index([blueprintId])
@@ -331,6 +339,7 @@ model CreativeAsset {
   scheduledPublication   ScheduledPublication    @relation(fields: [scheduledPublicationId], references: [id], onDelete: Cascade)
   generatedVariants      GeneratedCreativeVariant[]
   generationJobs          GenerationJob[]
+  productionTasks         MonthProductionTask[]
 
   @@index([clientId])
   @@index([monthlyPlanId])
@@ -418,6 +427,70 @@ model GenerationJob {
   @@index([creativeAssetId])
   @@index([status])
   @@index([jobType])
+  @@index([createdAt])
+}
+
+model MonthProductionRun {
+  id              String                  @id @default(cuid())
+  clientId        String
+  blueprintId     String
+  monthlyPlanId   String
+  status          String                  @default("queued")
+  currentStage    String                  @default("planning")
+  totalTasks      Int                     @default(0)
+  completedTasks  Int                     @default(0)
+  failedTasks     Int                     @default(0)
+  errorMessage    String?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  client          Client                  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  blueprint       ClientPresenceBlueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+  monthlyPlan     MonthlyOperatingPlan    @relation(fields: [monthlyPlanId], references: [id], onDelete: Cascade)
+  tasks           MonthProductionTask[]
+
+  @@index([clientId])
+  @@index([blueprintId])
+  @@index([monthlyPlanId])
+  @@index([status])
+  @@index([currentStage])
+  @@index([createdAt])
+}
+
+model MonthProductionTask {
+  id                   String                  @id @default(cuid())
+  productionRunId      String
+  clientId             String
+  blueprintId          String
+  monthlyPlanId        String
+  plannedContentItemId String?
+  contentDraftId       String?
+  creativeAssetId      String?
+  stage                String
+  taskType             String
+  status               String                  @default("queued")
+  title                String
+  errorMessage         String?
+  startedAt            DateTime?
+  completedAt          DateTime?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+  productionRun        MonthProductionRun      @relation(fields: [productionRunId], references: [id], onDelete: Cascade)
+  client               Client                  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  blueprint            ClientPresenceBlueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+  monthlyPlan          MonthlyOperatingPlan    @relation(fields: [monthlyPlanId], references: [id], onDelete: Cascade)
+  plannedContentItem   PlannedContentItem?     @relation(fields: [plannedContentItemId], references: [id], onDelete: SetNull)
+  contentDraft         ContentDraft?           @relation(fields: [contentDraftId], references: [id], onDelete: SetNull)
+  creativeAsset        CreativeAsset?          @relation(fields: [creativeAssetId], references: [id], onDelete: SetNull)
+
+  @@index([productionRunId])
+  @@index([monthlyPlanId])
+  @@index([plannedContentItemId])
+  @@index([creativeAssetId])
+  @@index([status])
+  @@index([stage])
+  @@index([taskType])
   @@index([createdAt])
 }
 

@@ -437,6 +437,15 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - `Подготовить месяц` runs the production chain for the selected plan: exact dates, text drafts, scheduled publication records, creative briefs, and a safe visual-generation chunk.
 - Client approval remains package-level later; nothing is sent to the client automatically.
 
+## Core-15 Background Month Production Queue
+
+- `Подготовить месяц` now creates a persisted `MonthProductionRun` and task queue instead of blocking on the whole month in one request.
+- Month production tasks are split by stage: texts, creative briefs, visuals, and AI quality check.
+- `Продолжить подготовку` processes a safe small batch, so ready materials appear progressively while the rest stays queued.
+- Failed tasks are saved independently and can be retried without rolling back completed texts, briefs, or visuals.
+- Materials shows the current production run, progress counters, current task, errors, and per-material retry controls.
+- Progress survives refresh and browser close; nothing is sent to the client automatically.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.
@@ -482,5 +491,7 @@ The Prisma schema includes:
 - `CreativeAsset`
 - `GeneratedCreativeVariant`
 - `GenerationJob`
+- `MonthProductionRun`
+- `MonthProductionTask`
 
 The blueprint intentionally stores platform names and module names as generated data. There is no fixed platform list and no fixed deliverable package baked into the application.

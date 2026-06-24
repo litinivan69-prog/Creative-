@@ -2744,11 +2744,334 @@ export async function prepareMonthVisuals(formData: FormData) {
   }));
 }
 
+const monthProductionStageOrder = ["planning", "dates", "texts", "briefs", "visuals", "quality_check", "done"];
+
+function productionStageRank(stage: string) {
+  const index = monthProductionStageOrder.indexOf(stage);
+  return index === -1 ? monthProductionStageOrder.length : index;
+}
+
+async function refreshMonthProductionRunCounters(productionRunId: string) {
+  const tasks = await prisma.monthProductionTask.findMany({
+    where: { productionRunId },
+    select: { status: true, stage: true },
+  });
+  const completedTasks = tasks.filter((task) => task.status === "completed").length;
+  const failedTasks = tasks.filter((task) => task.status === "failed").length;
+  const runningTask = tasks.find((task) => task.status === "running");
+  const nextQueuedTask = [...tasks]
+    .filter((task) => task.status === "queued")
+    .sort((left, right) => productionStageRank(left.stage) - productionStageRank(right.stage))[0];
+  const allDone = tasks.length > 0 && completedTasks + failedTasks === tasks.length;
+  const currentStage = allDone ? "done" : runningTask?.stage ?? nextQueuedTask?.stage ?? "done";
+  const status = allDone
+    ? failedTasks > 0 ? "completed_with_errors" : "completed"
+    : runningTask || nextQueuedTask ? "running" : "queued";
+
+  return prisma.monthProductionRun.update({
+    where: { id: productionRunId },
+    data: {
+      status,
+      currentStage,
+      totalTasks: tasks.length,
+      completedTasks,
+      failedTasks,
+      startedAt: status === "running" ? new Date() : undefined,
+      completedAt: allDone ? new Date() : null,
+    },
+  });
+}
+
+async function createMonthProductionRun(monthlyPlanId: string) {
+  const existingRun = await prisma.monthProductionRun.findFirst({
+    where: {
+      monthlyPlanId,
+      status: { in: ["queued", "running", "paused", "completed_with_errors"] },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (existingRun && ["queued", "running", "paused"].includes(existingRun.status)) {
+    return existingRun;
+  }
+
+  const plan = await prisma.monthlyOperatingPlan.findUnique({
+    where: { id: monthlyPlanId },
+    include: {
+      plannedContentItems: {
+        include: {
+          contentDraft: true,
+          creativeAssets: {
+            include: {
+              generatedVariants: {
+                select: { id: true },
+              },
+            },
+          },
+          generatedCreativeVariants: {
+            select: { id: true },
+          },
+        },
+      },
+    },
+  });
+
+  if (!plan) {
+    errorRedirect("Месячный план для подготовки не найден.", "drafts");
+  }
+
+  const run = await prisma.monthProductionRun.create({
+    data: {
+      clientId: plan.clientId,
+      blueprintId: plan.blueprintId,
+      monthlyPlanId: plan.id,
+      status: "queued",
+      currentStage: "texts",
+    },
+  });
+
+  const tasks = [];
+  for (const item of plan.plannedContentItems) {
+    if (!item.contentDraft) {
+      tasks.push({
+        productionRunId: run.id,
+        clientId: plan.clientId,
+        blueprintId: plan.blueprintId,
+        monthlyPlanId: plan.id,
+        plannedContentItemId: item.id,
+        stage: "texts",
+        taskType: "generate_text",
+        title: `Текст: ${item.topic}`,
+      });
+    }
+
+    if (item.creativeAssets.length === 0) {
+      tasks.push({
+        productionRunId: run.id,
+        clientId: plan.clientId,
+        blueprintId: plan.blueprintId,
+        monthlyPlanId: plan.id,
+        plannedContentItemId: item.id,
+        stage: "briefs",
+        taskType: "generate_brief",
+        title: `ТЗ: ${item.topic}`,
+      });
+    }
+
+    const hasVisual = item.generatedCreativeVariants.length > 0 || item.creativeAssets.some((asset) => asset.generatedVariants.length > 0);
+    if (!hasVisual) {
+      tasks.push({
+        productionRunId: run.id,
+        clientId: plan.clientId,
+        blueprintId: plan.blueprintId,
+        monthlyPlanId: plan.id,
+        plannedContentItemId: item.id,
+        stage: "visuals",
+        taskType: "generate_visual",
+        title: `Визуал: ${item.topic}`,
+      });
+    }
+  }
+
+  tasks.push({
+    productionRunId: run.id,
+    clientId: plan.clientId,
+    blueprintId: plan.blueprintId,
+    monthlyPlanId: plan.id,
+    stage: "quality_check",
+    taskType: "quality_check",
+    title: "AI-проверка месячного пакета",
+  });
+
+  if (tasks.length > 0) {
+    await prisma.monthProductionTask.createMany({ data: tasks });
+  }
+
+  return refreshMonthProductionRunCounters(run.id);
+}
+
+async function scheduledPublicationForProductionItem(plannedContentItemId: string) {
+  const item = await prisma.plannedContentItem.findUnique({
+    where: { id: plannedContentItemId },
+    include: {
+      contentDraft: true,
+      scheduledPublications: {
+        orderBy: { createdAt: "desc" },
+        include: {
+          client: true,
+          blueprint: { include: { riskRules: true } },
+          monthlyPlan: true,
+          plannedContentItem: true,
+          contentDraft: true,
+          creativeAssets: true,
+        },
+      },
+      monthlyPlan: true,
+    },
+  });
+
+  if (!item?.contentDraft) {
+    throw new Error("Сначала нужен текст материала.");
+  }
+
+  const existing = item.scheduledPublications[0];
+  if (existing) return existing;
+
+  const publication = await prisma.scheduledPublication.create({
+    data: {
+      clientId: item.monthlyPlan.clientId,
+      blueprintId: item.monthlyPlan.blueprintId,
+      monthlyPlanId: item.monthlyPlanId,
+      plannedContentItemId: item.id,
+      contentDraftId: item.contentDraft.id,
+      platformName: item.platformName,
+      format: item.format,
+      topic: item.topic,
+      scheduledDate: item.plannedDate,
+      scheduledTime: null,
+      timezone: null,
+      status: "scheduled",
+      publishMode: "manual",
+      notes: null,
+    },
+  });
+
+  const loaded = await prisma.scheduledPublication.findUnique({
+    where: { id: publication.id },
+    include: {
+      client: true,
+      blueprint: { include: { riskRules: true } },
+      monthlyPlan: true,
+      plannedContentItem: true,
+      contentDraft: true,
+      creativeAssets: true,
+    },
+  });
+
+  if (!loaded) {
+    throw new Error("Не удалось подготовить календарную публикацию.");
+  }
+
+  return loaded;
+}
+
+async function processMonthProductionTask(taskId: string) {
+  const task = await prisma.monthProductionTask.update({
+    where: { id: taskId },
+    data: { status: "running", startedAt: new Date(), errorMessage: null },
+  });
+
+  try {
+    if (task.taskType === "generate_text") {
+      if (!task.plannedContentItemId) throw new Error("Материал для текста не найден.");
+      const result = await generateContentTextForPlannedItem(task.plannedContentItemId, {
+        replaceExisting: false,
+        createReviewEvent: true,
+        generationJobType: "generate_publication_text",
+      });
+      if (result.status === "failed") throw new Error(result.message);
+      await prisma.monthProductionTask.update({
+        where: { id: task.id },
+        data: { status: "completed", contentDraftId: result.contentDraftId, completedAt: new Date() },
+      });
+      return;
+    }
+
+    if (task.taskType === "generate_brief") {
+      if (!task.plannedContentItemId) throw new Error("Материал для ТЗ не найден.");
+      const existingAsset = await prisma.creativeAsset.findFirst({
+        where: { plannedContentItemId: task.plannedContentItemId },
+        select: { id: true },
+      });
+      if (existingAsset) {
+        await prisma.monthProductionTask.update({
+          where: { id: task.id },
+          data: { status: "completed", creativeAssetId: existingAsset.id, completedAt: new Date() },
+        });
+        return;
+      }
+
+      const publication = await scheduledPublicationForProductionItem(task.plannedContentItemId);
+      const generationJob = await createGenerationJob({
+        clientId: publication.clientId,
+        blueprintId: publication.blueprintId,
+        monthlyPlanId: publication.monthlyPlanId,
+        plannedContentItemId: publication.plannedContentItemId,
+        contentDraftId: publication.contentDraftId,
+        scheduledPublicationId: publication.id,
+        jobType: "generate_creative_brief",
+        title: "Генерация ТЗ на креатив",
+      });
+      await markGenerationJobRunning(generationJob.id, "AI готовит ТЗ на креатив.");
+      const brief = await generateCreativeAssetBriefFromContext(publication);
+      const asset = await prisma.creativeAsset.create({
+        data: {
+          clientId: publication.clientId,
+          blueprintId: publication.blueprintId,
+          monthlyPlanId: publication.monthlyPlanId,
+          plannedContentItemId: publication.plannedContentItemId,
+          contentDraftId: publication.contentDraftId,
+          scheduledPublicationId: publication.id,
+          assetType: brief.assetType,
+          title: brief.title,
+          brief: brief.brief,
+          formatRequirements: brief.formatRequirements,
+          textOnAsset: brief.textOnAsset || null,
+          references: brief.references,
+          status: "brief_ready",
+          source: "ai",
+          approvalRequired: brief.approvalRequired,
+          notes: brief.notes,
+        },
+      });
+      await markGenerationJobCompleted(generationJob.id, "ТЗ на креатив сгенерировано.", { creativeAssetId: asset.id });
+      await prisma.monthProductionTask.update({
+        where: { id: task.id },
+        data: { status: "completed", creativeAssetId: asset.id, completedAt: new Date() },
+      });
+      return;
+    }
+
+    if (task.taskType === "generate_visual") {
+      if (!task.plannedContentItemId) throw new Error("Материал для визуала не найден.");
+      const asset = await prisma.creativeAsset.findFirst({
+        where: { plannedContentItemId: task.plannedContentItemId },
+        include: { generatedVariants: { select: { id: true } } },
+        orderBy: { createdAt: "desc" },
+      });
+      if (!asset) throw new Error("Сначала нужно ТЗ на креатив.");
+      if (asset.generatedVariants.length > 0) {
+        await prisma.monthProductionTask.update({
+          where: { id: task.id },
+          data: { status: "completed", creativeAssetId: asset.id, completedAt: new Date() },
+        });
+        return;
+      }
+      const result = await generateVisualForCreativeAssetId(asset.id);
+      if (result.status === "failed") throw new Error(result.message);
+      await prisma.monthProductionTask.update({
+        where: { id: task.id },
+        data: { status: "completed", creativeAssetId: asset.id, completedAt: new Date() },
+      });
+      return;
+    }
+
+    await prisma.monthProductionTask.update({
+      where: { id: task.id },
+      data: { status: "completed", completedAt: new Date() },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Не удалось выполнить задачу производства.";
+    await prisma.monthProductionTask.update({
+      where: { id: task.id },
+      data: { status: "failed", errorMessage: message, completedAt: new Date() },
+    });
+  }
+}
+
 export async function prepareMonthProductionEngine(formData: FormData) {
   let monthlyPlanId = formText(formData, "monthlyPlanId");
   let blueprintId = formText(formData, "blueprintId");
-  const notices: string[] = [];
-  const errors: string[] = [];
 
   if (!monthlyPlanId) {
     if (!blueprintId) {
@@ -2758,7 +3081,6 @@ export async function prepareMonthProductionEngine(formData: FormData) {
     const created = await createMonthlyPlanForBlueprint(blueprintId, formData);
     monthlyPlanId = created.monthlyPlanId;
     blueprintId = created.blueprintId;
-    notices.push(created.notice);
   } else if (!blueprintId) {
     const plan = await prisma.monthlyOperatingPlan.findUnique({
       where: { id: monthlyPlanId },
@@ -2770,33 +3092,109 @@ export async function prepareMonthProductionEngine(formData: FormData) {
     blueprintId = plan.blueprintId;
   }
 
-  const datePreparation = await normalizeDatesForMonthlyPlan(monthlyPlanId);
-  if (datePreparation.hasFailures) errors.push(datePreparation.notice);
-  else notices.push(datePreparation.notice);
-
-  const textPreparation = await prepareMissingTextsForMonthlyPlan(monthlyPlanId);
-  if (textPreparation.hasFailures) errors.push(textPreparation.notice);
-  else notices.push(textPreparation.notice);
-
-  const schedulePreparation = await ensureScheduledPublicationsForMonthlyPlan(monthlyPlanId);
-  if (schedulePreparation.hasFailures) errors.push(schedulePreparation.notice);
-  else notices.push(schedulePreparation.notice);
-
-  const briefPreparation = await prepareMissingCreativeBriefsForMonthlyPlan(monthlyPlanId);
-  if (briefPreparation.hasFailures) errors.push(briefPreparation.notice);
-  else notices.push(briefPreparation.notice);
-
-  const visualPreparation = await prepareMissingVisualsForMonthlyPlan(monthlyPlanId);
-  if (visualPreparation.hasFailures) errors.push(visualPreparation.notice);
-  else notices.push(visualPreparation.notice);
+  await normalizeDatesForMonthlyPlan(monthlyPlanId);
+  const run = await createMonthProductionRun(monthlyPlanId);
 
   revalidatePath("/");
   redirect(workspaceLocation("drafts", {
     blueprintId,
     planId: monthlyPlanId,
-    ...(errors.length > 0
-      ? { error: `Подготовка месяца выполнена с ошибками: ${errors.join(" ")}` }
-      : { notice: `Подготовка месяца запущена. ${notices.join(" ")}` }),
+    notice: `Подготовка месяца поставлена в очередь. Run: ${run.id}. Можно закрыть страницу, прогресс сохранится.`,
+  }));
+}
+
+export async function processNextMonthProductionTasks(formData: FormData) {
+  const productionRunId = formText(formData, "productionRunId");
+  if (!productionRunId) errorRedirect("Production run не выбран.", "drafts");
+
+  const run = await prisma.monthProductionRun.findUnique({ where: { id: productionRunId } });
+  if (!run) errorRedirect("Production run не найден.", "drafts");
+
+  await prisma.monthProductionRun.update({
+    where: { id: run.id },
+    data: { status: "running", startedAt: run.startedAt ?? new Date() },
+  });
+
+  const queuedTasks = await prisma.monthProductionTask.findMany({
+    where: { productionRunId: run.id, status: "queued" },
+    orderBy: { createdAt: "asc" },
+  });
+  const nextStage = queuedTasks.sort((left, right) => productionStageRank(left.stage) - productionStageRank(right.stage))[0]?.stage;
+  const batchSize = nextStage === "texts" ? 3 : nextStage === "briefs" ? 2 : 1;
+  const batch = queuedTasks
+    .filter((task) => task.stage === nextStage)
+    .slice(0, batchSize);
+
+  for (const task of batch) {
+    await processMonthProductionTask(task.id);
+  }
+
+  const updatedRun = await refreshMonthProductionRunCounters(run.id);
+
+  revalidatePath("/");
+  redirect(workspaceLocation("drafts", {
+    blueprintId: run.blueprintId,
+    planId: run.monthlyPlanId,
+    ...(updatedRun.status === "completed" || updatedRun.status === "completed_with_errors"
+      ? { notice: updatedRun.status === "completed" ? "Подготовка месяца завершена." : "Подготовка месяца завершена с ошибками. Ошибки можно повторить." }
+      : { notice: `Продолжили подготовку месяца: ${updatedRun.completedTasks}/${updatedRun.totalTasks} задач готово.` }),
+  }));
+}
+
+export async function retryFailedProductionTasks(formData: FormData) {
+  const productionRunId = formText(formData, "productionRunId");
+  if (!productionRunId) errorRedirect("Production run не выбран.", "drafts");
+
+  const run = await prisma.monthProductionRun.findUnique({ where: { id: productionRunId } });
+  if (!run) errorRedirect("Production run не найден.", "drafts");
+
+  await prisma.monthProductionTask.updateMany({
+    where: { productionRunId, status: "failed" },
+    data: { status: "queued", errorMessage: null, startedAt: null, completedAt: null },
+  });
+  await refreshMonthProductionRunCounters(productionRunId);
+
+  revalidatePath("/");
+  redirect(workspaceLocation("drafts", {
+    blueprintId: run.blueprintId,
+    planId: run.monthlyPlanId,
+    notice: "Ошибки возвращены в очередь. Нажмите «Продолжить подготовку».",
+  }));
+}
+
+export async function retryMaterialProductionStep(formData: FormData) {
+  const plannedContentItemId = formText(formData, "plannedContentItemId");
+  const step = formText(formData, "step");
+  if (!plannedContentItemId || !["generate_text", "generate_brief", "generate_visual"].includes(step)) {
+    errorRedirect("Не выбрана задача для повтора.", "drafts");
+  }
+
+  const latestTask = await prisma.monthProductionTask.findFirst({
+    where: { plannedContentItemId },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!latestTask) errorRedirect("Для материала ещё нет production run.", "drafts");
+
+  await prisma.monthProductionTask.create({
+    data: {
+      productionRunId: latestTask.productionRunId,
+      clientId: latestTask.clientId,
+      blueprintId: latestTask.blueprintId,
+      monthlyPlanId: latestTask.monthlyPlanId,
+      plannedContentItemId,
+      stage: step === "generate_text" ? "texts" : step === "generate_brief" ? "briefs" : "visuals",
+      taskType: step,
+      title: `Повтор: ${step}`,
+    },
+  });
+  await refreshMonthProductionRunCounters(latestTask.productionRunId);
+
+  revalidatePath("/");
+  redirect(workspaceLocation("drafts", {
+    blueprintId: latestTask.blueprintId,
+    planId: latestTask.monthlyPlanId,
+    materialId: plannedContentItemId,
+    notice: "Задача добавлена в очередь повторной подготовки.",
   }));
 }
 

@@ -33,12 +33,15 @@ import {
   prepareMonthAutopilot,
   prepareMonthProductionEngine,
   prepareMonthVisuals,
+  processNextMonthProductionTasks,
   proposeMonthlyPlanRevision,
   reviseMonthlyPlanWithCopilot,
   regenerateCreativeAssetBrief,
   rejectDraft,
   rejectCreativeVariant,
   rejectMonthlyPlanRevisionProposal,
+  retryFailedProductionTasks,
+  retryMaterialProductionStep,
   requestDraftChanges,
   revokeClientPortalLink,
   scheduleContentDraft,
@@ -1246,6 +1249,31 @@ type GenerationJobPreview = {
   completedAt: Date | null;
 };
 
+type MonthProductionTaskPreview = {
+  id: string;
+  plannedContentItemId: string | null;
+  stage: string;
+  taskType: string;
+  status: string;
+  title: string;
+  errorMessage: string | null;
+  startedAt: Date | null;
+  completedAt: Date | null;
+};
+
+type MonthProductionRunPreview = {
+  id: string;
+  status: string;
+  currentStage: string;
+  totalTasks: number;
+  completedTasks: number;
+  failedTasks: number;
+  errorMessage: string | null;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  tasks: MonthProductionTaskPreview[];
+};
+
 function formatGenerationJobType(jobType: string) {
   const labels: Record<string, string> = {
     prepare_month_texts: "Автоподготовка месяца",
@@ -1277,6 +1305,29 @@ function generationJobTone(status: string): "neutral" | "teal" | "amber" | "rose
   if (status === "completed") return "green";
   if (status === "failed") return "rose";
   return "neutral";
+}
+
+function formatProductionStage(stage: string) {
+  const labels: Record<string, string> = {
+    planning: "План",
+    dates: "Даты",
+    texts: "Тексты",
+    briefs: "ТЗ",
+    visuals: "Визуалы",
+    quality_check: "AI-проверка",
+    done: "Готово",
+  };
+  return labels[stage] ?? formatStatus(stage);
+}
+
+function formatProductionTaskType(taskType: string) {
+  const labels: Record<string, string> = {
+    generate_text: "Текст",
+    generate_brief: "ТЗ",
+    generate_visual: "Визуал",
+    quality_check: "AI-проверка",
+  };
+  return labels[taskType] ?? formatStatus(taskType);
 }
 
 function generationJobSummary(job: GenerationJobPreview) {
@@ -1340,6 +1391,77 @@ function GenerationJobsPanel({ jobs }: { jobs: GenerationJobPreview[] }) {
         {jobs.length === 0 ? <EmptyState>Пока нет производственных задач.</EmptyState> : null}
       </div>
     </article>
+  );
+}
+
+function MonthProductionRunPanel({ run }: { run?: MonthProductionRunPreview }) {
+  if (!run) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+        <p className="text-sm font-semibold text-slate-950">Производство месяца ещё не запускалось.</p>
+        <p className="mt-1 text-sm text-slate-500">Нажмите «Подготовить месяц», чтобы поставить тексты, ТЗ и визуалы в очередь.</p>
+      </div>
+    );
+  }
+
+  const progress = run.totalTasks > 0 ? Math.round(((run.completedTasks + run.failedTasks) / run.totalTasks) * 100) : 0;
+  const runningTask = run.tasks.find((task) => task.status === "running");
+  const nextTask = runningTask ?? run.tasks.find((task) => task.status === "queued");
+  const textTasks = run.tasks.filter((task) => task.taskType === "generate_text");
+  const briefTasks = run.tasks.filter((task) => task.taskType === "generate_brief");
+  const visualTasks = run.tasks.filter((task) => task.taskType === "generate_visual");
+  const failedTasks = run.tasks.filter((task) => task.status === "failed");
+  const active = ["queued", "running", "paused", "completed_with_errors"].includes(run.status) && run.completedTasks + run.failedTasks < run.totalTasks;
+  const stageCounts = (tasks: MonthProductionTaskPreview[]) => `${tasks.filter((task) => task.status === "completed").length}/${tasks.length}`;
+
+  return (
+    <section className="rounded-[24px] border border-violet-100 bg-white p-4 shadow-[0_10px_28px_rgba(88,75,135,0.055)]">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">Производство месяца</p>
+          <h3 className="mt-1 text-lg font-semibold text-slate-950">Подготовка месяца</h3>
+          <p className="mt-1 text-sm text-slate-500">Можно закрыть страницу, прогресс сохранится. Готовые материалы уже доступны.</p>
+        </div>
+        <StatusBadge tone={run.status === "completed" ? "green" : run.failedTasks > 0 ? "rose" : active ? "teal" : "neutral"}>
+          {run.status === "completed_with_errors" ? "Есть ошибки" : formatStatus(run.status)}
+        </StatusBadge>
+      </div>
+      <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+        <div className="h-full rounded-full bg-violet-600 transition-all" style={{ width: `${progress}%` }} />
+      </div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-4">
+        <MetricCard label="Тексты" value={stageCounts(textTasks)} detail="готово" />
+        <MetricCard label="ТЗ" value={stageCounts(briefTasks)} detail="готово" />
+        <MetricCard label="Визуалы" value={stageCounts(visualTasks)} detail="готово" />
+        <MetricCard label="Ошибки" value={run.failedTasks} detail="повторяемо" tone={run.failedTasks > 0 ? "amber" : "teal"} />
+      </div>
+      <div className="mt-4 rounded-2xl bg-slate-50 p-3 text-sm text-slate-600">
+        {nextTask ? (
+          <p>Сейчас в очереди: <span className="font-semibold text-slate-950">{formatProductionTaskType(nextTask.taskType)}</span> · {nextTask.title}</p>
+        ) : (
+          <p>{run.failedTasks > 0 ? "Производство завершено с ошибками." : "Производство месяца завершено."}</p>
+        )}
+        <p className="mt-1 text-xs font-semibold text-slate-400">Стадия: {formatProductionStage(run.currentStage)} · {run.completedTasks}/{run.totalTasks} задач готово</p>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {active ? (
+          <form action={processNextMonthProductionTasks}>
+            <input type="hidden" name="productionRunId" value={run.id} />
+            <PendingSubmitButton pendingLabel="Продолжаем..." className="rounded-full bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700">
+              Продолжить подготовку
+            </PendingSubmitButton>
+          </form>
+        ) : null}
+        {failedTasks.length > 0 ? (
+          <form action={retryFailedProductionTasks}>
+            <input type="hidden" name="productionRunId" value={run.id} />
+            <PendingSubmitButton pendingLabel="Возвращаем ошибки..." className="rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-100">
+              Повторить ошибки
+            </PendingSubmitButton>
+          </form>
+        ) : null}
+      </div>
+    </section>
   );
 }
 
@@ -3461,6 +3583,7 @@ function DraftsView({
   items,
   publications,
   jobs,
+  productionRun,
   monthlyPlanId,
   blueprintId,
   clientName,
@@ -3479,6 +3602,7 @@ function DraftsView({
   items: MaterialPlannedItem[];
   publications: ScheduledPublicationPreview[];
   jobs: GenerationJobPreview[];
+  productionRun?: MonthProductionRunPreview;
   monthlyPlanId?: string;
   blueprintId?: string;
   clientName?: string;
@@ -3523,6 +3647,13 @@ function DraftsView({
     return `/?${searchParams.toString()}`;
   };
   const publicationByItemId = new Map(publications.map((publication) => [publication.plannedContentItemId, publication]));
+  const productionTasksByItemId = new Map<string, MonthProductionTaskPreview[]>();
+  for (const task of productionRun?.tasks ?? []) {
+    if (!task.plannedContentItemId) continue;
+    const tasks = productionTasksByItemId.get(task.plannedContentItemId) ?? [];
+    tasks.push(task);
+    productionTasksByItemId.set(task.plannedContentItemId, tasks);
+  }
   const itemMatchesFilter = (item: MaterialPlannedItem) => {
     const publication = publicationByItemId.get(item.id);
     const asset = item.creativeAssets[0] ?? publication?.creativeAssets[0];
@@ -3549,14 +3680,24 @@ function DraftsView({
   const selectedClientRevision = selectedItem?.contentDraft?.reviewEvents
     .filter((event) => event.actorType === "client" || (event.action === "changes_requested" && Boolean(event.comment)))
     .at(-1);
+  const selectedProductionTasks = selectedItem ? productionTasksByItemId.get(selectedItem.id) ?? [] : [];
+  const selectedFailedProductionTasks = selectedProductionTasks.filter((task) => task.status === "failed");
+  const selectedRunningProductionTask = selectedProductionTasks.find((task) => task.status === "running" || task.status === "queued");
   const packageReady = selectedItem?.contentDraft?.status === "ready_to_schedule" || selectedPublication?.status === "ready";
   const visualSource = selectedVisual ? getGeneratedVariantImageSrc(selectedVisual) : null;
   const statusForMaterial = (item: MaterialPlannedItem) => {
+    const itemTasks = productionTasksByItemId.get(item.id) ?? [];
+    const failedTask = itemTasks.find((task) => task.status === "failed");
+    const runningTask = itemTasks.find((task) => task.status === "running" || task.status === "queued");
     const publication = publicationByItemId.get(item.id);
     const asset = publication?.creativeAssets[0] ?? item.creativeAssets[0];
     const hasVisual = Boolean(asset?.generatedVariants.length || item.generatedCreativeVariants.length);
     const draftStatus = item.contentDraft?.status;
 
+    if (failedTask) return "Ошибка";
+    if (runningTask?.taskType === "generate_text") return runningTask.status === "running" ? "Текст создаётся" : "Ожидает";
+    if (runningTask?.taskType === "generate_brief") return runningTask.status === "running" ? "ТЗ создаётся" : "Ожидает ТЗ";
+    if (runningTask?.taskType === "generate_visual") return runningTask.status === "running" ? "Визуал создаётся" : "Ожидает визуал";
     if (!item.contentDraft) return "Нужен текст";
     if (draftStatus === "client_changes_requested") return "Есть правки";
     if (!asset) return "Нужно ТЗ";
@@ -3680,11 +3821,15 @@ function DraftsView({
                   Подготовить визуалы
                 </PendingSubmitButton>
               </form>
-              <a href={reportsHref} className={softButtonClass}>Собрать месячный пакет</a>
-            </div>
-          </section>
+	              <a href={reportsHref} className={softButtonClass}>Собрать месячный пакет</a>
+	            </div>
+	          </section>
 
-          <div className="mt-4 flex flex-wrap gap-1.5">
+	          <div className="mt-4">
+	            <MonthProductionRunPanel run={productionRun} />
+	          </div>
+
+	          <div className="mt-4 flex flex-wrap gap-1.5">
             {filters.map((filter) => (
               <a
                 key={filter.id}
@@ -3736,12 +3881,33 @@ function DraftsView({
                         </div>
                       ) : null}
                     </div>
-                    <span className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${nextActionBadgeClass(selectedActionLabel)}`}>
-                      {selectedActionLabel}
-                    </span>
-                  </div>
+	                    <span className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${nextActionBadgeClass(selectedActionLabel)}`}>
+	                      {selectedActionLabel}
+	                    </span>
+	                  </div>
 
-                  <div className="mt-5 grid gap-4">
+	                  {selectedRunningProductionTask || selectedFailedProductionTasks.length > 0 ? (
+	                    <div className={`mt-4 rounded-2xl border p-3 text-sm ${selectedFailedProductionTasks.length > 0 ? "border-rose-200 bg-rose-50 text-rose-900" : "border-violet-100 bg-violet-50 text-violet-900"}`}>
+	                      {selectedRunningProductionTask ? (
+	                        <p>
+	                          {selectedRunningProductionTask.status === "running" ? "Сейчас выполняется" : "Ожидает в очереди"}:{" "}
+	                          <span className="font-semibold">{formatProductionTaskType(selectedRunningProductionTask.taskType)}</span>
+	                        </p>
+	                      ) : null}
+	                      {selectedFailedProductionTasks.map((task) => (
+	                        <form key={task.id} action={retryMaterialProductionStep} className="mt-2 flex flex-wrap items-center gap-2">
+	                          <input type="hidden" name="plannedContentItemId" value={selectedItem.id} />
+	                          <input type="hidden" name="step" value={task.taskType} />
+	                          <span className="text-xs font-semibold">{formatProductionTaskType(task.taskType)}: {task.errorMessage || "ошибка генерации"}</span>
+	                          <PendingSubmitButton pendingLabel="Добавляем..." className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-rose-700">
+	                            Повторить шаг
+	                          </PendingSubmitButton>
+	                        </form>
+	                      ))}
+	                    </div>
+	                  ) : null}
+
+	                  <div className="mt-5 grid gap-4">
                     <section className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <h4 className="text-base font-semibold text-slate-950">1. Текст публикации</h4>
@@ -5137,11 +5303,20 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 revisionProposals: {
                   orderBy: { createdAt: "desc" },
                 },
-                generationJobs: {
-                  orderBy: { createdAt: "desc" },
-                  take: 30,
-                },
-                creativeAssets: {
+	                generationJobs: {
+	                  orderBy: { createdAt: "desc" },
+	                  take: 30,
+	                },
+	                productionRuns: {
+	                  orderBy: { createdAt: "desc" },
+	                  take: 3,
+	                  include: {
+	                    tasks: {
+	                      orderBy: { createdAt: "asc" },
+	                    },
+	                  },
+	                },
+	                creativeAssets: {
                   orderBy: { createdAt: "desc" },
                   include: {
                     scheduledPublication: true,
@@ -5224,11 +5399,20 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 revisionProposals: {
                   orderBy: { createdAt: "desc" },
                 },
-                generationJobs: {
-                  orderBy: { createdAt: "desc" },
-                  take: 30,
-                },
-                creativeAssets: {
+	                generationJobs: {
+	                  orderBy: { createdAt: "desc" },
+	                  take: 30,
+	                },
+	                productionRuns: {
+	                  orderBy: { createdAt: "desc" },
+	                  take: 3,
+	                  include: {
+	                    tasks: {
+	                      orderBy: { createdAt: "asc" },
+	                    },
+	                  },
+	                },
+	                creativeAssets: {
                   orderBy: { createdAt: "desc" },
                   include: {
                     scheduledPublication: true,
@@ -5301,6 +5485,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
   const missingTextCount = Math.max(plannedContentCount - draftCount, 0);
   const creativeAssets = selectedMonthlyPlan?.creativeAssets ?? [];
   const generationJobs = selectedMonthlyPlan?.generationJobs ?? [];
+  const latestProductionRun = selectedMonthlyPlan?.productionRuns[0];
   const creativeAssetAttentionCount =
     creativeAssets.filter((asset) => ["needed", "brief_ready", "in_production", "needs_review"].includes(asset.status)).length +
     (selectedMonthlyPlan?.scheduledPublications.filter(
@@ -5511,9 +5696,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
             {activeView === "drafts" ? (
               <DraftsView
                 items={selectedMonthlyPlan?.plannedContentItems ?? []}
-                publications={selectedMonthlyPlan?.scheduledPublications ?? []}
-                jobs={generationJobs}
-                monthlyPlanId={selectedMonthlyPlan?.id}
+	                publications={selectedMonthlyPlan?.scheduledPublications ?? []}
+	                jobs={generationJobs}
+	                productionRun={latestProductionRun}
+	                monthlyPlanId={selectedMonthlyPlan?.id}
                 blueprintId={latestBlueprint?.id}
                 clientName={latestBlueprint?.client.name}
                 month={selectedMonthlyPlan?.month}
