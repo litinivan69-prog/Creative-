@@ -454,6 +454,15 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - `Переделать месяц` creates a new monthly plan version for the same client/month, marks the previous active plan as `replaced`, starts a fresh production run, and preserves old work.
 - The dashboard selects the latest non-replaced month by default, so managers can test or rebuild without manually re-entering the original brief.
 
+## Critical Hotfix Month Preparation State
+
+- Month preparation now uses one safe `prepareOrContinueMonthProduction` flow for creating/opening a plan, creating/reusing a production run, and recovering missing tasks.
+- Repeated clicks no longer create duplicate monthly plans or duplicate production runs; existing runs are opened and existing artifacts are preserved.
+- Partial months are recoverable: the queue inspects existing texts, creative briefs, and visuals, then enqueues only missing steps.
+- Materials shows a clear `Подготовка месяца` progress panel with plan status, date status, text/TZ/visual counters, current task, error count, and recovery actions.
+- Raw duplicate-plan and timeout/quota errors are converted into manager-friendly Russian messages.
+- Test clients can safely reset and rebuild the test month without affecting the original client.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.

@@ -32,7 +32,7 @@ import {
   markScheduledPublicationSkipped,
   prepareMonthCreativeBriefs,
   prepareMonthAutopilot,
-  prepareMonthProductionEngine,
+  prepareOrContinueMonthProduction,
   prepareMonthVisuals,
   processNextMonthProductionTasks,
   proposeMonthlyPlanRevision,
@@ -42,6 +42,7 @@ import {
   rejectCreativeVariant,
   rejectMonthlyPlanRevisionProposal,
   rebuildMonthProduction,
+  resetTestMonthProduction,
   retryFailedProductionTasks,
   retryMaterialProductionStep,
   requestDraftChanges,
@@ -1276,6 +1277,15 @@ type MonthProductionRunPreview = {
   tasks: MonthProductionTaskPreview[];
 };
 
+type MonthProductionPlanState = {
+  id?: string;
+  blueprintId?: string;
+  clientId?: string;
+  totalPlannedUnits?: number;
+  plannedItemsCount?: number;
+  clientName?: string;
+};
+
 function formatGenerationJobType(jobType: string) {
   const labels: Record<string, string> = {
     prepare_month_texts: "Автоподготовка месяца",
@@ -1396,13 +1406,69 @@ function GenerationJobsPanel({ jobs }: { jobs: GenerationJobPreview[] }) {
   );
 }
 
-function MonthProductionRunPanel({ run }: { run?: MonthProductionRunPreview }) {
+function productionRunState(run?: MonthProductionRunPreview) {
+  if (!run) return "plan_created";
+  if (run.status === "completed") return "production_completed";
+  if (run.status === "paused") return "production_paused";
+  if (run.failedTasks > 0 && run.completedTasks + run.failedTasks >= run.totalTasks) return "production_failed";
+  if (run.status === "completed_with_errors") return "production_failed";
+  if (run.status === "running" || run.status === "queued") return "production_running";
+  return "production_partial";
+}
+
+function productionStateLabel(state: string) {
+  const labels: Record<string, string> = {
+    plan_created: "План создан",
+    production_running: "Подготовка идёт",
+    production_paused: "Подготовка остановлена",
+    production_failed: "Есть ошибки",
+    production_partial: "Можно продолжить",
+    production_completed: "Готово к проверке",
+  };
+
+  return labels[state] ?? "Проверить состояние";
+}
+
+function MonthProductionRunPanel({ run, plan }: { run?: MonthProductionRunPreview; plan?: MonthProductionPlanState }) {
+  const state = productionRunState(run);
+  const plannedItemsCount = plan?.plannedItemsCount ?? 0;
+  const expectedUnits = plan?.totalPlannedUnits ?? plannedItemsCount;
+  const hasPlan = Boolean(plan?.id || plan?.blueprintId);
+  const isTestClient = Boolean(plan?.clientName && /\btest\b|· test/i.test(plan.clientName));
+
   if (!run) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <p className="text-sm font-semibold text-slate-950">Производство месяца ещё не запускалось.</p>
-        <p className="mt-1 text-sm text-slate-500">Нажмите «Подготовить месяц», чтобы поставить тексты, ТЗ и визуалы в очередь.</p>
-      </div>
+      <section className="rounded-[24px] border border-violet-100 bg-white p-4 shadow-[0_10px_28px_rgba(88,75,135,0.055)]">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">Подготовка месяца</p>
+            <h3 className="mt-1 text-lg font-semibold text-slate-950">{plan?.id ? "Месячный план найден" : "План ещё не создан"}</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              {hasPlan
+                ? `Материалов в плане: ${plannedItemsCount}. Запустите подготовку, чтобы поставить недостающие тексты, ТЗ и визуалы в очередь.`
+                : "Нажмите «Подготовить месяц», чтобы создать план и очередь производства."}
+            </p>
+          </div>
+          <StatusBadge tone="neutral">{plan?.id ? "plan_created" : "no_plan"}</StatusBadge>
+        </div>
+        {expectedUnits > plannedItemsCount ? (
+          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">
+            План содержит {plannedItemsCount} материалов из ожидаемых {expectedUnits}. Проверьте scope или пересоберите месяц.
+          </div>
+        ) : (
+          <p className="mt-4 rounded-2xl bg-slate-50 p-3 text-sm text-slate-600">Материалов в плане: {plannedItemsCount}.</p>
+        )}
+        {hasPlan ? (
+          <form action={prepareOrContinueMonthProduction} className="mt-4">
+            {plan?.id ? <input type="hidden" name="monthlyPlanId" value={plan.id} /> : null}
+            {plan?.blueprintId ? <input type="hidden" name="blueprintId" value={plan.blueprintId} /> : null}
+            {plan?.clientId ? <input type="hidden" name="clientId" value={plan.clientId} /> : null}
+            <PendingSubmitButton pendingLabel="Запускаем..." className="rounded-full bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:bg-slate-300">
+              {plan?.id ? "Начать подготовку" : "Подготовить месяц"}
+            </PendingSubmitButton>
+          </form>
+        ) : null}
+      </section>
     );
   }
 
@@ -1415,6 +1481,11 @@ function MonthProductionRunPanel({ run }: { run?: MonthProductionRunPreview }) {
   const failedTasks = run.tasks.filter((task) => task.status === "failed");
   const active = ["queued", "running", "paused", "completed_with_errors"].includes(run.status) && run.completedTasks + run.failedTasks < run.totalTasks;
   const stageCounts = (tasks: MonthProductionTaskPreview[]) => `${tasks.filter((task) => task.status === "completed").length}/${tasks.length}`;
+  const primaryActionLabel = failedTasks.length > 0 && !active
+    ? "Повторить ошибки"
+    : active
+      ? run.status === "running" ? "Смотреть прогресс" : "Продолжить подготовку"
+      : run.status === "completed" ? "Открыть месяц" : "Проверить состояние";
 
   return (
     <section className="rounded-[24px] border border-violet-100 bg-white p-4 shadow-[0_10px_28px_rgba(88,75,135,0.055)]">
@@ -1425,8 +1496,16 @@ function MonthProductionRunPanel({ run }: { run?: MonthProductionRunPreview }) {
           <p className="mt-1 text-sm text-slate-500">Можно закрыть страницу, прогресс сохранится. Готовые материалы уже доступны.</p>
         </div>
         <StatusBadge tone={run.status === "completed" ? "green" : run.failedTasks > 0 ? "rose" : active ? "teal" : "neutral"}>
-          {run.status === "completed_with_errors" ? "Есть ошибки" : formatStatus(run.status)}
+          {productionStateLabel(state)}
         </StatusBadge>
+      </div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <div className="rounded-2xl bg-slate-50 p-3 text-sm text-slate-600">
+          <span className="font-semibold text-slate-950">План:</span> готов
+        </div>
+        <div className="rounded-2xl bg-slate-50 p-3 text-sm text-slate-600">
+          <span className="font-semibold text-slate-950">Даты:</span> готово
+        </div>
       </div>
       <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
         <div className="h-full rounded-full bg-violet-600 transition-all" style={{ width: `${progress}%` }} />
@@ -1437,6 +1516,13 @@ function MonthProductionRunPanel({ run }: { run?: MonthProductionRunPreview }) {
         <MetricCard label="Визуалы" value={stageCounts(visualTasks)} detail="готово" />
         <MetricCard label="Ошибки" value={run.failedTasks} detail="повторяемо" tone={run.failedTasks > 0 ? "amber" : "teal"} />
       </div>
+      {expectedUnits > plannedItemsCount ? (
+        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">
+          План содержит {plannedItemsCount} материалов из ожидаемых {expectedUnits}. Проверьте scope или пересоберите месяц.
+        </div>
+      ) : (
+        <p className="mt-4 rounded-2xl bg-slate-50 p-3 text-sm text-slate-600">План содержит {plannedItemsCount} материалов.</p>
+      )}
       <div className="mt-4 rounded-2xl bg-slate-50 p-3 text-sm text-slate-600">
         {nextTask ? (
           <p>Сейчас в очереди: <span className="font-semibold text-slate-950">{formatProductionTaskType(nextTask.taskType)}</span> · {nextTask.title}</p>
@@ -1450,7 +1536,7 @@ function MonthProductionRunPanel({ run }: { run?: MonthProductionRunPreview }) {
           <form action={processNextMonthProductionTasks}>
             <input type="hidden" name="productionRunId" value={run.id} />
             <PendingSubmitButton pendingLabel="Продолжаем..." className="rounded-full bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700">
-              Продолжить подготовку
+              {primaryActionLabel}
             </PendingSubmitButton>
           </form>
         ) : null}
@@ -1461,6 +1547,19 @@ function MonthProductionRunPanel({ run }: { run?: MonthProductionRunPreview }) {
               Повторить ошибки
             </PendingSubmitButton>
           </form>
+        ) : null}
+        {isTestClient && plan?.id ? (
+          <details className="rounded-full border border-rose-100 bg-white px-4 py-2 text-sm font-semibold text-rose-700">
+            <summary className="cursor-pointer">Очистить тестовый месяц</summary>
+            <form action={resetTestMonthProduction} className="absolute z-10 mt-3 grid w-[min(92vw,440px)] gap-3 rounded-2xl border border-rose-100 bg-white p-4 text-left text-sm shadow-[0_18px_50px_rgba(88,75,135,0.16)]">
+              <input type="hidden" name="monthlyPlanId" value={plan.id} />
+              <p className="font-semibold text-slate-950">Очистить и пересобрать тестовый месяц?</p>
+              <p className="text-slate-500">Это удалит текущий тестовый месячный план и его production-данные, но не затронет оригинального клиента.</p>
+              <PendingSubmitButton pendingLabel="Пересобираем..." className="rounded-full bg-rose-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-rose-700">
+                Очистить и пересобрать
+              </PendingSubmitButton>
+            </form>
+          </details>
         ) : null}
       </div>
     </section>
@@ -3591,6 +3690,8 @@ function DraftsView({
   clientName,
   month,
   planStatus,
+  totalPlannedUnits,
+  clientId,
   selectedMaterialId,
   activeFilter,
   approvalsHref,
@@ -3610,6 +3711,8 @@ function DraftsView({
   clientName?: string;
   month?: string;
   planStatus?: string;
+  totalPlannedUnits?: number;
+  clientId?: string;
   selectedMaterialId?: string;
   activeFilter?: string;
   approvalsHref: string;
@@ -3697,9 +3800,9 @@ function DraftsView({
     const draftStatus = item.contentDraft?.status;
 
     if (failedTask) return "Ошибка";
-    if (runningTask?.taskType === "generate_text") return runningTask.status === "running" ? "Текст создаётся" : "Ожидает";
-    if (runningTask?.taskType === "generate_brief") return runningTask.status === "running" ? "ТЗ создаётся" : "Ожидает ТЗ";
-    if (runningTask?.taskType === "generate_visual") return runningTask.status === "running" ? "Визуал создаётся" : "Ожидает визуал";
+    if (runningTask?.taskType === "generate_text") return runningTask.status === "running" ? "Текст создаётся" : "Текст в очереди";
+    if (runningTask?.taskType === "generate_brief") return runningTask.status === "running" ? "ТЗ создаётся" : "ТЗ в очереди";
+    if (runningTask?.taskType === "generate_visual") return runningTask.status === "running" ? "Визуал создаётся" : "Визуал в очереди";
     if (!item.contentDraft) return "Нужен текст";
     if (draftStatus === "client_changes_requested") return "Есть правки";
     if (!asset) return "Нужно ТЗ";
@@ -3797,13 +3900,6 @@ function DraftsView({
 	              </div>
             </div>
 	            <div className="mt-4 flex flex-wrap gap-2">
-		              <form action={prepareMonthProductionEngine}>
-		                <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} />
-		                {blueprintId ? <input type="hidden" name="blueprintId" value={blueprintId} /> : null}
-		                <PendingSubmitButton pendingLabel="Готовим месяц..." className="rounded-full bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:bg-slate-300">
-		                  Подготовить месяц
-		                </PendingSubmitButton>
-		              </form>
 		              <details className="rounded-full border border-violet-100 bg-white px-3 py-2 text-xs font-semibold text-violet-700">
 		                <summary className="cursor-pointer">Переделать месяц</summary>
 		                <form action={rebuildMonthProduction} className="absolute z-10 mt-3 grid w-[min(92vw,440px)] gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left text-sm shadow-[0_18px_50px_rgba(88,75,135,0.16)]">
@@ -3818,31 +3914,50 @@ function DraftsView({
 		                  </div>
 		                </form>
 		              </details>
-		              <form action={prepareMonthAutopilot}>
-	                <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} />
-	                {blueprintId ? <input type="hidden" name="blueprintId" value={blueprintId} /> : null}
-                <PendingSubmitButton pendingLabel="Готовим тексты..." disabled={missingTextsCount === 0} className="rounded-full bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:bg-slate-300">
-                  Подготовить тексты
-                </PendingSubmitButton>
-              </form>
-              <form action={prepareMonthCreativeBriefs}>
-                <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} />
-                <PendingSubmitButton pendingLabel="Готовим ТЗ..." disabled={!allTextsReady || briefsReadyCount >= totalMaterialsCount} className={softButtonClass}>
-                  Подготовить ТЗ
-                </PendingSubmitButton>
-              </form>
-              <form action={prepareMonthVisuals}>
-                <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} />
-                <PendingSubmitButton pendingLabel="Готовим визуал..." disabled={briefsReadyCount === 0 || visualsReadyCount >= briefsReadyCount} className={softButtonClass}>
-                  Подготовить визуалы
-                </PendingSubmitButton>
-              </form>
+		              <details className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">
+		                <summary className="cursor-pointer">Ручное восстановление</summary>
+		                <div className="absolute z-10 mt-3 grid w-[min(92vw,520px)] gap-2 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-[0_18px_50px_rgba(88,75,135,0.16)]">
+		                  <p className="text-sm font-semibold text-slate-950">Точечные действия</p>
+		                  <p className="text-xs leading-5 text-slate-500">Используйте только если нужно восстановить отдельный слой. Основная подготовка месяца идёт через панель прогресса ниже.</p>
+		                  <div className="flex flex-wrap gap-2">
+		                    <form action={prepareMonthAutopilot}>
+	                      <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} />
+	                      {blueprintId ? <input type="hidden" name="blueprintId" value={blueprintId} /> : null}
+                      <PendingSubmitButton pendingLabel="Готовим тексты..." disabled={missingTextsCount === 0} className={softButtonClass}>
+                        Подготовить тексты
+                      </PendingSubmitButton>
+                    </form>
+                    <form action={prepareMonthCreativeBriefs}>
+                      <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} />
+                      <PendingSubmitButton pendingLabel="Готовим ТЗ..." disabled={!allTextsReady || briefsReadyCount >= totalMaterialsCount} className={softButtonClass}>
+                        Подготовить ТЗ
+                      </PendingSubmitButton>
+                    </form>
+                    <form action={prepareMonthVisuals}>
+                      <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} />
+                      <PendingSubmitButton pendingLabel="Готовим визуал..." disabled={briefsReadyCount === 0 || visualsReadyCount >= briefsReadyCount} className={softButtonClass}>
+                        Подготовить визуалы
+                      </PendingSubmitButton>
+                    </form>
+		                  </div>
+		                </div>
+		              </details>
 	              <a href={reportsHref} className={softButtonClass}>Собрать месячный пакет</a>
 	            </div>
 	          </section>
 
 	          <div className="mt-4">
-	            <MonthProductionRunPanel run={productionRun} />
+	            <MonthProductionRunPanel
+	              run={productionRun}
+	              plan={{
+	                id: monthlyPlanId,
+	                blueprintId,
+	                clientId,
+	                totalPlannedUnits,
+	                plannedItemsCount: totalMaterialsCount,
+	                clientName,
+	              }}
+	            />
 	          </div>
 
 	          <div className="mt-4 flex flex-wrap gap-1.5">
@@ -4912,8 +5027,9 @@ function ClientSetupWizard({
 	                </form>
 	              </details>
 	            ) : blueprint ? (
-	              <form action={prepareMonthProductionEngine}>
+	              <form action={prepareOrContinueMonthProduction}>
 	                <input type="hidden" name="blueprintId" value={blueprint.id} />
+	                <input type="hidden" name="clientId" value={blueprint.clientId} />
 	                <PendingSubmitButton pendingLabel="Готовим месяц..." disabled={blueprint.nextRecommendedAction === "request_more_brief_data"} className="rounded-md bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:bg-slate-300">
 	                  Подготовить месяц
 	                </PendingSubmitButton>
@@ -5758,6 +5874,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 clientName={latestBlueprint?.client.name}
                 month={selectedMonthlyPlan?.month}
                 planStatus={selectedMonthlyPlan?.status}
+                totalPlannedUnits={selectedMonthlyPlan?.totalPlannedUnits}
+                clientId={latestBlueprint?.clientId}
                 selectedMaterialId={params.materialId ?? params.material}
                 activeFilter={params.filter}
                 approvalsHref={workspaceLinks.approvals}
