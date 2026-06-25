@@ -305,7 +305,7 @@ function carouselSlideCountFromText(...values: Array<string | null | undefined>)
 
   if (!carouselMentioned) return 1;
 
-  const numericMatch = text.match(/(?:^|\D)([2-8])\s*(?:карточ|слайд|slide|card)/i);
+  const numericMatch = text.match(/(?:^|\D)([2-8])(?:\s+[a-zа-яё-]+){0,3}\s+(?:карточ|слайд|slide|card)/i);
   if (numericMatch?.[1]) return Number(numericMatch[1]);
 
   const wordCounts: Array<[string, number]> = [
@@ -314,6 +314,11 @@ function carouselSlideCountFromText(...values: Array<string | null | undefined>)
     ["четыр", 4],
     ["пять", 5],
     ["шесть", 6],
+    ["two", 2],
+    ["three", 3],
+    ["four", 4],
+    ["five", 5],
+    ["six", 6],
   ];
   const wordMatch = wordCounts.find(([word]) => text.includes(word));
 
@@ -363,6 +368,10 @@ function creativeAssetCreateInputsFromBrief(
     approvalRequired: boolean;
     notes: string;
   },
+  options: {
+    status?: CreativeAssetStatus;
+    source?: "ai" | "manual";
+  } = {},
 ) {
   const slideCount = carouselSlideCountFromText(
     brief.assetType,
@@ -381,8 +390,8 @@ function creativeAssetCreateInputsFromBrief(
     plannedContentItemId: publication.plannedContentItemId,
     contentDraftId: publication.contentDraftId,
     scheduledPublicationId: publication.id,
-    status: "brief_ready",
-    source: "ai",
+    status: options.status ?? "brief_ready",
+    source: options.source ?? "ai",
     approvalRequired: brief.approvalRequired,
   };
 
@@ -417,6 +426,179 @@ function creativeAssetCreateInputsFromBrief(
       notes: `${brief.notes}\nslideNumber=${slideNumber}; slideCount=${slideCount}`,
     };
   });
+}
+
+function isLegacyCombinedCarouselAsset(asset: { notes: string | null }) {
+  return Boolean(asset.notes?.includes("legacyCombinedCarouselAsset=true"));
+}
+
+function carouselSlideCreateInputsFromAsset(asset: {
+  clientId: string;
+  blueprintId: string;
+  monthlyPlanId: string;
+  plannedContentItemId: string;
+  contentDraftId: string;
+  scheduledPublicationId: string;
+  assetType: string;
+  title: string;
+  brief: string;
+  formatRequirements: string | null;
+  textOnAsset: string | null;
+  references: string | null;
+  status: string;
+  source: string;
+  approvalRequired: boolean;
+  notes: string | null;
+  scheduledPublication: {
+    id: string;
+    clientId: string;
+    blueprintId: string;
+    monthlyPlanId: string;
+    plannedContentItemId: string;
+    contentDraftId: string;
+    format: string;
+    topic: string;
+  };
+}) {
+  return creativeAssetCreateInputsFromBrief(
+    {
+      clientId: asset.clientId,
+      blueprintId: asset.blueprintId,
+      monthlyPlanId: asset.monthlyPlanId,
+      plannedContentItemId: asset.plannedContentItemId,
+      contentDraftId: asset.contentDraftId,
+      id: asset.scheduledPublicationId,
+      format: asset.scheduledPublication.format,
+      topic: asset.scheduledPublication.topic,
+    },
+    {
+      assetType: asset.assetType,
+      title: asset.title,
+      brief: asset.brief,
+      formatRequirements: asset.formatRequirements ?? "",
+      textOnAsset: asset.textOnAsset ?? "",
+      references: asset.references ?? "",
+      approvalRequired: asset.approvalRequired,
+      notes: asset.notes ?? "",
+    },
+    {
+      status: creativeAssetStatuses.includes(asset.status as CreativeAssetStatus) ? asset.status as CreativeAssetStatus : "brief_ready",
+      source: asset.source === "manual" ? "manual" : "ai",
+    },
+  ).filter((input) => input.assetType === "carousel_slide");
+}
+
+async function splitCreativeAssetIntoCarouselSlides(creativeAssetId: string) {
+  const asset = await prisma.creativeAsset.findUnique({
+    where: { id: creativeAssetId },
+    include: {
+      scheduledPublication: true,
+      generatedVariants: {
+        select: { id: true },
+      },
+    },
+  });
+
+  if (!asset) {
+    return {
+      status: "failed" as const,
+      message: "Креативный материал не найден.",
+    };
+  }
+
+  if (asset.assetType === "carousel_slide") {
+    return {
+      status: "skipped" as const,
+      message: "Это уже отдельная карточка карусели.",
+      blueprintId: asset.blueprintId,
+      monthlyPlanId: asset.monthlyPlanId,
+      plannedContentItemId: asset.plannedContentItemId,
+    };
+  }
+
+  const existingSlides = await prisma.creativeAsset.findMany({
+    where: {
+      scheduledPublicationId: asset.scheduledPublicationId,
+      plannedContentItemId: asset.plannedContentItemId,
+      assetType: "carousel_slide",
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (existingSlides.length > 0) {
+    return {
+      status: "skipped" as const,
+      message: `Карусель уже пересобрана: ${existingSlides.length} карточки.`,
+      blueprintId: asset.blueprintId,
+      monthlyPlanId: asset.monthlyPlanId,
+      plannedContentItemId: asset.plannedContentItemId,
+    };
+  }
+
+  const slideInputs = carouselSlideCreateInputsFromAsset(asset);
+
+  if (slideInputs.length <= 1) {
+    return {
+      status: "failed" as const,
+      message: "В этом ТЗ не найдено требование к нескольким карточкам.",
+      blueprintId: asset.blueprintId,
+      monthlyPlanId: asset.monthlyPlanId,
+      plannedContentItemId: asset.plannedContentItemId,
+    };
+  }
+
+  await prisma.$transaction(async (transaction) => {
+    for (const slideInput of slideInputs) {
+      await transaction.creativeAsset.create({ data: slideInput });
+    }
+
+    await transaction.creativeAsset.update({
+      where: { id: asset.id },
+      data: {
+        status: "rejected",
+        notes: [
+          asset.notes,
+          `legacyCombinedCarouselAsset=true; replacedByCarouselSlidesAt=${new Date().toISOString()}; slideCount=${slideInputs.length}`,
+        ].filter(Boolean).join("\n"),
+      },
+    });
+  });
+
+  return {
+    status: "created" as const,
+    message: `Карусель пересобрана: создано ${slideInputs.length} отдельных карточек.`,
+    blueprintId: asset.blueprintId,
+    monthlyPlanId: asset.monthlyPlanId,
+    plannedContentItemId: asset.plannedContentItemId,
+  };
+}
+
+function creativeAssetNeedsCarouselSplit(asset: {
+  assetType: string;
+  title: string;
+  brief: string;
+  formatRequirements: string | null;
+  textOnAsset: string | null;
+  notes: string | null;
+  scheduledPublication: {
+    format: string;
+    topic: string;
+  };
+}) {
+  if (asset.assetType === "carousel_slide" || isLegacyCombinedCarouselAsset(asset)) return false;
+
+  return carouselSlideCountFromText(
+    asset.assetType,
+    asset.title,
+    asset.brief,
+    asset.formatRequirements,
+    asset.textOnAsset,
+    asset.notes,
+    asset.scheduledPublication.format,
+    asset.scheduledPublication.topic,
+  ) > 1;
 }
 
 async function updateDraftWorkflow(
@@ -2958,6 +3140,17 @@ async function generateVisualForCreativeAssetId(creativeAssetId: string) {
     };
   }
 
+  if (creativeAssetNeedsCarouselSplit(asset)) {
+    const splitResult = await splitCreativeAssetIntoCarouselSlides(asset.id);
+
+    return {
+      status: splitResult.status === "created" || splitResult.status === "skipped" ? "split" as const : "failed" as const,
+      message: splitResult.message,
+      blueprintId: asset.blueprintId,
+      monthlyPlanId: asset.monthlyPlanId,
+    };
+  }
+
   const generationJob = await createGenerationJob({
     clientId: asset.clientId,
     blueprintId: asset.blueprintId,
@@ -3323,7 +3516,12 @@ async function ensureMissingMonthProductionTasks(monthlyPlanId: string, producti
       });
     }
 
-    for (const asset of item.creativeAssets) {
+    const carouselSlideAssets = item.creativeAssets.filter((asset) => asset.assetType === "carousel_slide");
+    const assetsForVisualTasks = carouselSlideAssets.length > 0
+      ? carouselSlideAssets
+      : item.creativeAssets.filter((asset) => !isLegacyCombinedCarouselAsset(asset));
+
+    for (const asset of assetsForVisualTasks) {
       if (asset.generatedVariants.length === 0 && !hasTask("generate_visual", item.id, asset.id)) {
         tasks.push({
           productionRunId,
@@ -3602,25 +3800,21 @@ async function processMonthProductionTask(taskId: string) {
       });
       await markGenerationJobRunning(generationJob.id, "AI готовит ТЗ на креатив.");
       const brief = await generateCreativeAssetBriefFromContext(publication);
-      const asset = await prisma.creativeAsset.create({
-        data: {
-          clientId: publication.clientId,
-          blueprintId: publication.blueprintId,
-          monthlyPlanId: publication.monthlyPlanId,
-          plannedContentItemId: publication.plannedContentItemId,
-          contentDraftId: publication.contentDraftId,
-          scheduledPublicationId: publication.id,
-          assetType: brief.assetType,
-          title: brief.title,
-          brief: brief.brief,
-          formatRequirements: brief.formatRequirements,
-          textOnAsset: brief.textOnAsset || null,
-          references: brief.references,
-          status: "brief_ready",
-          source: "ai",
-          approvalRequired: brief.approvalRequired,
-          notes: brief.notes,
-        },
+      const assetInputs = creativeAssetCreateInputsFromBrief(publication, brief);
+      const asset = await prisma.$transaction(async (transaction) => {
+        const assets = [];
+        for (const assetInput of assetInputs) {
+          assets.push(await transaction.creativeAsset.create({ data: assetInput }));
+        }
+
+        if (publication.status === "scheduled") {
+          await transaction.scheduledPublication.update({
+            where: { id: publication.id },
+            data: { status: "needs_assets" },
+          });
+        }
+
+        return assets[0];
       });
       await markGenerationJobCompleted(generationJob.id, "ТЗ на креатив сгенерировано.", { creativeAssetId: asset.id });
       await prisma.monthProductionTask.update({
@@ -4322,36 +4516,45 @@ export async function createCreativeAssetBrief(formData: FormData) {
     errorRedirect("Запланированная публикация не найдена.");
   }
 
-  await prisma.$transaction([
-    prisma.creativeAsset.create({
-      data: {
-        clientId: publication.clientId,
-        blueprintId: publication.blueprintId,
-        monthlyPlanId: publication.monthlyPlanId,
-        plannedContentItemId: publication.plannedContentItemId,
-        contentDraftId: publication.contentDraftId,
-        scheduledPublicationId: publication.id,
-        assetType,
-        title,
-        brief,
-        formatRequirements: formatRequirements || null,
-        textOnAsset: textOnAsset || null,
-        references: references || null,
-        status: "needed",
-        source: "manual",
-        approvalRequired,
-        notes: notes || null,
-      },
-    }),
-    ...(publication.status === "scheduled"
-      ? [
-          prisma.scheduledPublication.update({
-            where: { id: publication.id },
-            data: { status: "needs_assets" },
-          }),
-        ]
-      : []),
-  ]);
+  const assetInputs = creativeAssetCreateInputsFromBrief(
+    {
+      clientId: publication.clientId,
+      blueprintId: publication.blueprintId,
+      monthlyPlanId: publication.monthlyPlanId,
+      plannedContentItemId: publication.plannedContentItemId,
+      contentDraftId: publication.contentDraftId,
+      id: publication.id,
+      format: publication.format,
+      topic: publication.topic,
+    },
+    {
+      assetType,
+      title,
+      brief,
+      formatRequirements,
+      textOnAsset,
+      references,
+      approvalRequired,
+      notes,
+    },
+    {
+      status: "needed",
+      source: "manual",
+    },
+  );
+
+  await prisma.$transaction(async (transaction) => {
+    for (const assetInput of assetInputs) {
+      await transaction.creativeAsset.create({ data: assetInput });
+    }
+
+    if (publication.status === "scheduled") {
+      await transaction.scheduledPublication.update({
+        where: { id: publication.id },
+        data: { status: "needs_assets" },
+      });
+    }
+  });
 
   revalidatePath("/");
   redirect(workspaceLocation("assets", { blueprintId: publication.blueprintId, planId: publication.monthlyPlanId, notice: "ТЗ на креативный материал создано." }));
@@ -4620,6 +4823,21 @@ export async function regenerateCreativeAssetBrief(formData: FormData) {
     errorRedirect("Креативный материал не найден.");
   }
 
+  if (creativeAssetNeedsCarouselSplit(asset)) {
+    const splitResult = await splitCreativeAssetIntoCarouselSlides(asset.id);
+    const notice = splitResult.status === "created"
+      ? `${splitResult.message} Теперь сгенерируйте визуал для каждой карточки отдельно.`
+      : splitResult.message;
+
+    revalidatePath("/");
+    redirect(workspaceLocation(returnViewFromForm(formData, "assets"), {
+      blueprintId: asset.blueprintId,
+      planId: asset.monthlyPlanId,
+      materialId: asset.plannedContentItemId,
+      ...(splitResult.status === "failed" ? { error: notice } : { notice }),
+    }));
+  }
+
   const generationJob = await createGenerationJob({
     clientId: asset.clientId,
     blueprintId: asset.blueprintId,
@@ -4761,6 +4979,28 @@ export async function updateCreativeAssetBrief(formData: FormData) {
     planId: asset.monthlyPlanId,
     materialId: asset.plannedContentItemId,
     notice: "ТЗ на креативный материал обновлено.",
+  }));
+}
+
+export async function rebuildCreativeAssetAsCarousel(formData: FormData) {
+  const creativeAssetId = formText(formData, "creativeAssetId");
+
+  if (!creativeAssetId) {
+    errorRedirect("Не выбран креативный материал для пересборки.");
+  }
+
+  const splitResult = await splitCreativeAssetIntoCarouselSlides(creativeAssetId);
+
+  if (!splitResult.blueprintId || !splitResult.monthlyPlanId) {
+    errorRedirect(splitResult.message, "drafts");
+  }
+
+  revalidatePath("/");
+  redirect(workspaceLocation(returnViewFromForm(formData, "drafts"), {
+    blueprintId: splitResult.blueprintId,
+    planId: splitResult.monthlyPlanId,
+    materialId: splitResult.plannedContentItemId,
+    ...(splitResult.status === "failed" ? { error: splitResult.message } : { notice: splitResult.message }),
   }));
 }
 

@@ -36,6 +36,7 @@ import {
   prepareMonthVisuals,
   processNextMonthProductionTasks,
   proposeMonthlyPlanRevision,
+  rebuildCreativeAssetAsCarousel,
   reviseMonthlyPlanWithCopilot,
   regenerateCreativeAssetBrief,
   rejectDraft,
@@ -1043,13 +1044,57 @@ function assetHasVisual(asset: { generatedVariants: GeneratedCreativeVariantPrev
   return asset.generatedVariants.length > 0;
 }
 
-type VisualAssetBase = { generatedVariants: GeneratedCreativeVariantPreview[] };
+type VisualAssetBase = {
+  assetType?: string;
+  title?: string;
+  brief?: string;
+  formatRequirements?: string | null;
+  textOnAsset?: string | null;
+  notes?: string | null;
+  generatedVariants: GeneratedCreativeVariantPreview[];
+};
+
+function isLegacyCombinedCarouselAssetPreview(asset: { notes?: string | null }) {
+  return Boolean(asset.notes?.includes("legacyCombinedCarouselAsset=true"));
+}
+
+function creativeAssetLooksLikeCarousel(
+  asset: {
+    assetType?: string;
+    title?: string;
+    brief?: string;
+    formatRequirements?: string | null;
+    textOnAsset?: string | null;
+    notes?: string | null;
+  },
+  item?: { format?: string; topic?: string } | null,
+) {
+  if (asset.assetType === "carousel_slide" || isLegacyCombinedCarouselAssetPreview(asset)) return false;
+
+  const text = [
+    asset.assetType,
+    asset.title,
+    asset.brief,
+    asset.formatRequirements,
+    asset.textOnAsset,
+    asset.notes,
+    item?.format,
+    item?.topic,
+  ].filter(Boolean).join(" ").toLowerCase();
+
+  return /(карус|carousel|multi[- ]?slide|карточ|слайд|серия карточек)/i.test(text);
+}
 
 function visualAssetsForMaterial<T extends VisualAssetBase>(
   item: { creativeAssets: T[] },
   publication?: { creativeAssets: T[] },
 ): T[] {
-  return item.creativeAssets.length > 0 ? item.creativeAssets : publication?.creativeAssets ?? [];
+  const assets = publication?.creativeAssets.length ? publication.creativeAssets : item.creativeAssets;
+  const slideAssets = assets.filter((asset) => asset.assetType === "carousel_slide");
+
+  if (slideAssets.length > 0) return slideAssets;
+
+  return assets.filter((asset) => !isLegacyCombinedCarouselAssetPreview(asset));
 }
 
 function visualProgressLabel(assets: Array<{ generatedVariants: GeneratedCreativeVariantPreview[] }>, fallbackVisuals: GeneratedCreativeVariantPreview[]) {
@@ -2493,6 +2538,21 @@ function CreativeAssetLayer({
                     </PendingSubmitButton>
                   </form>
                 </div>
+                {creativeAssetLooksLikeCarousel(asset, asset.scheduledPublication) ? (
+                  <div className="mt-3 rounded-md border border-violet-200 bg-white p-3">
+                    <p className="text-xs font-bold text-violet-950">Это нужно собрать как отдельные карточки</p>
+                    <p className="mt-1 text-xs leading-5 text-violet-800">
+                      Старый общий визуал останется в истории, а система создаст отдельные ТЗ для каждой карточки карусели.
+                    </p>
+                    <form action={rebuildCreativeAssetAsCarousel} className="mt-3">
+                      <input type="hidden" name="creativeAssetId" value={asset.id} />
+                      <input type="hidden" name="returnView" value="assets" />
+                      <PendingSubmitButton pendingLabel="Пересобираем..." className={primaryButtonClass}>
+                        Пересобрать как карусель
+                      </PendingSubmitButton>
+                    </form>
+                  </div>
+                ) : null}
                 <details className="mt-3 rounded-md border border-stone-200 bg-stone-50/70">
                   <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-stone-700">Изменить ТЗ</summary>
                   <form action={updateCreativeAssetBrief} className="grid gap-2 border-t border-stone-200 p-3">
@@ -4130,19 +4190,36 @@ function DraftsView({
                         <StatusBadge tone={selectedAsset ? creativeAssetTone(selectedAsset.status) : "neutral"}>{selectedAsset ? formatStatus(selectedAsset.status) : "ТЗ не создано"}</StatusBadge>
                       </div>
                       {selectedAsset ? (
-                        <form action={updateCreativeAssetBrief} className="mt-4 grid gap-3">
-                          <input type="hidden" name="creativeAssetId" value={selectedAsset.id} />
-                          <input type="hidden" name="returnView" value="drafts" />
-                          <input type="text" name="title" required defaultValue={selectedAsset.title} className={inputClass} />
-                          <textarea name="brief" required rows={8} defaultValue={selectedAsset.brief} className={`${inputClass} min-h-[220px] w-full resize-y overflow-x-hidden whitespace-pre-wrap break-words leading-6`} />
-                          <textarea name="formatRequirements" rows={4} defaultValue={selectedAsset.formatRequirements ?? ""} className={`${inputClass} w-full resize-y overflow-x-hidden whitespace-pre-wrap break-words leading-6`} placeholder="Требования к формату" />
-                          <textarea name="textOnAsset" rows={3} defaultValue={selectedAsset.textOnAsset ?? ""} className={`${inputClass} w-full resize-y overflow-x-hidden whitespace-pre-wrap break-words leading-6`} placeholder="Текст на визуале" />
-                          <input type="text" name="references" defaultValue={selectedAsset.references ?? ""} className={inputClass} placeholder="Референсы" />
-                          <input type="text" name="notes" defaultValue={selectedAsset.notes ?? ""} className={inputClass} placeholder="Заметки" />
-                          <div className="flex flex-wrap gap-2">
-                            <PendingSubmitButton pendingLabel="Сохраняем..." className={softButtonClass}>Сохранить ТЗ</PendingSubmitButton>
-                          </div>
-                        </form>
+                        <>
+                          <form action={updateCreativeAssetBrief} className="mt-4 grid gap-3">
+                            <input type="hidden" name="creativeAssetId" value={selectedAsset.id} />
+                            <input type="hidden" name="returnView" value="drafts" />
+                            <input type="text" name="title" required defaultValue={selectedAsset.title} className={inputClass} />
+                            <textarea name="brief" required rows={8} defaultValue={selectedAsset.brief} className={`${inputClass} min-h-[220px] w-full resize-y overflow-x-hidden whitespace-pre-wrap break-words leading-6`} />
+                            <textarea name="formatRequirements" rows={4} defaultValue={selectedAsset.formatRequirements ?? ""} className={`${inputClass} w-full resize-y overflow-x-hidden whitespace-pre-wrap break-words leading-6`} placeholder="Требования к формату" />
+                            <textarea name="textOnAsset" rows={3} defaultValue={selectedAsset.textOnAsset ?? ""} className={`${inputClass} w-full resize-y overflow-x-hidden whitespace-pre-wrap break-words leading-6`} placeholder="Текст на визуале" />
+                            <input type="text" name="references" defaultValue={selectedAsset.references ?? ""} className={inputClass} placeholder="Референсы" />
+                            <input type="text" name="notes" defaultValue={selectedAsset.notes ?? ""} className={inputClass} placeholder="Заметки" />
+                            <div className="flex flex-wrap gap-2">
+                              <PendingSubmitButton pendingLabel="Сохраняем..." className={softButtonClass}>Сохранить ТЗ</PendingSubmitButton>
+                            </div>
+                          </form>
+                          {creativeAssetLooksLikeCarousel(selectedAsset, selectedItem) ? (
+                            <div className="mt-3 rounded-2xl border border-violet-200 bg-violet-50 p-4">
+                              <p className="text-sm font-semibold text-violet-950">Похоже, это карусель из нескольких карточек.</p>
+                              <p className="mt-1 text-xs leading-5 text-violet-800">
+                                Пересоберите ТЗ в отдельные карточки, чтобы AI не сделал один общий коллаж.
+                              </p>
+                              <form action={rebuildCreativeAssetAsCarousel} className="mt-3">
+                                <input type="hidden" name="creativeAssetId" value={selectedAsset.id} />
+                                <input type="hidden" name="returnView" value="drafts" />
+                                <PendingSubmitButton pendingLabel="Пересобираем..." className={primaryButtonClass}>
+                                  Пересобрать как карусель
+                                </PendingSubmitButton>
+                              </form>
+                            </div>
+                          ) : null}
+                        </>
                       ) : selectedPublication ? (
                         <div className="mt-4 rounded-2xl bg-white p-4">
                           <p className="text-sm text-slate-500">ТЗ ещё не создано.</p>
@@ -4184,7 +4261,7 @@ function DraftsView({
                             return (
                               <div key={asset.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
                                 <div className="border-b border-slate-100 px-3 py-2">
-                                  <p className="text-xs font-semibold text-slate-950">Карточка {index + 1}</p>
+                                  <p className="text-xs font-semibold text-slate-950">Карточка {index + 1}/{selectedAssets.length}</p>
                                   <p className="mt-0.5 truncate text-[11px] text-slate-400">{asset.title}</p>
                                 </div>
                                 {variant ? (
@@ -4199,7 +4276,7 @@ function DraftsView({
                                     <input type="hidden" name="creativeAssetId" value={asset.id} />
                                     <input type="hidden" name="returnView" value="drafts" />
                                     <PendingSubmitButton pendingLabel="Генерируем..." className={softButtonClass}>
-                                      {variant ? "Перегенерировать" : "Сгенерировать"}
+                                      {variant ? "Перегенерировать карточку" : "Сгенерировать карточку"}
                                     </PendingSubmitButton>
                                   </form>
                                   {variant ? (
