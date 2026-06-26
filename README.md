@@ -482,6 +482,13 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - After carousel rebuild, missing slide visuals are added to the active month production queue automatically and the Materials auto-runner continues generation without manual per-slide clicks.
 - Calendar cards show the first visual thumbnail for carousel materials plus a compact slide-count label.
 
+## Premium Client Portal Shell
+
+- Public client portal links now open a dedicated premium monthly package surface, separate from the Manager Console.
+- The client view shows monthly KPIs, a clean calendar, selected material detail, month materials list, visuals, carousel slide previews, and comments/revision controls.
+- Carousel materials use `carousel_slide` assets as the active client-facing visuals, while legacy combined carousel visuals stay out of the primary preview.
+- Client approval and change-request actions continue to use the existing review workflow and stored review events.
+
 ## Automation Sprint 0
 
 - GitHub Actions CI runs automatically on pushes to `main` and on pull requests.

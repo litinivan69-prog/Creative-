@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Клиентский календарь · Adaptive Presence OS",
+  title: "Клиентский пакет · Adaptive Presence OS",
   robots: {
     index: false,
     follow: false,
@@ -15,11 +15,11 @@ export const metadata: Metadata = {
 
 function PortalError({ children }: { children: React.ReactNode }) {
   return (
-    <main className="min-h-screen bg-[#f5f7f6] px-4 py-10 sm:px-6">
-      <section className="mx-auto max-w-xl rounded-lg border border-rose-200 bg-white p-6 shadow-[0_1px_2px_rgba(28,36,38,0.04)]">
-        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">Adaptive Presence OS · by Creative</p>
-        <h1 className="mt-3 text-2xl font-semibold text-stone-950">Клиентский календарь</h1>
-        <p className="mt-4 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold leading-6 text-rose-800">{children}</p>
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(139,92,246,0.16),transparent_34%),linear-gradient(135deg,#f8fafc,#ffffff_44%,#f5f3ff)] px-4 py-10 sm:px-6">
+      <section className="mx-auto max-w-xl rounded-[28px] border border-rose-100 bg-white/90 p-7 shadow-[0_24px_80px_rgba(88,75,135,0.12)]">
+        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">Adaptive Presence OS · by Creative Command</p>
+        <h1 className="mt-3 text-2xl font-semibold text-slate-950">Клиентский пакет</h1>
+        <p className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold leading-6 text-rose-800">{children}</p>
       </section>
     </main>
   );
@@ -64,6 +64,16 @@ export default async function ClientPortalPage({
                   status: true,
                   draftTitle: true,
                   draftBody: true,
+                  reviewEvents: {
+                    orderBy: { createdAt: "asc" },
+                    select: {
+                      id: true,
+                      actorType: true,
+                      action: true,
+                      comment: true,
+                      createdAt: true,
+                    },
+                  },
                 },
               },
             },
@@ -78,6 +88,11 @@ export default async function ClientPortalPage({
               notes: true,
               creativeAssets: {
                 select: {
+                  id: true,
+                  assetType: true,
+                  title: true,
+                  status: true,
+                  notes: true,
                   generatedVariants: {
                     orderBy: { createdAt: "desc" },
                     select: {
@@ -115,18 +130,14 @@ export default async function ClientPortalPage({
   });
 
   return (
-    <main className="min-h-screen bg-[#f5f7f6] px-4 py-6 sm:px-6 lg:py-10">
-      <div className="mx-auto max-w-7xl">
-        <ClientPortalView
-          clientName={portalLink.client.name}
-          month={portalLink.monthlyPlan.month}
-          items={portalLink.monthlyPlan.plannedContentItems}
-          publications={portalLink.monthlyPlan.scheduledPublications}
-          portalToken={token}
-          notice={query.notice}
-          error={query.error}
-        />
-      </div>
-    </main>
+    <ClientPortalView
+      clientName={portalLink.client.name}
+      month={portalLink.monthlyPlan.month}
+      items={portalLink.monthlyPlan.plannedContentItems}
+      publications={portalLink.monthlyPlan.scheduledPublications}
+      portalToken={token}
+      notice={query.notice}
+      error={query.error}
+    />
   );
 }
