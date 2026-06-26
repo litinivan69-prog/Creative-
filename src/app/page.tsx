@@ -1335,6 +1335,7 @@ type GenerationJobPreview = {
 type MonthProductionTaskPreview = {
   id: string;
   plannedContentItemId: string | null;
+  creativeAssetId: string | null;
   stage: string;
   taskType: string;
   status: string;
@@ -1420,6 +1421,22 @@ function formatProductionTaskType(taskType: string) {
     quality_check: "AI-проверка",
   };
   return labels[taskType] ?? formatStatus(taskType);
+}
+
+function formatSlideVisualTaskStatus(asset: { generatedVariants: GeneratedCreativeVariantPreview[] }, task?: MonthProductionTaskPreview) {
+  if (asset.generatedVariants.length > 0) return "Готово";
+  if (task?.status === "running") return "Генерируется";
+  if (task?.status === "queued") return "В очереди";
+  if (task?.status === "failed") return "Ошибка";
+  return "Ждёт очереди";
+}
+
+function slideVisualTaskTone(asset: { generatedVariants: GeneratedCreativeVariantPreview[] }, task?: MonthProductionTaskPreview): "neutral" | "teal" | "amber" | "rose" | "green" {
+  if (asset.generatedVariants.length > 0) return "green";
+  if (task?.status === "running") return "teal";
+  if (task?.status === "queued") return "amber";
+  if (task?.status === "failed") return "rose";
+  return "neutral";
 }
 
 function generationJobSummary(job: GenerationJobPreview) {
@@ -4257,12 +4274,23 @@ function DraftsView({
                         <div className="mt-4 grid gap-3 sm:grid-cols-2">
                           {selectedAssets.map((asset, index) => {
                             const variant = asset.generatedVariants[0];
+                            const visualTask = selectedProductionTasks.find(
+                              (task) => task.taskType === "generate_visual" && task.creativeAssetId === asset.id,
+                            );
+                            const taskActive = visualTask?.status === "queued" || visualTask?.status === "running";
 
                             return (
                               <div key={asset.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
                                 <div className="border-b border-slate-100 px-3 py-2">
-                                  <p className="text-xs font-semibold text-slate-950">Карточка {index + 1}/{selectedAssets.length}</p>
-                                  <p className="mt-0.5 truncate text-[11px] text-slate-400">{asset.title}</p>
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                      <p className="text-xs font-semibold text-slate-950">Карточка {index + 1}/{selectedAssets.length}</p>
+                                      <p className="mt-0.5 truncate text-[11px] text-slate-400">{asset.title}</p>
+                                    </div>
+                                    <StatusBadge tone={slideVisualTaskTone(asset, visualTask)}>
+                                      {formatSlideVisualTaskStatus(asset, visualTask)}
+                                    </StatusBadge>
+                                  </div>
                                 </div>
                                 {variant ? (
                                   <GeneratedVisualImage variant={variant} alt={variant.variantTitle} className="aspect-square w-full bg-slate-100 object-contain" />
@@ -4272,13 +4300,19 @@ function DraftsView({
                                   </div>
                                 )}
                                 <div className="flex flex-wrap gap-2 p-3">
-                                  <form action={generateCreativeVisualVariantForAsset}>
-                                    <input type="hidden" name="creativeAssetId" value={asset.id} />
-                                    <input type="hidden" name="returnView" value="drafts" />
-                                    <PendingSubmitButton pendingLabel="Генерируем..." className={softButtonClass}>
-                                      {variant ? "Перегенерировать карточку" : "Сгенерировать карточку"}
-                                    </PendingSubmitButton>
-                                  </form>
+                                  {taskActive ? (
+                                    <span className="rounded-full bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700">
+                                      Автоподготовка запущена
+                                    </span>
+                                  ) : (
+                                    <form action={generateCreativeVisualVariantForAsset}>
+                                      <input type="hidden" name="creativeAssetId" value={asset.id} />
+                                      <input type="hidden" name="returnView" value="drafts" />
+                                      <PendingSubmitButton pendingLabel="Генерируем..." className={softButtonClass}>
+                                        {variant ? "Перегенерировать карточку" : visualTask?.status === "failed" ? "Повторить карточку" : "Сгенерировать карточку"}
+                                      </PendingSubmitButton>
+                                    </form>
+                                  )}
                                   {variant ? (
                                     <form action={approveCreativeVariant}>
                                       <input type="hidden" name="creativeVariantId" value={variant.id} />
@@ -5833,10 +5867,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
       (publication) => publication.status === "needs_assets" && publication.creativeAssets.length === 0,
     ).length ?? 0);
   const missingVisualCount =
-    selectedMonthlyPlan?.scheduledPublications.filter((publication) =>
-      publication.creativeAssets.length === 0 ||
-      publication.creativeAssets.some((asset) => asset.generatedVariants.length === 0),
-    ).length ?? 0;
+    selectedMonthlyPlan?.scheduledPublications.filter((publication) => {
+      const slideAssets = publication.creativeAssets.filter((asset) => asset.assetType === "carousel_slide");
+      const requiredAssets = slideAssets.length > 0
+        ? slideAssets
+        : publication.creativeAssets.filter((asset) => !isLegacyCombinedCarouselAssetPreview(asset));
+
+      return requiredAssets.length === 0 || requiredAssets.some((asset) => asset.generatedVariants.length === 0);
+    }).length ?? 0;
   const brandProfileReady = Boolean(selectedBrandClient?.brandProfile);
   const brandAssetsCount = selectedBrandClient?.brandAssets.length ?? 0;
   const selectedSetupClient =

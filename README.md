@@ -479,6 +479,7 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Carousel-style materials can create multiple `carousel_slide` creative assets for one publication, so each card/slide receives its own visual task and generated variant.
 - Carousel visual generation is guarded so AI creates only one standalone slide per `carousel_slide`, never one combined collage with all cards inside it.
 - Legacy combined carousel briefs can be rebuilt into separate slide assets with `Пересобрать как карусель`; the old combined asset is preserved as a rejected legacy record.
+- After carousel rebuild, missing slide visuals are added to the active month production queue automatically and the Materials auto-runner continues generation without manual per-slide clicks.
 - Calendar cards show the first visual thumbnail for carousel materials plus a compact slide-count label.
 
 ## Automation Sprint 0

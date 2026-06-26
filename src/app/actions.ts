@@ -503,6 +503,7 @@ async function splitCreativeAssetIntoCarouselSlides(creativeAssetId: string) {
     return {
       status: "failed" as const,
       message: "Креативный материал не найден.",
+      createdSlideAssetIds: [],
     };
   }
 
@@ -510,6 +511,7 @@ async function splitCreativeAssetIntoCarouselSlides(creativeAssetId: string) {
     return {
       status: "skipped" as const,
       message: "Это уже отдельная карточка карусели.",
+      createdSlideAssetIds: [],
       blueprintId: asset.blueprintId,
       monthlyPlanId: asset.monthlyPlanId,
       plannedContentItemId: asset.plannedContentItemId,
@@ -531,6 +533,7 @@ async function splitCreativeAssetIntoCarouselSlides(creativeAssetId: string) {
     return {
       status: "skipped" as const,
       message: `Карусель уже пересобрана: ${existingSlides.length} карточки.`,
+      createdSlideAssetIds: [],
       blueprintId: asset.blueprintId,
       monthlyPlanId: asset.monthlyPlanId,
       plannedContentItemId: asset.plannedContentItemId,
@@ -543,15 +546,19 @@ async function splitCreativeAssetIntoCarouselSlides(creativeAssetId: string) {
     return {
       status: "failed" as const,
       message: "В этом ТЗ не найдено требование к нескольким карточкам.",
+      createdSlideAssetIds: [],
       blueprintId: asset.blueprintId,
       monthlyPlanId: asset.monthlyPlanId,
       plannedContentItemId: asset.plannedContentItemId,
     };
   }
 
-  await prisma.$transaction(async (transaction) => {
+  const createdSlideAssetIds = await prisma.$transaction(async (transaction) => {
+    const ids: string[] = [];
+
     for (const slideInput of slideInputs) {
-      await transaction.creativeAsset.create({ data: slideInput });
+      const slide = await transaction.creativeAsset.create({ data: slideInput });
+      ids.push(slide.id);
     }
 
     await transaction.creativeAsset.update({
@@ -564,11 +571,14 @@ async function splitCreativeAssetIntoCarouselSlides(creativeAssetId: string) {
         ].filter(Boolean).join("\n"),
       },
     });
+
+    return ids;
   });
 
   return {
     status: "created" as const,
     message: `Карусель пересобрана: создано ${slideInputs.length} отдельных карточек.`,
+    createdSlideAssetIds,
     blueprintId: asset.blueprintId,
     monthlyPlanId: asset.monthlyPlanId,
     plannedContentItemId: asset.plannedContentItemId,
@@ -3263,6 +3273,17 @@ async function prepareMissingVisualsForMonthlyPlan(monthlyPlanId: string) {
   const plan = await prisma.monthlyOperatingPlan.findUnique({
     where: { id: monthlyPlanId },
     include: {
+      plannedContentItems: {
+        include: {
+          creativeAssets: {
+            include: {
+              generatedVariants: {
+                select: { id: true },
+              },
+            },
+          },
+        },
+      },
       creativeAssets: {
         include: {
           generatedVariants: {
@@ -3282,7 +3303,14 @@ async function prepareMissingVisualsForMonthlyPlan(monthlyPlanId: string) {
     };
   }
 
-  const candidates = plan.creativeAssets.filter((asset) => asset.generatedVariants.length === 0).slice(0, 1);
+  const requiredAssets = plan.plannedContentItems.flatMap((item) => {
+    const carouselSlideAssets = item.creativeAssets.filter((asset) => asset.assetType === "carousel_slide");
+
+    return carouselSlideAssets.length > 0
+      ? carouselSlideAssets
+      : item.creativeAssets.filter((asset) => !isLegacyCombinedCarouselAsset(asset));
+  });
+  const candidates = requiredAssets.filter((asset) => asset.generatedVariants.length === 0).slice(0, 1);
   const results = [];
 
   for (const asset of candidates) {
@@ -3291,7 +3319,7 @@ async function prepareMissingVisualsForMonthlyPlan(monthlyPlanId: string) {
 
   const createdCount = results.filter((result) => result.status === "created").length;
   const failedCount = results.filter((result) => result.status === "failed").length;
-  const remainingCount = Math.max(0, plan.creativeAssets.filter((asset) => asset.generatedVariants.length === 0).length - createdCount);
+  const remainingCount = Math.max(0, requiredAssets.filter((asset) => asset.generatedVariants.length === 0).length - createdCount);
   const notice = `Подготовлено ${createdCount} визуалов. Осталось ${remainingCount}. В MVP визуалы готовятся по одному за запуск.`;
 
   return {
@@ -3590,6 +3618,35 @@ async function createMonthProductionRun(monthlyPlanId: string) {
 
   await markStaleProductionTasksRecoverable(run.id);
   return ensureMissingMonthProductionTasks(monthlyPlanId, run.id);
+}
+
+async function enqueueMonthProductionAfterCarouselSplit(monthlyPlanId: string) {
+  let run = await createMonthProductionRun(monthlyPlanId);
+  const queuedVisualTasks = await prisma.monthProductionTask.count({
+    where: {
+      productionRunId: run.id,
+      taskType: "generate_visual",
+      status: "queued",
+    },
+  });
+
+  if (queuedVisualTasks > 0 && ["completed", "completed_with_errors", "paused"].includes(run.status)) {
+    await prisma.monthProductionRun.update({
+      where: { id: run.id },
+      data: {
+        status: "queued",
+        currentStage: "visuals",
+        errorMessage: null,
+        completedAt: null,
+      },
+    });
+    run = await refreshMonthProductionRunCounters(run.id);
+  }
+
+  return {
+    run,
+    queuedVisualTasks,
+  };
 }
 
 function productionScopeFromRawPlanJson(value: Prisma.JsonValue): MonthlyProductionScope | undefined {
@@ -4825,8 +4882,11 @@ export async function regenerateCreativeAssetBrief(formData: FormData) {
 
   if (creativeAssetNeedsCarouselSplit(asset)) {
     const splitResult = await splitCreativeAssetIntoCarouselSlides(asset.id);
+    const production = splitResult.monthlyPlanId
+      ? await enqueueMonthProductionAfterCarouselSplit(splitResult.monthlyPlanId)
+      : null;
     const notice = splitResult.status === "created"
-      ? `${splitResult.message} Теперь сгенерируйте визуал для каждой карточки отдельно.`
+      ? `Карусель пересобрана. Визуалы карточек добавлены в очередь. Добавили ${production?.queuedVisualTasks ?? 0} карточек в очередь визуалов.`
       : splitResult.message;
 
     revalidatePath("/");
@@ -4834,6 +4894,7 @@ export async function regenerateCreativeAssetBrief(formData: FormData) {
       blueprintId: asset.blueprintId,
       planId: asset.monthlyPlanId,
       materialId: asset.plannedContentItemId,
+      productionRunId: production?.run.id,
       ...(splitResult.status === "failed" ? { error: notice } : { notice }),
     }));
   }
@@ -4995,12 +5056,28 @@ export async function rebuildCreativeAssetAsCarousel(formData: FormData) {
     errorRedirect(splitResult.message, "drafts");
   }
 
+  if (splitResult.status === "failed") {
+    revalidatePath("/");
+    redirect(workspaceLocation(returnViewFromForm(formData, "drafts"), {
+      blueprintId: splitResult.blueprintId,
+      planId: splitResult.monthlyPlanId,
+      materialId: splitResult.plannedContentItemId,
+      error: splitResult.message,
+    }));
+  }
+
+  const production = await enqueueMonthProductionAfterCarouselSplit(splitResult.monthlyPlanId);
+  const notice = splitResult.status === "created"
+    ? `Карусель пересобрана. Визуалы карточек добавлены в очередь. Добавили ${production.queuedVisualTasks} карточек в очередь визуалов.`
+    : "Карусель уже пересобрана.";
+
   revalidatePath("/");
   redirect(workspaceLocation(returnViewFromForm(formData, "drafts"), {
     blueprintId: splitResult.blueprintId,
     planId: splitResult.monthlyPlanId,
     materialId: splitResult.plannedContentItemId,
-    ...(splitResult.status === "failed" ? { error: splitResult.message } : { notice: splitResult.message }),
+    productionRunId: production.run.id,
+    notice,
   }));
 }
 
