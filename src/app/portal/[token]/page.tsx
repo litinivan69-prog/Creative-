@@ -15,8 +15,8 @@ export const metadata: Metadata = {
 
 function PortalError({ children }: { children: React.ReactNode }) {
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(139,92,246,0.16),transparent_34%),linear-gradient(135deg,#f8fafc,#ffffff_44%,#f5f3ff)] px-4 py-10 sm:px-6">
-      <section className="mx-auto max-w-xl rounded-[28px] border border-rose-100 bg-white/90 p-7 shadow-[0_24px_80px_rgba(88,75,135,0.12)]">
+    <main className="min-h-screen bg-[#f7f5fb] bg-[radial-gradient(circle_at_24%_-8%,rgba(139,92,246,0.16),transparent_34%)] px-4 py-10 sm:px-6">
+      <section className="mx-auto max-w-xl rounded-[28px] border border-white/80 bg-white/90 p-7 shadow-[0_24px_80px_rgba(88,75,135,0.10)]">
         <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">Adaptive Presence OS · by Creative Command</p>
         <h1 className="mt-3 text-2xl font-semibold text-slate-950">Клиентский пакет</h1>
         <p className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold leading-6 text-rose-800">{children}</p>

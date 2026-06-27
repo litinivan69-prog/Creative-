@@ -79,13 +79,15 @@ type ClientPortalMaterial = {
 };
 
 const inputClass =
-  "w-full rounded-2xl border border-slate-200/80 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:ring-4 focus:ring-violet-100";
+  "w-full rounded-[22px] border border-slate-200/70 bg-white px-4 py-3 text-sm leading-6 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-violet-300 focus:ring-4 focus:ring-violet-100/80";
 const primaryButtonClass =
-  "inline-flex items-center justify-center rounded-full bg-violet-600 px-5 py-3 text-sm font-semibold text-white shadow-[0_14px_32px_rgba(124,58,237,0.22)] transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex items-center justify-center rounded-full bg-violet-600 px-5 py-3 text-sm font-semibold text-white shadow-[0_16px_34px_rgba(124,58,237,0.20)] transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60";
 const secondaryButtonClass =
-  "inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-violet-200 hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex items-center justify-center rounded-full border border-slate-200/80 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-violet-200 hover:bg-violet-50/70 disabled:cursor-not-allowed disabled:opacity-60";
 const ghostButtonClass =
   "inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-900";
+const surfaceClass =
+  "rounded-[28px] border border-white/70 bg-white/90 shadow-[0_22px_70px_rgba(88,75,135,0.075)]";
 
 function PortalStatusBadge({
   children,
@@ -95,14 +97,14 @@ function PortalStatusBadge({
   tone?: "neutral" | "violet" | "amber" | "rose" | "green";
 }) {
   const tones = {
-    neutral: "border-slate-200 bg-slate-50 text-slate-600",
-    violet: "border-violet-200 bg-violet-50 text-violet-700",
-    amber: "border-amber-200 bg-amber-50 text-amber-800",
-    rose: "border-rose-200 bg-rose-50 text-rose-700",
-    green: "border-violet-200 bg-violet-50 text-violet-700",
+    neutral: "border-slate-200/70 bg-slate-50/80 text-slate-500",
+    violet: "border-violet-200/80 bg-violet-50/80 text-violet-700",
+    amber: "border-amber-200/80 bg-amber-50/80 text-amber-800",
+    rose: "border-rose-200/80 bg-rose-50/80 text-rose-700",
+    green: "border-violet-200/80 bg-violet-50/80 text-violet-700",
   };
 
-  return <span className={`inline-flex shrink-0 rounded-full border px-3 py-1 text-[11px] font-semibold ${tones[tone]}`}>{children}</span>;
+  return <span className={`inline-flex shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${tones[tone]}`}>{children}</span>;
 }
 
 function PortalMetric({
@@ -119,17 +121,20 @@ function PortalMetric({
   tone?: "neutral" | "violet" | "amber";
 }) {
   const bar = tone === "amber" ? "bg-amber-400" : "bg-violet-500";
+  const sparkTone = tone === "amber" ? "#f59e0b" : "#8b5cf6";
 
   return (
-    <article className="rounded-[24px] border border-slate-200/70 bg-white p-5 shadow-[0_18px_60px_rgba(88,75,135,0.07)]">
+    <article className="group rounded-[24px] border border-white/80 bg-white/92 p-5 shadow-[0_18px_58px_rgba(88,75,135,0.07)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_72px_rgba(88,75,135,0.10)]">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-3xl font-semibold tracking-tight text-slate-950">{value}</p>
-          <p className="mt-1 text-sm font-semibold text-slate-700">{label}</p>
+          <p className="text-[34px] font-semibold leading-none tracking-tight text-slate-950">{value}</p>
+          <p className="mt-2 text-sm font-semibold text-slate-700">{label}</p>
         </div>
-        <span className={`mt-1 h-2.5 w-2.5 rounded-full ${tone === "amber" ? "bg-amber-400" : "bg-violet-400"}`} />
+        <svg viewBox="0 0 72 28" className="mt-1 h-7 w-16 text-violet-300" aria-hidden="true">
+          <path d="M2 22 C13 8 23 25 34 14 S55 7 70 12" fill="none" stroke={sparkTone} strokeOpacity="0.38" strokeWidth="3" strokeLinecap="round" />
+        </svg>
       </div>
-      <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-slate-100">
+      <div className="mt-5 h-1 overflow-hidden rounded-full bg-slate-100">
         <div className={`h-full rounded-full ${bar}`} style={{ width: `${Math.max(4, Math.min(progress, 100))}%` }} />
       </div>
       <p className="mt-3 text-xs leading-5 text-slate-400">{helper}</p>
@@ -339,6 +344,16 @@ function PortalImage({ variant, alt, className }: { variant?: ClientPortalVarian
   );
 }
 
+function PortalTinyThumbnail({ material }: { material: ClientPortalMaterial }) {
+  const src = material.thumbnail ? getGeneratedVariantImageSrc(material.thumbnail) : null;
+
+  if (src) {
+    return <img src={src} alt="" className="h-7 w-7 shrink-0 rounded-lg object-cover" />;
+  }
+
+  return <span className="h-2 w-2 shrink-0 rounded-full bg-violet-300" />;
+}
+
 export function ClientPortalView({
   clientName,
   month,
@@ -393,8 +408,8 @@ export function ClientPortalView({
 
   if (!month) {
     return (
-      <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(139,92,246,0.14),transparent_36%),linear-gradient(135deg,#f8fafc,#ffffff_44%,#f5f3ff)] p-6">
-        <section className="mx-auto max-w-3xl rounded-[28px] border border-white/80 bg-white/90 p-8 shadow-[0_24px_80px_rgba(88,75,135,0.12)]">
+      <main className="min-h-screen bg-[#f7f5fb] bg-[radial-gradient(circle_at_20%_0%,rgba(139,92,246,0.15),transparent_34%)] p-6">
+        <section className="mx-auto max-w-3xl rounded-[28px] border border-white/80 bg-white/90 p-8 shadow-[0_24px_80px_rgba(88,75,135,0.10)]">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-violet-700">Adaptive Presence OS · by Creative Command</p>
           <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950">Клиентский пакет ещё собирается</h1>
           {showPreviewNotice ? (
@@ -409,10 +424,10 @@ export function ClientPortalView({
   }
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_top_left,rgba(139,92,246,0.18),transparent_34%),radial-gradient(circle_at_top_right,rgba(196,181,253,0.16),transparent_28%),linear-gradient(135deg,#f8fafc,#ffffff_42%,#f5f3ff)] text-slate-900">
+    <main className="min-h-screen overflow-x-hidden bg-[#f7f5fb] bg-[radial-gradient(circle_at_26%_-10%,rgba(139,92,246,0.16),transparent_34%),radial-gradient(circle_at_92%_6%,rgba(196,181,253,0.12),transparent_28%)] text-slate-900">
       <div className="grid min-h-screen lg:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="border-r border-white/80 bg-white/75 px-5 py-6 shadow-[18px_0_60px_rgba(88,75,135,0.06)] backdrop-blur-xl">
-          <div className="rounded-[24px] border border-violet-100 bg-white p-5 shadow-[0_18px_60px_rgba(88,75,135,0.07)]">
+        <aside className="border-r border-white/70 bg-white/60 px-5 py-6 backdrop-blur-xl">
+          <div className="rounded-[24px] border border-white/80 bg-white/82 p-5 shadow-[0_18px_60px_rgba(88,75,135,0.055)]">
             <p className="text-lg font-semibold tracking-tight text-slate-950">Adaptive Presence OS</p>
             <p className="mt-1 text-xs font-semibold text-violet-700">by Creative Command</p>
           </div>
@@ -421,13 +436,13 @@ export function ClientPortalView({
               <a
                 key={item}
                 href={`#${["overview", "calendar", "materials", "revisions", "files"][index]}`}
-                className="rounded-2xl px-4 py-3 text-sm font-semibold text-slate-500 transition hover:bg-white hover:text-violet-700"
+                className="rounded-2xl px-4 py-3 text-sm font-semibold text-slate-500 transition hover:bg-white/80 hover:text-violet-700"
               >
                 {item}
               </a>
             ))}
           </nav>
-          <div className="mt-6 rounded-[24px] border border-violet-100 bg-gradient-to-br from-violet-50 to-white p-5">
+          <div className="mt-6 rounded-[24px] border border-white/80 bg-white/70 p-5">
             <p className="font-semibold text-slate-950">Нужна помощь?</p>
             <p className="mt-2 text-sm leading-6 text-slate-500">Напишите нам — мы на связи.</p>
             <a href="mailto:hello@creative-command.local" className={`${secondaryButtonClass} mt-4 w-full`}>Написать</a>
@@ -447,12 +462,12 @@ export function ClientPortalView({
           {notice ? <div className="mb-4 rounded-2xl border border-violet-200 bg-white px-4 py-3 text-sm font-semibold text-violet-800">{notice}</div> : null}
           {error ? <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">{error}</div> : null}
 
-          <header id="overview" className="rounded-[28px] border border-white/80 bg-white/82 p-5 shadow-[0_24px_80px_rgba(88,75,135,0.10)] backdrop-blur-xl">
+          <header id="overview" className={`${surfaceClass} p-5 backdrop-blur-xl`}>
             <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <PortalStatusBadge tone="violet">Месячный пакет</PortalStatusBadge>
-                  <PortalStatusBadge>{monthLabel}</PortalStatusBadge>
+                  <span className="rounded-full bg-violet-50 px-3 py-1 text-[11px] font-semibold text-violet-700">Месячный пакет</span>
+                  <span className="text-xs font-semibold text-slate-400">{monthLabel}</span>
                 </div>
                 <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">{clientName || "Клиент"}</h1>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
@@ -476,15 +491,15 @@ export function ClientPortalView({
           </section>
 
           <section className="mt-5 grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)_320px]">
-            <article id="calendar" className="min-w-0 rounded-[28px] border border-slate-200/70 bg-white/92 p-5 shadow-[0_24px_80px_rgba(88,75,135,0.08)]">
+            <article id="calendar" className={`${surfaceClass} min-w-0 p-5`}>
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-violet-700">Календарь</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-600">Календарь</p>
                   <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">{monthLabel}</h2>
                 </div>
-                <PortalStatusBadge tone="violet">{stats.total} материалов</PortalStatusBadge>
+                <span className="text-xs font-semibold text-slate-400">{stats.total} материалов</span>
               </div>
-              <div className="mt-5 grid grid-cols-7 gap-2 text-center text-[11px] font-semibold text-slate-400">
+              <div className="mt-6 grid grid-cols-7 gap-2 text-center text-[11px] font-semibold text-slate-400">
                 {weekDays.map((day) => <div key={day}>{day}</div>)}
               </div>
               <div className="mt-2 grid grid-cols-7 gap-2">
@@ -495,11 +510,11 @@ export function ClientPortalView({
                   return (
                     <div
                       key={day.key}
-                      className={`min-h-[82px] rounded-2xl border p-2 transition ${
+                      className={`min-h-[92px] rounded-[20px] border p-2.5 transition ${
                         day.day
                           ? selected
-                            ? "border-violet-300 bg-violet-50 shadow-[0_12px_30px_rgba(124,58,237,0.10)]"
-                            : "border-slate-200/70 bg-white"
+                            ? "border-violet-200 bg-violet-50/80 shadow-[0_14px_34px_rgba(124,58,237,0.10)]"
+                            : "border-transparent bg-slate-50/70 hover:bg-white"
                           : "border-transparent"
                       }`}
                     >
@@ -509,11 +524,14 @@ export function ClientPortalView({
                             <span className="text-xs font-semibold text-slate-500">{day.day}</span>
                             {day.materials.length > 0 ? <span className="h-1.5 w-1.5 rounded-full bg-violet-400" /> : null}
                           </div>
-                          <div className="mt-2 grid gap-1">
+                          <div className="mt-2 grid gap-1.5">
                             {day.materials.slice(0, 2).map((material) => (
-                              <div key={material.item.id} className="min-w-0 rounded-lg bg-slate-50 px-2 py-1 text-left">
-                                <p className="truncate text-[10px] font-semibold text-slate-600">{material.item.platformName}</p>
-                                <p className="truncate text-[10px] text-slate-400">{material.item.topic}</p>
+                              <div key={material.item.id} className="flex min-w-0 items-center gap-1.5 rounded-xl bg-white/80 px-1.5 py-1 text-left shadow-[0_8px_18px_rgba(88,75,135,0.04)]">
+                                <PortalTinyThumbnail material={material} />
+                                <div className="min-w-0">
+                                  <p className="truncate text-[10px] font-semibold text-slate-600">{material.item.platformName}</p>
+                                  <p className="truncate text-[10px] text-slate-400">{material.item.topic}</p>
+                                </div>
                               </div>
                             ))}
                             {day.materials.length > 2 ? <p className="text-[10px] font-semibold text-violet-600">+{day.materials.length - 2}</p> : null}
@@ -526,7 +544,7 @@ export function ClientPortalView({
               </div>
             </article>
 
-            <article id="materials" className="min-w-0 rounded-[28px] border border-slate-200/70 bg-white/94 p-5 shadow-[0_24px_80px_rgba(88,75,135,0.10)]">
+            <article id="materials" className={`${surfaceClass} min-w-0 overflow-hidden p-5`}>
               {selectedMaterial ? (
                 <>
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -534,7 +552,7 @@ export function ClientPortalView({
                       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
                         {selectedMaterial.dateLabel} · {selectedMaterial.item.platformName}
                       </p>
-                      <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">{selectedMaterial.item.topic}</h2>
+                      <h2 className="mt-3 text-[28px] font-semibold leading-tight tracking-tight text-slate-950">{selectedMaterial.item.topic}</h2>
                     </div>
                     <PortalStatusBadge tone={clientPortalStatusTone(selectedMaterial.status)}>
                       {formatClientPortalStatus(selectedMaterial.status)}
@@ -544,7 +562,7 @@ export function ClientPortalView({
                     {selectedMaterial.item.goal || selectedMaterial.item.campaignTheme || selectedMaterial.item.contentPillar || "Материал из месячного пакета присутствия бренда."}
                   </p>
 
-                  <section className="mt-5 rounded-[24px] border border-slate-200/70 bg-slate-50/70 p-4">
+                  <section className="mt-6 rounded-[26px] bg-[#f8f7fb] p-5">
                     <div className="flex items-center justify-between gap-3">
                       <p className="font-semibold text-slate-950">Текст для публикации</p>
                       <a href="#full-text" className="text-xs font-semibold text-violet-700">Показать полностью</a>
@@ -559,15 +577,15 @@ export function ClientPortalView({
                     <div className="flex items-center justify-between gap-3">
                       <p className="font-semibold text-slate-950">Визуалы</p>
                       {selectedMaterial.isCarousel ? (
-                        <PortalStatusBadge tone="violet">Карусель · {selectedMaterial.readySlides}/{selectedMaterial.totalSlides || 1}</PortalStatusBadge>
+                        <span className="text-xs font-semibold text-violet-700">Карусель · {selectedMaterial.readySlides}/{selectedMaterial.totalSlides || 1}</span>
                       ) : (
-                        <PortalStatusBadge>{selectedMaterial.thumbnail ? "Визуал готов" : "Готовится"}</PortalStatusBadge>
+                        <span className="text-xs font-semibold text-slate-400">{selectedMaterial.thumbnail ? "Визуал готов" : "Готовится"}</span>
                       )}
                     </div>
                     {selectedMaterial.visualAssets.length > 1 ? (
                       <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
                         {selectedMaterial.visualAssets.slice(0, 4).map((asset, index) => (
-                          <div key={asset.id ?? index} className={`overflow-hidden rounded-2xl border ${index === 0 ? "border-violet-300 bg-violet-50" : "border-slate-200 bg-white"}`}>
+                          <div key={asset.id ?? index} className={`overflow-hidden rounded-[22px] border ${index === 0 ? "border-violet-200 bg-violet-50 shadow-[0_16px_38px_rgba(124,58,237,0.12)]" : "border-white bg-white shadow-[0_12px_30px_rgba(88,75,135,0.06)]"}`}>
                             <PortalImage variant={visualForAsset(asset)} alt={asset.title || `Слайд ${index + 1}`} className="aspect-square w-full object-cover" />
                             <p className="px-3 py-2 text-[11px] font-semibold text-slate-500">Карточка {index + 1}/{selectedMaterial.totalSlides}</p>
                           </div>
@@ -579,13 +597,13 @@ export function ClientPortalView({
                         ) : null}
                       </div>
                     ) : (
-                      <div className="mt-3 overflow-hidden rounded-[24px] border border-slate-200 bg-white">
+                      <div className="mt-3 overflow-hidden rounded-[26px] border border-white bg-white shadow-[0_18px_48px_rgba(88,75,135,0.08)]">
                         <PortalImage variant={selectedMaterial.thumbnail} alt={selectedMaterial.item.topic} className="aspect-[16/10] w-full object-cover" />
                       </div>
                     )}
                   </section>
 
-                  <div className="mt-5 flex flex-wrap gap-2">
+                  <div className="mt-6 flex flex-wrap gap-2">
                     <a href="#revisions" className={primaryButtonClass}>Оставить правку</a>
                     {selectedDraft ? (
                       <form action={portalToken ? approveDraftFromPortal : approveDraft}>
@@ -594,7 +612,6 @@ export function ClientPortalView({
                       </form>
                     ) : null}
                     <a href="#full-text" className={ghostButtonClass}>Открыть материал</a>
-                    <button className={ghostButtonClass} title="Скачать материал">Скачать</button>
                   </div>
                 </>
               ) : (
@@ -607,10 +624,10 @@ export function ClientPortalView({
               )}
             </article>
 
-            <aside className="min-w-0 rounded-[28px] border border-slate-200/70 bg-white/92 p-4 shadow-[0_24px_80px_rgba(88,75,135,0.08)]">
+            <aside className={`${surfaceClass} min-w-0 p-4`}>
               <div className="flex items-center justify-between gap-3">
                 <h2 className="font-semibold text-slate-950">Материалы месяца</h2>
-                <button className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-500">Фильтры</button>
+                <button className="rounded-full bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-500">Фильтры</button>
               </div>
               <div className="mt-4 grid max-h-[720px] gap-3 overflow-y-auto pr-1">
                 {materials.map((material) => {
@@ -618,12 +635,12 @@ export function ClientPortalView({
                   const selected = selectedMaterial?.item.id === material.item.id;
 
                   return (
-                    <article key={material.item.id} className={`min-w-0 rounded-[20px] border p-3 transition ${selected ? "border-violet-300 bg-violet-50/70" : "border-slate-200 bg-white"}`}>
+                    <article key={material.item.id} className={`min-w-0 rounded-[22px] border p-3 transition ${selected ? "border-violet-200 bg-violet-50/70 shadow-[0_14px_34px_rgba(124,58,237,0.10)]" : "border-transparent bg-slate-50/70 hover:bg-white"}`}>
                       <div className="flex min-w-0 gap-3">
                         {src ? (
-                          <img src={src} alt={material.item.topic} className="h-14 w-14 shrink-0 rounded-2xl object-cover" />
+                          <img src={src} alt={material.item.topic} className="h-14 w-14 shrink-0 rounded-[18px] object-cover" />
                         ) : (
-                          <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-slate-100 text-[10px] font-semibold text-slate-400">Soon</div>
+                          <div className="grid h-14 w-14 shrink-0 place-items-center rounded-[18px] bg-white text-[10px] font-semibold text-slate-400">Soon</div>
                         )}
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-[11px] font-semibold text-slate-400">{material.dateLabel} · {material.item.platformName}</p>
@@ -631,10 +648,11 @@ export function ClientPortalView({
                           <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{material.item.contentDraft?.draftBody || "Материал готовится."}</p>
                         </div>
                       </div>
-                      <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                        {selected ? <PortalStatusBadge tone="violet">Выбран</PortalStatusBadge> : null}
-                        <PortalStatusBadge tone={clientPortalStatusTone(material.status)}>{formatClientPortalStatus(material.status)}</PortalStatusBadge>
-                        {material.isCarousel ? <PortalStatusBadge>Карусель · {material.totalSlides}</PortalStatusBadge> : null}
+                      <div className="mt-3 flex items-center justify-between gap-2">
+                        <span className={`text-[11px] font-semibold ${material.status === "awaiting_approval" ? "text-amber-700" : "text-slate-400"}`}>
+                          {formatClientPortalStatus(material.status)}
+                        </span>
+                        {material.isCarousel ? <span className="text-[11px] font-semibold text-violet-600">Карусель · {material.totalSlides}</span> : null}
                       </div>
                     </article>
                   );
@@ -649,40 +667,45 @@ export function ClientPortalView({
           </section>
 
           <section id="revisions" className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <article className="rounded-[28px] border border-slate-200/70 bg-white/92 p-5 shadow-[0_24px_80px_rgba(88,75,135,0.08)]">
+            <article className={`${surfaceClass} p-5`}>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-violet-700">Комментарии / Правки</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-600">Комментарии / Правки</p>
                   <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">Обсуждение материала</h2>
                 </div>
-                <PortalStatusBadge>{commentCount} комментариев</PortalStatusBadge>
+                <span className="text-xs font-semibold text-slate-400">{commentCount} комментариев</span>
               </div>
               <div className="mt-5 grid gap-3">
                 {selectedEvents.filter((event) => event.comment).slice(-4).map((event) => (
-                  <div key={event.id} className="rounded-[20px] border border-slate-200 bg-slate-50/70 p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-semibold text-slate-950">{formatReviewActor(event.actorType)}</p>
-                      <span className="text-xs font-semibold text-slate-400">{formatReviewAction(event.action)}</span>
+                  <div key={event.id} className="flex gap-3 rounded-[22px] bg-slate-50/70 p-4">
+                    <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-semibold ${event.actorType === "client" ? "bg-violet-100 text-violet-700" : "bg-white text-slate-500"}`}>
+                      {formatReviewActor(event.actorType).slice(0, 1)}
                     </div>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">{event.comment}</p>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-slate-950">{formatReviewActor(event.actorType)}</p>
+                        <span className="text-xs font-semibold text-slate-400">{formatReviewAction(event.action)}</span>
+                      </div>
+                      <p className="mt-2 text-sm leading-6 text-slate-600">{event.comment}</p>
+                    </div>
                   </div>
                 ))}
                 {selectedEvents.filter((event) => event.comment).length === 0 ? (
-                  <p className="rounded-[20px] border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">Комментариев пока нет.</p>
+                  <p className="rounded-[22px] bg-slate-50/70 p-5 text-sm text-slate-500">Комментариев пока нет.</p>
                 ) : null}
               </div>
             </article>
 
-            <article className="rounded-[28px] border border-slate-200/70 bg-white/92 p-5 shadow-[0_24px_80px_rgba(88,75,135,0.08)]">
+            <article className={`${surfaceClass} p-5`}>
               <h2 className="text-lg font-semibold tracking-tight text-slate-950">Решение по материалу</h2>
               {!selectedDraft ? (
-                <p className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-500">
+                <p className="mt-4 rounded-[22px] bg-slate-50/80 px-4 py-3 text-sm leading-6 text-slate-500">
                   Материал ещё готовится. Согласование появится после подготовки текста и визуала.
                 </p>
               ) : selectedMaterial?.status === "approved" ? (
-                <p className="mt-4 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-semibold leading-6 text-violet-800">Материал согласован.</p>
+                <p className="mt-4 rounded-[22px] bg-violet-50 px-4 py-3 text-sm font-semibold leading-6 text-violet-800">Материал согласован.</p>
               ) : selectedMaterial?.status === "changes_requested" ? (
-                <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-900">Правки отправлены команде.</p>
+                <p className="mt-4 rounded-[22px] bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-900">Правки отправлены команде.</p>
               ) : selectedMaterial?.status === "awaiting_approval" || selectedMaterial?.status === "ready_for_review" ? (
                 <div className="mt-4 grid gap-3">
                   <form action={portalToken ? requestDraftChangesFromPortal : requestDraftChanges} className="grid gap-3">
@@ -697,14 +720,14 @@ export function ClientPortalView({
                   </form>
                 </div>
               ) : (
-                <p className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-500">
+                <p className="mt-4 rounded-[22px] bg-slate-50/80 px-4 py-3 text-sm leading-6 text-slate-500">
                   Материал ещё готовится. Согласование появится после подготовки текста и визуала.
                 </p>
               )}
             </article>
           </section>
 
-          <section id="files" className="mt-5 rounded-[28px] border border-slate-200/70 bg-white/75 p-5 shadow-[0_24px_80px_rgba(88,75,135,0.06)]">
+          <section id="files" className="mt-5 rounded-[28px] border border-white/70 bg-white/65 p-5 shadow-[0_20px_60px_rgba(88,75,135,0.045)]">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-violet-700">Файлы</p>
