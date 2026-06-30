@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import {
   approveDraft,
   approveDraftFromPortal,
@@ -107,35 +110,65 @@ function PortalStatusBadge({
   return <span className={`inline-flex shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${tones[tone]}`}>{children}</span>;
 }
 
+function useCountUp(value: number) {
+  const [display, setDisplay] = useState(0);
+
+  useEffect(() => {
+    const reduceMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+    if (reduceMotion || value <= 0) {
+      setDisplay(value);
+      return;
+    }
+
+    const duration = 750;
+    const start = performance.now();
+    let frame = requestAnimationFrame(function tick(now) {
+      const progress = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplay(Math.round(value * eased));
+      if (progress < 1) frame = requestAnimationFrame(tick);
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [value]);
+
+  return display;
+}
+
 function PortalMetric({
   label,
   value,
   helper,
   progress,
   tone = "neutral",
+  index = 0,
 }: {
   label: string;
   value: number;
   helper: string;
   progress: number;
   tone?: "neutral" | "violet" | "amber";
+  index?: number;
 }) {
+  const display = useCountUp(value);
   const bar = tone === "amber" ? "bg-amber-400" : "bg-violet-500";
-  const sparkTone = tone === "amber" ? "#f59e0b" : "#8b5cf6";
+  const width = Math.max(4, Math.min(progress, 100));
 
   return (
-    <article className="group rounded-[24px] border border-white/80 bg-white/92 p-5 shadow-[0_18px_58px_rgba(88,75,135,0.07)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_72px_rgba(88,75,135,0.10)]">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-[34px] font-semibold leading-none tracking-tight text-slate-950">{value}</p>
-          <p className="mt-2 text-sm font-semibold text-slate-700">{label}</p>
-        </div>
-        <svg viewBox="0 0 72 28" className="mt-1 h-7 w-16 text-violet-300" aria-hidden="true">
-          <path d="M2 22 C13 8 23 25 34 14 S55 7 70 12" fill="none" stroke={sparkTone} strokeOpacity="0.38" strokeWidth="3" strokeLinecap="round" />
-        </svg>
-      </div>
+    <article
+      className="ap-rise group rounded-[24px] border border-white/80 bg-white/92 p-5 shadow-[0_18px_58px_rgba(88,75,135,0.07)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_72px_rgba(88,75,135,0.10)]"
+      style={{ animationDelay: `${index * 70}ms` }}
+    >
+      <p className="text-[34px] font-semibold leading-none tracking-tight text-slate-950 tabular-nums">{display}</p>
+      <p className="mt-2 text-sm font-semibold text-slate-700">{label}</p>
       <div className="mt-5 h-1 overflow-hidden rounded-full bg-slate-100">
-        <div className={`h-full rounded-full ${bar}`} style={{ width: `${Math.max(4, Math.min(progress, 100))}%` }} />
+        <div
+          className={`ap-grow h-full origin-left rounded-full ${bar}`}
+          style={{ width: `${width}%`, animationDelay: `${index * 70 + 120}ms` }}
+        />
       </div>
       <p className="mt-3 text-xs leading-5 text-slate-400">{helper}</p>
     </article>
@@ -396,7 +429,15 @@ export function ClientPortalView({
       totalSlides,
     };
   });
-  const selectedMaterial = selectDefaultMaterial(materials);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [textExpanded, setTextExpanded] = useState(false);
+  const handleSelectMaterial = (id: string) => {
+    setSelectedId(id);
+    setTextExpanded(false);
+  };
+  const fallbackMaterial = selectDefaultMaterial(materials);
+  const selectedMaterial =
+    materials.find((material) => material.item.id === selectedId) ?? fallbackMaterial;
   const selectedDraft = selectedMaterial?.item.contentDraft;
   const selectedEvents = selectedDraft?.reviewEvents ?? [];
   const stats = calculateClientPortalStats(materials);
@@ -484,10 +525,10 @@ export function ClientPortalView({
           </header>
 
           <section className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <PortalMetric label="Материалов всего" value={stats.total} helper="В плане на месяц" progress={100} />
-            <PortalMetric label="Готово" value={stats.ready} helper={`${progress}% пакета готово`} progress={progress} tone="violet" />
-            <PortalMetric label="Требуют решения" value={stats.needsDecision} helper="Правки или подтверждение" progress={stats.total ? (stats.needsDecision / stats.total) * 100 : 0} tone={stats.needsDecision > 0 ? "amber" : "neutral"} />
-            <PortalMetric label="В работе" value={stats.inProgress} helper="Команда готовит материалы" progress={stats.total ? (stats.inProgress / stats.total) * 100 : 0} />
+            <PortalMetric label="Материалов всего" value={stats.total} helper="В плане на месяц" progress={100} index={0} />
+            <PortalMetric label="Готово" value={stats.ready} helper={`${progress}% пакета готово`} progress={progress} tone="violet" index={1} />
+            <PortalMetric label="Требуют решения" value={stats.needsDecision} helper="Правки или подтверждение" progress={stats.total ? (stats.needsDecision / stats.total) * 100 : 0} tone={stats.needsDecision > 0 ? "amber" : "neutral"} index={2} />
+            <PortalMetric label="В работе" value={stats.inProgress} helper="Команда готовит материалы" progress={stats.total ? (stats.inProgress / stats.total) * 100 : 0} index={3} />
           </section>
 
           <section className="mt-5 grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)_320px]">
@@ -526,7 +567,19 @@ export function ClientPortalView({
                           </div>
                           <div className="mt-2 grid gap-1.5">
                             {day.materials.slice(0, 2).map((material) => (
-                              <div key={material.item.id} className="flex min-w-0 items-center gap-1.5 rounded-xl bg-white/80 px-1.5 py-1 text-left shadow-[0_8px_18px_rgba(88,75,135,0.04)]">
+                              <div
+                                key={material.item.id}
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => handleSelectMaterial(material.item.id)}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter" || event.key === " ") {
+                                    event.preventDefault();
+                                    handleSelectMaterial(material.item.id);
+                                  }
+                                }}
+                                className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-xl bg-white/80 px-1.5 py-1 text-left shadow-[0_8px_18px_rgba(88,75,135,0.04)] outline-none transition hover:bg-white focus-visible:ring-2 focus-visible:ring-violet-200"
+                              >
                                 <PortalTinyThumbnail material={material} />
                                 <div className="min-w-0">
                                   <p className="truncate text-[10px] font-semibold text-slate-600">{material.item.platformName}</p>
@@ -565,10 +618,19 @@ export function ClientPortalView({
                   <section className="mt-6 rounded-[26px] bg-[#f8f7fb] p-5">
                     <div className="flex items-center justify-between gap-3">
                       <p className="font-semibold text-slate-950">Текст для публикации</p>
-                      <a href="#full-text" className="text-xs font-semibold text-violet-700">Показать полностью</a>
+                      {selectedDraft?.draftBody ? (
+                        <button
+                          type="button"
+                          onClick={() => setTextExpanded((value) => !value)}
+                          className="cursor-pointer rounded-full px-2 py-1 text-xs font-semibold text-violet-700 transition hover:bg-violet-50"
+                          aria-expanded={textExpanded}
+                        >
+                          {textExpanded ? "Свернуть" : "Показать полностью"}
+                        </button>
+                      ) : null}
                     </div>
                     <h3 className="mt-3 text-sm font-semibold text-slate-900">{selectedDraft?.draftTitle || selectedMaterial.item.topic}</h3>
-                    <p id="full-text" className="mt-3 max-h-72 overflow-hidden whitespace-pre-wrap text-sm leading-7 text-slate-600">
+                    <p id="full-text" className={`mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-600 ${textExpanded ? "" : "max-h-72 overflow-hidden"}`}>
                       {selectedDraft?.draftBody || "Материал ещё готовится. Текст появится после подготовки командой Creative Command."}
                     </p>
                   </section>
@@ -635,7 +697,20 @@ export function ClientPortalView({
                   const selected = selectedMaterial?.item.id === material.item.id;
 
                   return (
-                    <article key={material.item.id} className={`min-w-0 rounded-[22px] border p-3 transition ${selected ? "border-violet-200 bg-violet-50/70 shadow-[0_14px_34px_rgba(124,58,237,0.10)]" : "border-transparent bg-slate-50/70 hover:bg-white"}`}>
+                    <article
+                      key={material.item.id}
+                      role="button"
+                      tabIndex={0}
+                      aria-pressed={selected}
+                      onClick={() => handleSelectMaterial(material.item.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          handleSelectMaterial(material.item.id);
+                        }
+                      }}
+                      className={`min-w-0 cursor-pointer rounded-[22px] border p-3 outline-none transition focus-visible:ring-4 focus-visible:ring-violet-100 ${selected ? "border-violet-200 bg-violet-50/70 shadow-[0_14px_34px_rgba(124,58,237,0.10)]" : "border-transparent bg-slate-50/70 hover:bg-white"}`}
+                    >
                       <div className="flex min-w-0 gap-3">
                         {src ? (
                           <img src={src} alt={material.item.topic} className="h-14 w-14 shrink-0 rounded-[18px] object-cover" />
