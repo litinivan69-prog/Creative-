@@ -64,6 +64,12 @@ import {
 import { BrandAssetFileInput } from "@/app/brand-asset-file-input";
 import { ClientPortalView } from "@/app/client-portal-view";
 import { MonthProductionAutoRunner } from "@/app/month-production-auto-runner";
+import {
+  OverviewAttention,
+  OverviewMetric,
+  OverviewMiniCalendar,
+  type OverviewCalendarItem,
+} from "@/app/overview-widgets";
 import { PendingSubmitButton } from "@/app/pending-submit-button";
 import { getAutopilotTextBatchLimit } from "@/lib/autopilot";
 import {
@@ -610,6 +616,8 @@ function OverviewDashboard({
   brandProfileReady,
   brandAssetsCount,
   generationJobs,
+  month,
+  calendarItems,
 }: {
   currentMonthLabel: string;
   workspaceLinks: Record<WorkspaceView, string>;
@@ -632,48 +640,17 @@ function OverviewDashboard({
   brandProfileReady: boolean;
   brandAssetsCount: number;
   generationJobs: GenerationJobPreview[];
+  month?: string;
+  calendarItems: OverviewCalendarItem[];
 }) {
   const clientName = latestBlueprint?.client.name ?? "Клиент";
-  const focus =
-    waitingForClientCount > 0
-      ? {
-          title: "Правки клиента",
-          value: waitingForClientCount,
-          copy: "Новая правка от клиента.",
-          href: workspaceLinks.approvals,
-          action: "Открыть правки",
-        }
-      : integrationTaskCount > 0
-      ? {
-          title: "Заблокировано",
-          value: integrationTaskCount,
-          copy: "Нужно настроить доступы.",
-          href: workspaceLinks.calendar,
-          action: "Открыть календарь",
-        }
-      : missingTextCount > 0
-        ? {
-            title: "Материалы без текста",
-            value: missingTextCount,
-            copy: `${missingTextCount} материала ждут текста.`,
-            href: workspaceLinks.drafts,
-            action: "Открыть материалы",
-          }
-        : missingVisualCount > 0
-          ? {
-              title: "Нужны визуалы",
-              value: missingVisualCount,
-              copy: "Подготовьте ТЗ или визуал.",
-              href: workspaceLinks.drafts,
-              action: "Открыть материалы",
-            }
-          : {
-              title: "Фокус",
-              value: "OK",
-              copy: "Критичных задач нет.",
-              href: workspaceLinks.reports,
-              action: "Открыть отчёт",
-            };
+  const attentionItems = [
+    { label: "На проверке", count: needsManagerReviewCount, href: workspaceLinks.drafts },
+    { label: "Правки клиента", count: waitingForClientCount, href: workspaceLinks.approvals },
+    { label: "Заблокировано", count: integrationTaskCount, href: workspaceLinks.calendar },
+    { label: "Нужны визуалы", count: missingVisualCount, href: workspaceLinks.drafts },
+    { label: "Без текста", count: missingTextCount, href: workspaceLinks.drafts },
+  ];
   const recentItems = [
     ...generationJobs.slice(0, 3).map((job) => ({
       title: formatGenerationJobType(job.jobType),
@@ -711,78 +688,52 @@ function OverviewDashboard({
         </div>
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <OverviewMetricCard label="Материалов" value={plannedContentCount} detail="В месячном плане" href={workspaceLinks.drafts} icon="calendar" />
-        <OverviewMetricCard label="На проверке" value={needsManagerReviewCount} detail="Внутренняя очередь" href={workspaceLinks.drafts} icon="review" />
-        <OverviewMetricCard label="Готово в пакет" value={readyToScheduleCount} detail="Можно собирать" href={workspaceLinks.reports} icon="check" />
-        <OverviewMetricCard label="Правки клиента" value={waitingForClientCount} detail="Нужно ответить" href={workspaceLinks.approvals} icon="client" />
+      <div className="mt-4">
+        <OverviewAttention items={attentionItems} />
       </div>
 
-      <div className="mt-3 grid gap-3 lg:grid-cols-12">
-        <OverviewProgressCard
-          progress={productionProgress}
-          plannedContentCount={plannedContentCount}
-          draftCount={draftCount}
-          approvalQueueCount={approvalQueueCount}
-          readyToScheduleCount={readyToScheduleCount}
-          integrationTaskCount={integrationTaskCount}
-          draftsHref={workspaceLinks.drafts}
-        />
-        <OverviewClientCard
-          clientName={latestBlueprint?.client.name ?? "Клиент не выбран"}
-          industry={latestBlueprint?.client.industry ?? "Создайте клиента и Blueprint"}
-          confidenceScore={latestBlueprint?.confidenceScore ?? null}
-          plannedContentCount={plannedContentCount}
-          brandProfileReady={brandProfileReady}
-          brandAssetsCount={brandAssetsCount}
-          clientHref={workspaceLinks.client_setup}
-          blueprintHref={workspaceLinks.client_setup}
-        />
+      <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <OverviewMetric label="Материалов" value={plannedContentCount} detail="В месячном плане" href={workspaceLinks.drafts} icon={<SidebarIcon name="calendar" className="h-4 w-4" />} index={0} />
+        <OverviewMetric label="Готово в пакет" value={readyToScheduleCount} detail={`${productionProgress}% готовности`} href={workspaceLinks.reports} icon={<SidebarIcon name="check" className="h-4 w-4" />} progress={productionProgress} index={1} />
+        <OverviewMetric label="На проверке" value={needsManagerReviewCount} detail="Внутренняя очередь" href={workspaceLinks.drafts} icon={<SidebarIcon name="review" className="h-4 w-4" />} tone={needsManagerReviewCount > 0 ? "amber" : "neutral"} index={2} />
+        <OverviewMetric label="Правки клиента" value={waitingForClientCount} detail="Нужно ответить" href={workspaceLinks.approvals} icon={<SidebarIcon name="client" className="h-4 w-4" />} tone={waitingForClientCount > 0 ? "amber" : "neutral"} index={3} />
       </div>
 
-      <div className="mt-3 grid gap-3 lg:grid-cols-12">
-        <OverviewSmallCard
-          title={focus.title}
-          value={focus.value}
-          copy={focus.copy}
-          href={focus.href}
-          action={focus.action}
-        />
-        <article className={`${overviewCardClass} p-4 lg:col-span-4 xl:col-span-4`}>
-          <p className="text-xs font-semibold text-slate-400">Очередь</p>
-          <div className="mt-3 grid gap-2">
-            {[
-              ["Проверка", needsManagerReviewCount],
-              ["Правки", waitingForClientCount],
-              ["Визуалы", missingVisualCount],
-              ["Доступы", integrationTaskCount],
-            ].map(([label, value]) => (
-              <div key={label} className="flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-2">
-                <span className="text-xs font-semibold text-slate-500">{label}</span>
-                <span className="text-sm font-semibold text-slate-950">{value}</span>
-              </div>
-            ))}
-          </div>
-        </article>
-        <article className={`${overviewCardClass} p-4 lg:col-span-4 xl:col-span-4`}>
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-xs font-semibold text-slate-400">Активность</p>
-            <a href={workspaceLinks.reports} className="text-xs font-semibold text-violet-700">Отчёт</a>
-          </div>
-          <div className="mt-3 grid gap-2">
-            {recentItems.map((item) => (
-              <div key={`${item.title}-${item.time}`} className="flex items-center gap-3">
-                <span className="h-2 w-2 shrink-0 rounded-full bg-violet-500" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-semibold text-slate-800">{item.title}</p>
-                  <p className="truncate text-[11px] text-slate-400">{item.meta}</p>
+      <div className="mt-3 grid items-start gap-3 lg:grid-cols-12">
+        <div className="min-w-0 lg:col-span-8">
+          <OverviewMiniCalendar month={month} items={calendarItems} calendarHref={workspaceLinks.calendar} />
+        </div>
+        <div className="grid content-start gap-3 lg:col-span-4">
+          <OverviewClientCard
+            clientName={latestBlueprint?.client.name ?? "Клиент не выбран"}
+            industry={latestBlueprint?.client.industry ?? "Создайте клиента и Blueprint"}
+            confidenceScore={latestBlueprint?.confidenceScore ?? null}
+            plannedContentCount={plannedContentCount}
+            brandProfileReady={brandProfileReady}
+            brandAssetsCount={brandAssetsCount}
+            clientHref={workspaceLinks.client_setup}
+            blueprintHref={workspaceLinks.client_setup}
+          />
+          <article className={`${overviewCardClass} ap-rise p-4`}>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-semibold text-slate-400">Активность</p>
+              <a href={workspaceLinks.reports} className="text-xs font-semibold text-violet-700">Отчёт</a>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {recentItems.map((item) => (
+                <div key={`${item.title}-${item.time}`} className="flex items-center gap-3">
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-violet-500" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-semibold text-slate-800">{item.title}</p>
+                    <p className="truncate text-[11px] text-slate-400">{item.meta}</p>
+                  </div>
+                  <span className="text-[11px] text-slate-400">{item.time}</span>
                 </div>
-                <span className="text-[11px] text-slate-400">{item.time}</span>
-              </div>
-            ))}
-            {recentItems.length === 0 ? <p className="text-xs leading-5 text-slate-400">Пока нет недавних событий.</p> : null}
-          </div>
-        </article>
+              ))}
+              {recentItems.length === 0 ? <p className="text-xs leading-5 text-slate-400">Пока нет недавних событий.</p> : null}
+            </div>
+          </article>
+        </div>
       </div>
     </section>
   );
@@ -5860,6 +5811,18 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
   const missingTextCount = Math.max(plannedContentCount - draftCount, 0);
   const creativeAssets = selectedMonthlyPlan?.creativeAssets ?? [];
   const generationJobs = selectedMonthlyPlan?.generationJobs ?? [];
+  const overviewCalendarItems: OverviewCalendarItem[] = (selectedMonthlyPlan?.plannedContentItems ?? []).map((item) => {
+    const publication = selectedMonthlyPlan?.scheduledPublications.find(
+      (pub) => pub.plannedContentItemId === item.id,
+    );
+    return {
+      id: item.id,
+      date: publication?.scheduledDate ?? item.plannedDate ?? null,
+      platformName: item.platformName,
+      topic: item.topic,
+      status: item.contentDraft?.status ?? null,
+    };
+  });
   const latestProductionRun = selectedMonthlyPlan?.productionRuns[0];
   const creativeAssetAttentionCount =
     creativeAssets.filter((asset) => ["needed", "brief_ready", "in_production", "needs_review"].includes(asset.status)).length +
@@ -6024,6 +5987,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 brandProfileReady={brandProfileReady}
                 brandAssetsCount={brandAssetsCount}
                 generationJobs={generationJobs}
+                month={selectedMonthlyPlan?.month}
+                calendarItems={overviewCalendarItems}
               />
             ) : null}
 
