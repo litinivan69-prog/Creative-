@@ -296,6 +296,10 @@ model ScheduledPublication {
   status               String
   publishMode          String
   notes                String?
+  externalUrl          String?
+  externalId           String?
+  publishedAt          DateTime?
+  publishStatus        String?
   createdAt            DateTime                @default(now())
   updatedAt            DateTime                @updatedAt
   client               Client                  @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -306,6 +310,7 @@ model ScheduledPublication {
   creativeAssets       CreativeAsset[]
   generatedCreativeVariants GeneratedCreativeVariant[]
   generationJobs             GenerationJob[]
+  metrics                    PublicationMetric[]
 
   @@index([clientId])
   @@index([monthlyPlanId])
@@ -591,4 +596,47 @@ model RiskRule {
   blueprint        ClientPresenceBlueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
 
   @@index([blueprintId])
+}
+
+model PublicationMetric {
+  id                     String               @id @default(cuid())
+  scheduledPublicationId String
+  clientId               String
+  monthlyPlanId          String
+  platformName           String
+  likes                  Int?
+  comments               Int?
+  shares                 Int?
+  reach                  Int?
+  views                  Int?
+  saves                  Int?
+  clicks                 Int?
+  capturedAt             DateTime             @default(now())
+  source                 String               @default("manual")
+  createdAt              DateTime             @default(now())
+  scheduledPublication   ScheduledPublication @relation(fields: [scheduledPublicationId], references: [id], onDelete: Cascade)
+
+  @@index([scheduledPublicationId])
+  @@index([clientId])
+  @@index([monthlyPlanId])
+  @@index([platformName])
+  @@index([capturedAt])
+}
+
+model IntegrationEvent {
+  id           String    @id @default(cuid())
+  direction    String
+  eventType    String
+  relatedType  String?
+  relatedId    String?
+  payload      Json
+  status       String    @default("received")
+  errorMessage String?
+  createdAt    DateTime  @default(now())
+  processedAt  DateTime?
+
+  @@index([eventType])
+  @@index([status])
+  @@index([createdAt])
+  @@index([relatedId])
 }
