@@ -387,6 +387,34 @@ function PortalTinyThumbnail({ material }: { material: ClientPortalMaterial }) {
   return <span className="h-2 w-2 shrink-0 rounded-full bg-violet-300" />;
 }
 
+function PortalRing({ value, label }: { value: number; label: string }) {
+  const safe = Math.max(0, Math.min(value, 100));
+
+  return (
+    <div className="relative flex h-36 w-36 items-center justify-center">
+      <div
+        className="absolute inset-0 rounded-full"
+        style={{ background: `conic-gradient(#7c3aed ${safe * 3.6}deg, #ede9fe 0)` }}
+      />
+      <div className="relative flex h-28 w-28 flex-col items-center justify-center rounded-full bg-white shadow-[inset_0_2px_10px_rgba(88,75,135,0.08)]">
+        <span className="text-3xl font-semibold tracking-tight text-slate-950 tabular-nums">{safe}%</span>
+        <span className="text-[11px] font-semibold text-slate-400">{label}</span>
+      </div>
+    </div>
+  );
+}
+
+const portalSections = [
+  { key: "overview", label: "Обзор" },
+  { key: "calendar", label: "Календарь" },
+  { key: "visuals", label: "Визуалы" },
+  { key: "materials", label: "Материалы" },
+  { key: "revisions", label: "Правки" },
+  { key: "files", label: "Файлы" },
+] as const;
+
+type PortalSection = (typeof portalSections)[number]["key"];
+
 export function ClientPortalView({
   clientName,
   month,
@@ -431,9 +459,14 @@ export function ClientPortalView({
   });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [textExpanded, setTextExpanded] = useState(false);
+  const [section, setSection] = useState<PortalSection>("overview");
   const handleSelectMaterial = (id: string) => {
     setSelectedId(id);
     setTextExpanded(false);
+  };
+  const openMaterial = (id: string) => {
+    handleSelectMaterial(id);
+    setSection("materials");
   };
   const fallbackMaterial = selectDefaultMaterial(materials);
   const selectedMaterial =
@@ -467,20 +500,26 @@ export function ClientPortalView({
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#f7f5fb] bg-[radial-gradient(circle_at_26%_-10%,rgba(139,92,246,0.16),transparent_34%),radial-gradient(circle_at_92%_6%,rgba(196,181,253,0.12),transparent_28%)] text-slate-900">
       <div className="grid min-h-screen lg:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="border-r border-white/70 bg-white/60 px-5 py-6 backdrop-blur-xl">
+        <aside className="flex flex-col border-r border-white/70 bg-white/60 px-5 py-6 backdrop-blur-xl">
           <div className="rounded-[24px] border border-white/80 bg-white/82 p-5 shadow-[0_18px_60px_rgba(88,75,135,0.055)]">
             <p className="text-lg font-semibold tracking-tight text-slate-950">Adaptive Presence OS</p>
             <p className="mt-1 text-xs font-semibold text-violet-700">by Creative Command</p>
           </div>
           <nav className="mt-6 grid gap-1.5">
-            {["Обзор", "Календарь", "Материалы", "Правки", "Файлы"].map((item, index) => (
-              <a
-                key={item}
-                href={`#${["overview", "calendar", "materials", "revisions", "files"][index]}`}
-                className="rounded-2xl px-4 py-3 text-sm font-semibold text-slate-500 transition hover:bg-white/80 hover:text-violet-700"
+            {portalSections.map((entry) => (
+              <button
+                key={entry.key}
+                type="button"
+                onClick={() => setSection(entry.key)}
+                aria-current={section === entry.key}
+                className={`rounded-2xl px-4 py-3 text-left text-sm font-semibold transition ${
+                  section === entry.key
+                    ? "bg-violet-600 text-white shadow-[0_14px_30px_rgba(124,58,237,0.22)]"
+                    : "text-slate-500 hover:bg-white/80 hover:text-violet-700"
+                }`}
               >
-                {item}
-              </a>
+                {entry.label}
+              </button>
             ))}
           </nav>
           <div className="mt-6 rounded-[24px] border border-white/80 bg-white/70 p-5">
@@ -503,40 +542,160 @@ export function ClientPortalView({
           {notice ? <div className="mb-4 rounded-2xl border border-violet-200 bg-white px-4 py-3 text-sm font-semibold text-violet-800">{notice}</div> : null}
           {error ? <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">{error}</div> : null}
 
-          <header id="overview" className={`${surfaceClass} p-5 backdrop-blur-xl`}>
-            <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-full bg-violet-50 px-3 py-1 text-[11px] font-semibold text-violet-700">Месячный пакет</span>
-                  <span className="text-xs font-semibold text-slate-400">{monthLabel}</span>
+          {section === "overview" ? (
+            <div className="grid gap-5">
+              <header className={`${surfaceClass} p-5 backdrop-blur-xl sm:p-6`}>
+                <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-violet-50 px-3 py-1 text-[11px] font-semibold text-violet-700">Месячный пакет</span>
+                      <span className="text-xs font-semibold text-slate-400">{monthLabel}</span>
+                    </div>
+                    <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">{clientName || "Клиент"}</h1>
+                    <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500">
+                      Готовность пакета {progress}% · {stats.needsDecision > 0 ? `${stats.needsDecision} материалов ждут вашего решения` : "срочных решений нет"}.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button type="button" onClick={() => setSection("files")} className={primaryButtonClass}>Скачать пакет</button>
+                    <div className="grid h-12 w-12 place-items-center rounded-full bg-violet-600 text-base font-semibold text-white shadow-[0_14px_30px_rgba(124,58,237,0.25)]">
+                      {(clientName || "C").slice(0, 1).toUpperCase()}
+                    </div>
+                  </div>
                 </div>
-                <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">{clientName || "Клиент"}</h1>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-                  Календарь, тексты, визуалы и решения по материалам месяца в одном спокойном пространстве.
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <button className={secondaryButtonClass}>Скачать пакет месяца</button>
-                <div className="grid h-12 w-12 place-items-center rounded-full bg-violet-600 text-sm font-semibold text-white shadow-[0_14px_30px_rgba(124,58,237,0.25)]">
-                  {(clientName || "C").slice(0, 1).toUpperCase()}
-                </div>
-              </div>
+              </header>
+
+              <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <PortalMetric label="Материалов всего" value={stats.total} helper="В плане на месяц" progress={100} index={0} />
+                <PortalMetric label="Готово" value={stats.ready} helper={`${progress}% пакета готово`} progress={progress} tone="violet" index={1} />
+                <PortalMetric label="Требуют решения" value={stats.needsDecision} helper="Правки или подтверждение" progress={stats.total ? (stats.needsDecision / stats.total) * 100 : 0} tone={stats.needsDecision > 0 ? "amber" : "neutral"} index={2} />
+                <PortalMetric label="В работе" value={stats.inProgress} helper="Команда готовит материалы" progress={stats.total ? (stats.inProgress / stats.total) * 100 : 0} index={3} />
+              </section>
+
+              <section className="grid gap-5 lg:grid-cols-12">
+                <article className={`${surfaceClass} flex flex-col items-center p-6 lg:col-span-3`}>
+                  <p className="self-start text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-600">Готовность</p>
+                  <div className="my-3">
+                    <PortalRing value={progress} label="пакета" />
+                  </div>
+                  <p className="text-center text-xs leading-5 text-slate-400">{stats.ready} из {stats.total} материалов готовы</p>
+                </article>
+
+                <article className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-violet-600 to-violet-500 p-6 text-white shadow-[0_26px_70px_rgba(124,58,237,0.28)] lg:col-span-5">
+                  {selectedMaterial ? (
+                    <>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-100">Рекомендуем посмотреть</p>
+                          <h2 className="mt-2 text-2xl font-semibold leading-tight">{selectedMaterial.item.topic}</h2>
+                          <p className="mt-1 text-sm text-violet-100">{selectedMaterial.dateLabel} · {selectedMaterial.item.platformName}</p>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold text-white">
+                          {formatClientPortalStatus(selectedMaterial.status)}
+                        </span>
+                      </div>
+                      <div className="mt-4 overflow-hidden rounded-[20px] bg-white/10">
+                        <PortalImage variant={selectedMaterial.thumbnail} alt={selectedMaterial.item.topic} className="aspect-[16/9] w-full object-cover" />
+                      </div>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <button type="button" onClick={() => setSection("materials")} className="inline-flex items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-violet-700 transition hover:bg-violet-50">
+                          Открыть материал
+                        </button>
+                        {selectedDraft ? (
+                          <form action={portalToken ? approveDraftFromPortal : approveDraft}>
+                            <PortalActionFields contentDraftId={selectedDraft.id} portalToken={portalToken} />
+                            <PendingSubmitButton pendingLabel="Подтверждаем..." className="inline-flex items-center justify-center rounded-full border border-white/40 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/20">
+                              Подтвердить
+                            </PendingSubmitButton>
+                          </form>
+                        ) : null}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="grid min-h-[220px] place-items-center text-center">
+                      <div>
+                        <p className="font-semibold">Пакет месяца ещё собирается</p>
+                        <p className="mt-2 text-sm text-violet-100">Материалы появятся здесь после подготовки.</p>
+                      </div>
+                    </div>
+                  )}
+                </article>
+
+                <article className={`${surfaceClass} min-w-0 p-5 lg:col-span-4`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-600">Календарь</p>
+                      <h2 className="mt-1 text-lg font-semibold tracking-tight text-slate-950">{monthLabel}</h2>
+                    </div>
+                    <button type="button" onClick={() => setSection("calendar")} className="rounded-full bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 transition hover:bg-violet-100">
+                      Открыть
+                    </button>
+                  </div>
+                  <div className="mt-4 grid grid-cols-7 gap-1 text-center text-[10px] font-semibold text-slate-400">
+                    {weekDays.map((day) => <div key={day}>{day}</div>)}
+                  </div>
+                  <div className="mt-1.5 grid grid-cols-7 gap-1">
+                    {calendarDays.map((day) => (
+                      <div
+                        key={day.key}
+                        className={`flex aspect-square flex-col items-center justify-center rounded-lg text-[11px] ${
+                          day.day ? (day.materials.length > 0 ? "bg-violet-50 font-semibold text-violet-800" : "text-slate-500") : ""
+                        }`}
+                      >
+                        {day.day ? (
+                          <>
+                            <span>{day.day}</span>
+                            {day.materials.length > 0 ? <span className="mt-0.5 h-1 w-1 rounded-full bg-violet-500" /> : null}
+                          </>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                </article>
+              </section>
+
+              <section className="grid gap-5 lg:grid-cols-12">
+                <article className={`${surfaceClass} p-5 lg:col-span-8`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <h2 className="font-semibold text-slate-950">Последние комментарии</h2>
+                    <button type="button" onClick={() => setSection("revisions")} className="text-xs font-semibold text-violet-700">Все правки</button>
+                  </div>
+                  <div className="mt-4 grid gap-3">
+                    {selectedEvents.filter((event) => event.comment).slice(-3).map((event) => (
+                      <div key={event.id} className="flex gap-3 rounded-[20px] bg-slate-50/70 p-4">
+                        <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-semibold ${event.actorType === "client" ? "bg-violet-100 text-violet-700" : "bg-white text-slate-500"}`}>
+                          {formatReviewActor(event.actorType).slice(0, 1)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-sm font-semibold text-slate-950">{formatReviewActor(event.actorType)}</p>
+                            <span className="text-xs font-semibold text-slate-400">{formatReviewAction(event.action)}</span>
+                          </div>
+                          <p className="mt-1 text-sm leading-6 text-slate-600">{event.comment}</p>
+                        </div>
+                      </div>
+                    ))}
+                    {selectedEvents.filter((event) => event.comment).length === 0 ? (
+                      <p className="rounded-[20px] bg-slate-50/70 p-5 text-sm text-slate-500">Комментариев пока нет — всё идёт по плану.</p>
+                    ) : null}
+                  </div>
+                </article>
+                <article className={`${surfaceClass} p-5 lg:col-span-4`}>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-violet-700">Пакет месяца</p>
+                  <h2 className="mt-1 text-lg font-semibold text-slate-950">Файлы и экспорт</h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-500">Финальный архив материалов будет доступен после согласования пакета.</p>
+                  <button type="button" onClick={() => setSection("files")} className={`${secondaryButtonClass} mt-4 w-full`}>Открыть файлы</button>
+                </article>
+              </section>
             </div>
-          </header>
+          ) : null}
 
-          <section className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <PortalMetric label="Материалов всего" value={stats.total} helper="В плане на месяц" progress={100} index={0} />
-            <PortalMetric label="Готово" value={stats.ready} helper={`${progress}% пакета готово`} progress={progress} tone="violet" index={1} />
-            <PortalMetric label="Требуют решения" value={stats.needsDecision} helper="Правки или подтверждение" progress={stats.total ? (stats.needsDecision / stats.total) * 100 : 0} tone={stats.needsDecision > 0 ? "amber" : "neutral"} index={2} />
-            <PortalMetric label="В работе" value={stats.inProgress} helper="Команда готовит материалы" progress={stats.total ? (stats.inProgress / stats.total) * 100 : 0} index={3} />
-          </section>
-
-          <section className="mt-5 grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)_320px]">
-            <article id="calendar" className={`${surfaceClass} min-w-0 p-5`}>
+          {section === "calendar" ? (
+            <article className={`${surfaceClass} min-w-0 p-5 sm:p-6`}>
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-600">Календарь</p>
-                  <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">{monthLabel}</h2>
+                  <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">{monthLabel}</h2>
                 </div>
                 <span className="text-xs font-semibold text-slate-400">{stats.total} материалов</span>
               </div>
@@ -544,273 +703,318 @@ export function ClientPortalView({
                 {weekDays.map((day) => <div key={day}>{day}</div>)}
               </div>
               <div className="mt-2 grid grid-cols-7 gap-2">
-                {calendarDays.map((day) => {
-                  const firstMaterial = day.materials[0];
-                  const selected = Boolean(selectedMaterial && firstMaterial?.item.id === selectedMaterial.item.id);
-
-                  return (
-                    <div
-                      key={day.key}
-                      className={`min-h-[92px] rounded-[20px] border p-2.5 transition ${
-                        day.day
-                          ? selected
-                            ? "border-violet-200 bg-violet-50/80 shadow-[0_14px_34px_rgba(124,58,237,0.10)]"
-                            : "border-transparent bg-slate-50/70 hover:bg-white"
-                          : "border-transparent"
-                      }`}
-                    >
-                      {day.day ? (
-                        <>
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="text-xs font-semibold text-slate-500">{day.day}</span>
-                            {day.materials.length > 0 ? <span className="h-1.5 w-1.5 rounded-full bg-violet-400" /> : null}
-                          </div>
-                          <div className="mt-2 grid gap-1.5">
-                            {day.materials.slice(0, 2).map((material) => (
-                              <div
-                                key={material.item.id}
-                                role="button"
-                                tabIndex={0}
-                                onClick={() => handleSelectMaterial(material.item.id)}
-                                onKeyDown={(event) => {
-                                  if (event.key === "Enter" || event.key === " ") {
-                                    event.preventDefault();
-                                    handleSelectMaterial(material.item.id);
-                                  }
-                                }}
-                                className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-xl bg-white/80 px-1.5 py-1 text-left shadow-[0_8px_18px_rgba(88,75,135,0.04)] outline-none transition hover:bg-white focus-visible:ring-2 focus-visible:ring-violet-200"
-                              >
-                                <PortalTinyThumbnail material={material} />
-                                <div className="min-w-0">
-                                  <p className="truncate text-[10px] font-semibold text-slate-600">{material.item.platformName}</p>
-                                  <p className="truncate text-[10px] text-slate-400">{material.item.topic}</p>
-                                </div>
-                              </div>
-                            ))}
-                            {day.materials.length > 2 ? <p className="text-[10px] font-semibold text-violet-600">+{day.materials.length - 2}</p> : null}
-                          </div>
-                        </>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-            </article>
-
-            <article id="materials" className={`${surfaceClass} min-w-0 overflow-hidden p-5`}>
-              {selectedMaterial ? (
-                <>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                        {selectedMaterial.dateLabel} · {selectedMaterial.item.platformName}
-                      </p>
-                      <h2 className="mt-3 text-[28px] font-semibold leading-tight tracking-tight text-slate-950">{selectedMaterial.item.topic}</h2>
-                    </div>
-                    <PortalStatusBadge tone={clientPortalStatusTone(selectedMaterial.status)}>
-                      {formatClientPortalStatus(selectedMaterial.status)}
-                    </PortalStatusBadge>
-                  </div>
-                  <p className="mt-3 text-sm leading-6 text-slate-500">
-                    {selectedMaterial.item.goal || selectedMaterial.item.campaignTheme || selectedMaterial.item.contentPillar || "Материал из месячного пакета присутствия бренда."}
-                  </p>
-
-                  <section className="mt-6 rounded-[26px] bg-[#f8f7fb] p-5">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="font-semibold text-slate-950">Текст для публикации</p>
-                      {selectedDraft?.draftBody ? (
-                        <button
-                          type="button"
-                          onClick={() => setTextExpanded((value) => !value)}
-                          className="cursor-pointer rounded-full px-2 py-1 text-xs font-semibold text-violet-700 transition hover:bg-violet-50"
-                          aria-expanded={textExpanded}
-                        >
-                          {textExpanded ? "Свернуть" : "Показать полностью"}
-                        </button>
-                      ) : null}
-                    </div>
-                    <h3 className="mt-3 text-sm font-semibold text-slate-900">{selectedDraft?.draftTitle || selectedMaterial.item.topic}</h3>
-                    <p id="full-text" className={`mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-600 ${textExpanded ? "" : "max-h-72 overflow-hidden"}`}>
-                      {selectedDraft?.draftBody || "Материал ещё готовится. Текст появится после подготовки командой Creative Command."}
-                    </p>
-                  </section>
-
-                  <section className="mt-5">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="font-semibold text-slate-950">Визуалы</p>
-                      {selectedMaterial.isCarousel ? (
-                        <span className="text-xs font-semibold text-violet-700">Карусель · {selectedMaterial.readySlides}/{selectedMaterial.totalSlides || 1}</span>
-                      ) : (
-                        <span className="text-xs font-semibold text-slate-400">{selectedMaterial.thumbnail ? "Визуал готов" : "Готовится"}</span>
-                      )}
-                    </div>
-                    {selectedMaterial.visualAssets.length > 1 ? (
-                      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                        {selectedMaterial.visualAssets.slice(0, 4).map((asset, index) => (
-                          <div key={asset.id ?? index} className={`overflow-hidden rounded-[22px] border ${index === 0 ? "border-violet-200 bg-violet-50 shadow-[0_16px_38px_rgba(124,58,237,0.12)]" : "border-white bg-white shadow-[0_12px_30px_rgba(88,75,135,0.06)]"}`}>
-                            <PortalImage variant={visualForAsset(asset)} alt={asset.title || `Слайд ${index + 1}`} className="aspect-square w-full object-cover" />
-                            <p className="px-3 py-2 text-[11px] font-semibold text-slate-500">Карточка {index + 1}/{selectedMaterial.totalSlides}</p>
-                          </div>
-                        ))}
-                        {selectedMaterial.visualAssets.length > 4 ? (
-                          <div className="grid aspect-square place-items-center rounded-2xl border border-dashed border-violet-200 bg-violet-50 text-sm font-semibold text-violet-700">
-                            +{selectedMaterial.visualAssets.length - 4} слайда
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : (
-                      <div className="mt-3 overflow-hidden rounded-[26px] border border-white bg-white shadow-[0_18px_48px_rgba(88,75,135,0.08)]">
-                        <PortalImage variant={selectedMaterial.thumbnail} alt={selectedMaterial.item.topic} className="aspect-[16/10] w-full object-cover" />
-                      </div>
-                    )}
-                  </section>
-
-                  <div className="mt-6 flex flex-wrap gap-2">
-                    <a href="#revisions" className={primaryButtonClass}>Оставить правку</a>
-                    {selectedDraft ? (
-                      <form action={portalToken ? approveDraftFromPortal : approveDraft}>
-                        <PortalActionFields contentDraftId={selectedDraft.id} portalToken={portalToken} />
-                        <PendingSubmitButton pendingLabel="Подтверждаем..." className={secondaryButtonClass}>Подтвердить</PendingSubmitButton>
-                      </form>
-                    ) : null}
-                    <a href="#full-text" className={ghostButtonClass}>Открыть материал</a>
-                  </div>
-                </>
-              ) : (
-                <div className="grid min-h-[460px] place-items-center rounded-[24px] border border-dashed border-slate-200 bg-slate-50 text-center">
-                  <div>
-                    <p className="font-semibold text-slate-900">Пакет месяца ещё собирается</p>
-                    <p className="mt-2 text-sm text-slate-500">Материалы появятся здесь после подготовки.</p>
-                  </div>
-                </div>
-              )}
-            </article>
-
-            <aside className={`${surfaceClass} min-w-0 p-4`}>
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="font-semibold text-slate-950">Материалы месяца</h2>
-                <button className="rounded-full bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-500">Фильтры</button>
-              </div>
-              <div className="mt-4 grid max-h-[720px] gap-3 overflow-y-auto pr-1">
-                {materials.map((material) => {
-                  const src = material.thumbnail ? getGeneratedVariantImageSrc(material.thumbnail) : null;
-                  const selected = selectedMaterial?.item.id === material.item.id;
-
-                  return (
-                    <article
-                      key={material.item.id}
-                      role="button"
-                      tabIndex={0}
-                      aria-pressed={selected}
-                      onClick={() => handleSelectMaterial(material.item.id)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          handleSelectMaterial(material.item.id);
-                        }
-                      }}
-                      className={`min-w-0 cursor-pointer rounded-[22px] border p-3 outline-none transition focus-visible:ring-4 focus-visible:ring-violet-100 ${selected ? "border-violet-200 bg-violet-50/70 shadow-[0_14px_34px_rgba(124,58,237,0.10)]" : "border-transparent bg-slate-50/70 hover:bg-white"}`}
-                    >
-                      <div className="flex min-w-0 gap-3">
-                        {src ? (
-                          <img src={src} alt={material.item.topic} className="h-14 w-14 shrink-0 rounded-[18px] object-cover" />
-                        ) : (
-                          <div className="grid h-14 w-14 shrink-0 place-items-center rounded-[18px] bg-white text-[10px] font-semibold text-slate-400">Soon</div>
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-[11px] font-semibold text-slate-400">{material.dateLabel} · {material.item.platformName}</p>
-                          <h3 className="mt-1 line-clamp-2 text-sm font-semibold leading-5 text-slate-950">{material.item.topic}</h3>
-                          <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{material.item.contentDraft?.draftBody || "Материал готовится."}</p>
+                {calendarDays.map((day) => (
+                  <div
+                    key={day.key}
+                    className={`min-h-[120px] rounded-[20px] border p-2.5 transition ${
+                      day.day ? (day.materials.length > 0 ? "border-violet-100 bg-violet-50/40" : "border-transparent bg-slate-50/70") : "border-transparent"
+                    }`}
+                  >
+                    {day.day ? (
+                      <>
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-xs font-semibold text-slate-500">{day.day}</span>
+                          {day.materials.length > 0 ? <span className="h-1.5 w-1.5 rounded-full bg-violet-400" /> : null}
                         </div>
-                      </div>
-                      <div className="mt-3 flex items-center justify-between gap-2">
-                        <span className={`text-[11px] font-semibold ${material.status === "awaiting_approval" ? "text-amber-700" : "text-slate-400"}`}>
-                          {formatClientPortalStatus(material.status)}
-                        </span>
-                        {material.isCarousel ? <span className="text-[11px] font-semibold text-violet-600">Карусель · {material.totalSlides}</span> : null}
-                      </div>
-                    </article>
-                  );
-                })}
-                {materials.length === 0 ? (
-                  <div className="rounded-[20px] border border-dashed border-slate-200 bg-slate-50 p-5 text-sm leading-6 text-slate-500">
-                    Материалы месяца ещё готовятся.
-                  </div>
-                ) : null}
-              </div>
-            </aside>
-          </section>
-
-          <section id="revisions" className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <article className={`${surfaceClass} p-5`}>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-600">Комментарии / Правки</p>
-                  <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">Обсуждение материала</h2>
-                </div>
-                <span className="text-xs font-semibold text-slate-400">{commentCount} комментариев</span>
-              </div>
-              <div className="mt-5 grid gap-3">
-                {selectedEvents.filter((event) => event.comment).slice(-4).map((event) => (
-                  <div key={event.id} className="flex gap-3 rounded-[22px] bg-slate-50/70 p-4">
-                    <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-semibold ${event.actorType === "client" ? "bg-violet-100 text-violet-700" : "bg-white text-slate-500"}`}>
-                      {formatReviewActor(event.actorType).slice(0, 1)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-slate-950">{formatReviewActor(event.actorType)}</p>
-                        <span className="text-xs font-semibold text-slate-400">{formatReviewAction(event.action)}</span>
-                      </div>
-                      <p className="mt-2 text-sm leading-6 text-slate-600">{event.comment}</p>
-                    </div>
+                        <div className="mt-2 grid gap-1.5">
+                          {day.materials.slice(0, 3).map((material) => (
+                            <button
+                              key={material.item.id}
+                              type="button"
+                              onClick={() => openMaterial(material.item.id)}
+                              className="flex min-w-0 cursor-pointer items-center gap-2 rounded-xl bg-white px-2 py-1.5 text-left shadow-[0_8px_18px_rgba(88,75,135,0.05)] outline-none transition hover:bg-violet-50 focus-visible:ring-2 focus-visible:ring-violet-200"
+                            >
+                              <PortalTinyThumbnail material={material} />
+                              <span className="min-w-0">
+                                <span className="block truncate text-[10px] font-semibold text-slate-600">{material.item.platformName}</span>
+                                <span className="block truncate text-[10px] text-slate-400">{material.item.topic}</span>
+                              </span>
+                            </button>
+                          ))}
+                          {day.materials.length > 3 ? <p className="text-[10px] font-semibold text-violet-600">+{day.materials.length - 3}</p> : null}
+                        </div>
+                      </>
+                    ) : null}
                   </div>
                 ))}
-                {selectedEvents.filter((event) => event.comment).length === 0 ? (
-                  <p className="rounded-[22px] bg-slate-50/70 p-5 text-sm text-slate-500">Комментариев пока нет.</p>
-                ) : null}
               </div>
             </article>
+          ) : null}
 
-            <article className={`${surfaceClass} p-5`}>
-              <h2 className="text-lg font-semibold tracking-tight text-slate-950">Решение по материалу</h2>
-              {!selectedDraft ? (
-                <p className="mt-4 rounded-[22px] bg-slate-50/80 px-4 py-3 text-sm leading-6 text-slate-500">
-                  Материал ещё готовится. Согласование появится после подготовки текста и визуала.
-                </p>
-              ) : selectedMaterial?.status === "approved" ? (
-                <p className="mt-4 rounded-[22px] bg-violet-50 px-4 py-3 text-sm font-semibold leading-6 text-violet-800">Материал согласован.</p>
-              ) : selectedMaterial?.status === "changes_requested" ? (
-                <p className="mt-4 rounded-[22px] bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-900">Правки отправлены команде.</p>
-              ) : selectedMaterial?.status === "awaiting_approval" || selectedMaterial?.status === "ready_for_review" ? (
-                <div className="mt-4 grid gap-3">
-                  <form action={portalToken ? requestDraftChangesFromPortal : requestDraftChanges} className="grid gap-3">
-                    <PortalActionFields contentDraftId={selectedDraft.id} portalToken={portalToken} />
-                    <textarea name="comment" rows={5} className={inputClass} placeholder="Напишите комментарий или предложите правку..." />
-                    <PendingSubmitButton pendingLabel="Отправляем правку..." className={primaryButtonClass}>Оставить правку</PendingSubmitButton>
-                  </form>
-                  <form action={portalToken ? approveDraftFromPortal : approveDraft}>
-                    <PortalActionFields contentDraftId={selectedDraft.id} portalToken={portalToken} />
-                    <textarea name="comment" rows={2} className={`${inputClass} mb-3`} placeholder="Комментарий к подтверждению, необязательно" />
-                    <PendingSubmitButton pendingLabel="Подтверждаем..." className={`${secondaryButtonClass} w-full`}>Подтвердить материал</PendingSubmitButton>
-                  </form>
+          {section === "materials" ? (
+            <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+              <article className={`${surfaceClass} min-w-0 overflow-hidden p-5 sm:p-6`}>
+                {selectedMaterial ? (
+                  <>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                          {selectedMaterial.dateLabel} · {selectedMaterial.item.platformName}
+                        </p>
+                        <h2 className="mt-3 text-[28px] font-semibold leading-tight tracking-tight text-slate-950">{selectedMaterial.item.topic}</h2>
+                      </div>
+                      <PortalStatusBadge tone={clientPortalStatusTone(selectedMaterial.status)}>
+                        {formatClientPortalStatus(selectedMaterial.status)}
+                      </PortalStatusBadge>
+                    </div>
+                    <p className="mt-3 text-sm leading-6 text-slate-500">
+                      {selectedMaterial.item.goal || selectedMaterial.item.campaignTheme || selectedMaterial.item.contentPillar || "Материал из месячного пакета присутствия бренда."}
+                    </p>
+
+                    <section className="mt-6 rounded-[26px] bg-[#f8f7fb] p-5">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="font-semibold text-slate-950">Текст для публикации</p>
+                        {selectedDraft?.draftBody ? (
+                          <button
+                            type="button"
+                            onClick={() => setTextExpanded((value) => !value)}
+                            className="cursor-pointer rounded-full px-2 py-1 text-xs font-semibold text-violet-700 transition hover:bg-violet-50"
+                            aria-expanded={textExpanded}
+                          >
+                            {textExpanded ? "Свернуть" : "Показать полностью"}
+                          </button>
+                        ) : null}
+                      </div>
+                      <h3 className="mt-3 text-sm font-semibold text-slate-900">{selectedDraft?.draftTitle || selectedMaterial.item.topic}</h3>
+                      <p className={`mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-600 ${textExpanded ? "" : "max-h-72 overflow-hidden"}`}>
+                        {selectedDraft?.draftBody || "Материал ещё готовится. Текст появится после подготовки командой Creative Command."}
+                      </p>
+                    </section>
+
+                    <section className="mt-5">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="font-semibold text-slate-950">Визуалы</p>
+                        {selectedMaterial.isCarousel ? (
+                          <span className="text-xs font-semibold text-violet-700">Карусель · {selectedMaterial.readySlides}/{selectedMaterial.totalSlides || 1}</span>
+                        ) : (
+                          <span className="text-xs font-semibold text-slate-400">{selectedMaterial.thumbnail ? "Визуал готов" : "Готовится"}</span>
+                        )}
+                      </div>
+                      {selectedMaterial.visualAssets.length > 1 ? (
+                        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                          {selectedMaterial.visualAssets.slice(0, 4).map((asset, index) => (
+                            <div key={asset.id ?? index} className={`overflow-hidden rounded-[22px] border ${index === 0 ? "border-violet-200 bg-violet-50 shadow-[0_16px_38px_rgba(124,58,237,0.12)]" : "border-white bg-white shadow-[0_12px_30px_rgba(88,75,135,0.06)]"}`}>
+                              <PortalImage variant={visualForAsset(asset)} alt={asset.title || `Слайд ${index + 1}`} className="aspect-square w-full object-cover" />
+                              <p className="px-3 py-2 text-[11px] font-semibold text-slate-500">Карточка {index + 1}/{selectedMaterial.totalSlides}</p>
+                            </div>
+                          ))}
+                          {selectedMaterial.visualAssets.length > 4 ? (
+                            <div className="grid aspect-square place-items-center rounded-2xl border border-dashed border-violet-200 bg-violet-50 text-sm font-semibold text-violet-700">
+                              +{selectedMaterial.visualAssets.length - 4} слайда
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div className="mt-3 overflow-hidden rounded-[26px] border border-white bg-white shadow-[0_18px_48px_rgba(88,75,135,0.08)]">
+                          <PortalImage variant={selectedMaterial.thumbnail} alt={selectedMaterial.item.topic} className="aspect-[16/10] w-full object-cover" />
+                        </div>
+                      )}
+                    </section>
+
+                    <div className="mt-6 flex flex-wrap gap-2">
+                      <button type="button" onClick={() => setSection("revisions")} className={primaryButtonClass}>Оставить правку</button>
+                      {selectedDraft ? (
+                        <form action={portalToken ? approveDraftFromPortal : approveDraft}>
+                          <PortalActionFields contentDraftId={selectedDraft.id} portalToken={portalToken} />
+                          <PendingSubmitButton pendingLabel="Подтверждаем..." className={secondaryButtonClass}>Подтвердить</PendingSubmitButton>
+                        </form>
+                      ) : null}
+                    </div>
+                  </>
+                ) : (
+                  <div className="grid min-h-[460px] place-items-center rounded-[24px] border border-dashed border-slate-200 bg-slate-50 text-center">
+                    <div>
+                      <p className="font-semibold text-slate-900">Пакет месяца ещё собирается</p>
+                      <p className="mt-2 text-sm text-slate-500">Материалы появятся здесь после подготовки.</p>
+                    </div>
+                  </div>
+                )}
+              </article>
+
+              <aside className={`${surfaceClass} min-w-0 p-4`}>
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="font-semibold text-slate-950">Материалы месяца</h2>
+                  <span className="text-xs font-semibold text-slate-400">{materials.length}</span>
+                </div>
+                <div className="mt-4 grid max-h-[720px] gap-3 overflow-y-auto pr-1">
+                  {materials.map((material) => {
+                    const src = material.thumbnail ? getGeneratedVariantImageSrc(material.thumbnail) : null;
+                    const selected = selectedMaterial?.item.id === material.item.id;
+
+                    return (
+                      <article
+                        key={material.item.id}
+                        role="button"
+                        tabIndex={0}
+                        aria-pressed={selected}
+                        onClick={() => handleSelectMaterial(material.item.id)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            handleSelectMaterial(material.item.id);
+                          }
+                        }}
+                        className={`min-w-0 cursor-pointer rounded-[22px] border p-3 outline-none transition focus-visible:ring-4 focus-visible:ring-violet-100 ${selected ? "border-violet-200 bg-violet-50/70 shadow-[0_14px_34px_rgba(124,58,237,0.10)]" : "border-transparent bg-slate-50/70 hover:bg-white"}`}
+                      >
+                        <div className="flex min-w-0 gap-3">
+                          {src ? (
+                            <img src={src} alt={material.item.topic} className="h-14 w-14 shrink-0 rounded-[18px] object-cover" />
+                          ) : (
+                            <div className="grid h-14 w-14 shrink-0 place-items-center rounded-[18px] bg-white text-[10px] font-semibold text-slate-400">Soon</div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[11px] font-semibold text-slate-400">{material.dateLabel} · {material.item.platformName}</p>
+                            <h3 className="mt-1 line-clamp-2 text-sm font-semibold leading-5 text-slate-950">{material.item.topic}</h3>
+                            <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{material.item.contentDraft?.draftBody || "Материал готовится."}</p>
+                          </div>
+                        </div>
+                        <div className="mt-3 flex items-center justify-between gap-2">
+                          <span className={`text-[11px] font-semibold ${material.status === "awaiting_approval" ? "text-amber-700" : "text-slate-400"}`}>
+                            {formatClientPortalStatus(material.status)}
+                          </span>
+                          {material.isCarousel ? <span className="text-[11px] font-semibold text-violet-600">Карусель · {material.totalSlides}</span> : null}
+                        </div>
+                      </article>
+                    );
+                  })}
+                  {materials.length === 0 ? (
+                    <div className="rounded-[20px] border border-dashed border-slate-200 bg-slate-50 p-5 text-sm leading-6 text-slate-500">
+                      Материалы месяца ещё готовятся.
+                    </div>
+                  ) : null}
+                </div>
+              </aside>
+            </div>
+          ) : null}
+
+          {section === "visuals" ? (
+            <article className={`${surfaceClass} min-w-0 p-5 sm:p-6`}>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-600">Визуалы</p>
+                  <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">Все визуалы месяца</h2>
+                </div>
+                <span className="text-xs font-semibold text-slate-400">{materials.length} материалов</span>
+              </div>
+              {materials.length > 0 ? (
+                <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {materials.map((material) => {
+                    const src = material.thumbnail ? getGeneratedVariantImageSrc(material.thumbnail) : null;
+
+                    return (
+                      <button
+                        key={material.item.id}
+                        type="button"
+                        onClick={() => openMaterial(material.item.id)}
+                        className="group min-w-0 overflow-hidden rounded-[22px] border border-white bg-white text-left shadow-[0_12px_30px_rgba(88,75,135,0.06)] outline-none transition hover:-translate-y-0.5 hover:shadow-[0_20px_44px_rgba(88,75,135,0.12)] focus-visible:ring-4 focus-visible:ring-violet-100"
+                      >
+                        <div className="relative">
+                          {src ? (
+                            <img src={src} alt={material.item.topic} className="aspect-[4/5] w-full object-cover" />
+                          ) : (
+                            <div className="grid aspect-[4/5] w-full place-items-center bg-slate-50 text-xs font-semibold text-slate-400">Визуал готовится</div>
+                          )}
+                          <span className="absolute left-3 top-3">
+                            <PortalStatusBadge tone={clientPortalStatusTone(material.status)}>
+                              {formatClientPortalStatus(material.status)}
+                            </PortalStatusBadge>
+                          </span>
+                          {material.isCarousel ? (
+                            <span className="absolute right-3 top-3 rounded-full bg-slate-900/45 px-2 py-1 text-[11px] font-semibold text-white backdrop-blur">
+                              Карусель · {material.totalSlides}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="p-4">
+                          <p className="truncate text-[11px] font-semibold text-slate-400">{material.dateLabel} · {material.item.platformName}</p>
+                          <h3 className="mt-1 line-clamp-2 text-sm font-semibold leading-5 text-slate-950">{material.item.topic}</h3>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               ) : (
-                <p className="mt-4 rounded-[22px] bg-slate-50/80 px-4 py-3 text-sm leading-6 text-slate-500">
-                  Материал ещё готовится. Согласование появится после подготовки текста и визуала.
-                </p>
+                <div className="mt-6 rounded-[24px] border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-500">
+                  Визуалы появятся здесь после подготовки материалов.
+                </div>
               )}
             </article>
-          </section>
+          ) : null}
 
-          <section id="files" className="mt-5 rounded-[28px] border border-white/70 bg-white/65 p-5 shadow-[0_20px_60px_rgba(88,75,135,0.045)]">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-violet-700">Файлы</p>
-                <h2 className="mt-1 text-lg font-semibold text-slate-950">Пакет месяца</h2>
+          {section === "revisions" ? (
+            <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+              <article className={`${surfaceClass} p-5`}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-600">Комментарии / Правки</p>
+                    <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">Обсуждение материала</h2>
+                  </div>
+                  <span className="text-xs font-semibold text-slate-400">{commentCount} комментариев</span>
+                </div>
+                <div className="mt-5 grid gap-3">
+                  {selectedEvents.filter((event) => event.comment).slice(-4).map((event) => (
+                    <div key={event.id} className="flex gap-3 rounded-[22px] bg-slate-50/70 p-4">
+                      <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-semibold ${event.actorType === "client" ? "bg-violet-100 text-violet-700" : "bg-white text-slate-500"}`}>
+                        {formatReviewActor(event.actorType).slice(0, 1)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-sm font-semibold text-slate-950">{formatReviewActor(event.actorType)}</p>
+                          <span className="text-xs font-semibold text-slate-400">{formatReviewAction(event.action)}</span>
+                        </div>
+                        <p className="mt-2 text-sm leading-6 text-slate-600">{event.comment}</p>
+                      </div>
+                    </div>
+                  ))}
+                  {selectedEvents.filter((event) => event.comment).length === 0 ? (
+                    <p className="rounded-[22px] bg-slate-50/70 p-5 text-sm text-slate-500">Комментариев пока нет.</p>
+                  ) : null}
+                </div>
+              </article>
+
+              <article className={`${surfaceClass} p-5`}>
+                <h2 className="text-lg font-semibold tracking-tight text-slate-950">Решение по материалу</h2>
+                {!selectedDraft ? (
+                  <p className="mt-4 rounded-[22px] bg-slate-50/80 px-4 py-3 text-sm leading-6 text-slate-500">
+                    Материал ещё готовится. Согласование появится после подготовки текста и визуала.
+                  </p>
+                ) : selectedMaterial?.status === "approved" ? (
+                  <p className="mt-4 rounded-[22px] bg-violet-50 px-4 py-3 text-sm font-semibold leading-6 text-violet-800">Материал согласован.</p>
+                ) : selectedMaterial?.status === "changes_requested" ? (
+                  <p className="mt-4 rounded-[22px] bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-900">Правки отправлены команде.</p>
+                ) : selectedMaterial?.status === "awaiting_approval" || selectedMaterial?.status === "ready_for_review" ? (
+                  <div className="mt-4 grid gap-3">
+                    <form action={portalToken ? requestDraftChangesFromPortal : requestDraftChanges} className="grid gap-3">
+                      <PortalActionFields contentDraftId={selectedDraft.id} portalToken={portalToken} />
+                      <textarea name="comment" rows={5} className={inputClass} placeholder="Напишите комментарий или предложите правку..." />
+                      <PendingSubmitButton pendingLabel="Отправляем правку..." className={primaryButtonClass}>Оставить правку</PendingSubmitButton>
+                    </form>
+                    <form action={portalToken ? approveDraftFromPortal : approveDraft}>
+                      <PortalActionFields contentDraftId={selectedDraft.id} portalToken={portalToken} />
+                      <textarea name="comment" rows={2} className={`${inputClass} mb-3`} placeholder="Комментарий к подтверждению, необязательно" />
+                      <PendingSubmitButton pendingLabel="Подтверждаем..." className={`${secondaryButtonClass} w-full`}>Подтвердить материал</PendingSubmitButton>
+                    </form>
+                  </div>
+                ) : (
+                  <p className="mt-4 rounded-[22px] bg-slate-50/80 px-4 py-3 text-sm leading-6 text-slate-500">
+                    Материал ещё готовится. Согласование появится после подготовки текста и визуала.
+                  </p>
+                )}
+              </article>
+            </section>
+          ) : null}
+
+          {section === "files" ? (
+            <section className="rounded-[28px] border border-white/70 bg-white/65 p-5 shadow-[0_20px_60px_rgba(88,75,135,0.045)]">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-violet-700">Файлы</p>
+                  <h2 className="mt-1 text-lg font-semibold text-slate-950">Пакет месяца</h2>
+                </div>
+                <p className="text-sm text-slate-500">Экспорт материалов и финальный архив будут доступны после согласования пакета.</p>
               </div>
-              <p className="text-sm text-slate-500">Экспорт материалов и финальный архив будут доступны после согласования пакета.</p>
-            </div>
-          </section>
+            </section>
+          ) : null}
         </div>
       </div>
     </main>
