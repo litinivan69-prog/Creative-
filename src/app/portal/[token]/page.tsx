@@ -82,10 +82,28 @@ export default async function ClientPortalPage({
             orderBy: [{ scheduledDate: "asc" }, { scheduledTime: "asc" }],
             select: {
               plannedContentItemId: true,
+              platformName: true,
+              topic: true,
               scheduledDate: true,
               scheduledTime: true,
               status: true,
               notes: true,
+              publishStatus: true,
+              publishedAt: true,
+              externalUrl: true,
+              metrics: {
+                orderBy: { capturedAt: "desc" },
+                take: 1,
+                select: {
+                  likes: true,
+                  comments: true,
+                  shares: true,
+                  reach: true,
+                  views: true,
+                  saves: true,
+                  clicks: true,
+                },
+              },
               creativeAssets: {
                 select: {
                   id: true,

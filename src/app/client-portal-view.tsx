@@ -9,6 +9,11 @@ import {
 } from "@/app/actions";
 import { PendingSubmitButton } from "@/app/pending-submit-button";
 import { getGeneratedVariantImageSrc } from "@/lib/generated-visuals";
+import {
+  buildMonthlyReport,
+  formatReportNumber,
+  type ReportPublicationInput,
+} from "@/lib/report-metrics";
 
 type ClientPortalStatus = "in_progress" | "ready_for_review" | "awaiting_approval" | "approved" | "changes_requested";
 
@@ -58,6 +63,20 @@ export type ClientPortalPublication = {
   scheduledTime: string | null;
   status: string;
   notes: string | null;
+  platformName?: string;
+  topic?: string;
+  publishStatus?: string | null;
+  publishedAt?: string | Date | null;
+  externalUrl?: string | null;
+  metrics?: Array<{
+    likes: number | null;
+    comments: number | null;
+    shares: number | null;
+    reach: number | null;
+    views: number | null;
+    saves: number | null;
+    clicks: number | null;
+  }>;
   creativeAssets: Array<{
     id?: string;
     assetType?: string;
@@ -171,6 +190,22 @@ function PortalMetric({
         />
       </div>
       <p className="mt-3 text-xs leading-5 text-slate-400">{helper}</p>
+    </article>
+  );
+}
+
+function PortalReportKpi({ label, value, index = 0 }: { label: string; value: number | null; index?: number }) {
+  const display = useCountUp(value ?? 0);
+
+  return (
+    <article
+      className="ap-rise rounded-[24px] bg-white/92 p-5 ring-1 ring-slate-900/[0.05] shadow-[inset_0_1px_1px_rgba(255,255,255,0.75),0_16px_44px_-20px_rgba(88,75,135,0.3)]"
+      style={{ animationDelay: `${index * 70}ms` }}
+    >
+      <p className="text-[32px] font-semibold leading-none tracking-tight text-slate-950 tabular-nums">
+        {value == null ? "—" : formatReportNumber(display)}
+      </p>
+      <p className="mt-2 text-sm font-semibold text-slate-700">{label}</p>
     </article>
   );
 }
@@ -406,6 +441,7 @@ function PortalRing({ value, label }: { value: number; label: string }) {
 
 const portalSections = [
   { key: "overview", label: "Обзор" },
+  { key: "report", label: "Отчёт" },
   { key: "calendar", label: "Календарь" },
   { key: "visuals", label: "Визуалы" },
   { key: "materials", label: "Материалы" },
@@ -479,6 +515,17 @@ export function ClientPortalView({
   const progress = stats.total > 0 ? Math.round((stats.ready / stats.total) * 100) : 0;
   const commentCount = selectedEvents.filter((event) => event.comment).length;
   const weekDays = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+  const reportInput: ReportPublicationInput[] = materials.map((material) => ({
+    id: material.item.id,
+    platformName: material.item.platformName,
+    topic: material.item.topic,
+    publishStatus: material.publication?.publishStatus ?? null,
+    publishedAt: material.publication?.publishedAt ?? null,
+    scheduledDate: material.publication?.scheduledDate ?? material.item.plannedDate,
+    metric: material.publication?.metrics?.[0] ?? null,
+  }));
+  const report = buildMonthlyReport(reportInput);
+  const materialById = new Map(materials.map((material) => [material.item.id, material]));
 
   if (!month) {
     return (
@@ -1022,6 +1069,97 @@ export function ClientPortalView({
                 )}
               </article>
             </section>
+          ) : null}
+
+          {section === "report" ? (
+            <div className="grid gap-5">
+              <header className={`${surfaceClass} ap-rise p-5 sm:p-6`}>
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-700">Отчёт за месяц</p>
+                    <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">{monthLabel}</h2>
+                    <p className="mt-2 text-sm leading-6 text-slate-500">
+                      Запланировано {report.planned} · опубликовано {report.published} ({report.publishRate}%)
+                    </p>
+                  </div>
+                </div>
+              </header>
+
+              {report.hasMetrics || report.published > 0 ? (
+                <>
+                  <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                    <PortalReportKpi label="Охват" value={report.kpis.reach} index={0} />
+                    <PortalReportKpi label="Лайки" value={report.kpis.likes} index={1} />
+                    <PortalReportKpi label="Комментарии" value={report.kpis.comments} index={2} />
+                    <PortalReportKpi label="Переходы" value={report.kpis.clicks} index={3} />
+                  </section>
+
+                  <section className="grid gap-5 lg:grid-cols-12">
+                    <article className={`${surfaceClass} min-w-0 p-5 lg:col-span-6`}>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-600">По площадкам</p>
+                      <div className="mt-4 grid gap-2">
+                        {report.byPlatform.length > 0 ? (
+                          report.byPlatform.map((platform) => (
+                            <div key={platform.platformName} className="flex items-center justify-between gap-3 rounded-[18px] bg-slate-50/70 px-4 py-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-slate-900">{platform.platformName}</p>
+                                <p className="text-xs text-slate-400">{platform.published}/{platform.planned} опубликовано</p>
+                              </div>
+                              <div className="shrink-0 text-right">
+                                <p className="text-sm font-semibold text-slate-900 tabular-nums">{formatReportNumber(platform.engagement)}</p>
+                                <p className="text-xs text-slate-400">вовлечённость</p>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="rounded-[18px] bg-slate-50/70 p-4 text-sm text-slate-500">Пока нет данных по площадкам.</p>
+                        )}
+                      </div>
+                    </article>
+
+                    <article className={`${surfaceClass} min-w-0 p-5 lg:col-span-6`}>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-600">Топ материалов месяца</p>
+                      <div className="mt-4 grid gap-3">
+                        {report.top.length > 0 ? (
+                          report.top.map((entry) => {
+                            const material = materialById.get(entry.id);
+                            const src = material?.thumbnail ? getGeneratedVariantImageSrc(material.thumbnail) : null;
+                            return (
+                              <div key={entry.id} className="flex min-w-0 items-center gap-3 rounded-[18px] bg-slate-50/70 p-3">
+                                {src ? (
+                                  <img src={src} alt={entry.topic} className="h-12 w-12 shrink-0 rounded-[14px] object-cover" />
+                                ) : (
+                                  <div className="grid h-12 w-12 shrink-0 place-items-center rounded-[14px] bg-white text-[10px] font-semibold text-slate-400">—</div>
+                                )}
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-sm font-semibold text-slate-900">{entry.topic}</p>
+                                  <p className="text-xs text-slate-400">{entry.platformName}</p>
+                                </div>
+                                <div className="shrink-0 text-right">
+                                  <p className="text-sm font-semibold text-violet-700 tabular-nums">{formatReportNumber(entry.engagement)}</p>
+                                  <p className="text-xs text-slate-400">вовлечённость</p>
+                                </div>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <p className="rounded-[18px] bg-slate-50/70 p-4 text-sm text-slate-500">Топ появится после первых метрик.</p>
+                        )}
+                      </div>
+                    </article>
+                  </section>
+                </>
+              ) : (
+                <div className={`${surfaceClass} grid min-h-[280px] place-items-center p-8 text-center`}>
+                  <div className="max-w-md">
+                    <p className="text-lg font-semibold text-slate-900">Результаты появятся после публикаций</p>
+                    <p className="mt-2 text-sm leading-6 text-slate-500">
+                      Как только материалы выйдут в свет и появятся первые метрики, здесь будет отчёт: охват, вовлечённость, разбивка по площадкам и топ-материалы месяца.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
           ) : null}
 
           {section === "files" ? (
