@@ -48,7 +48,15 @@ function formText(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
 }
 
-type WorkspaceView = "overview" | "clients" | "client_setup" | "approvals" | "calendar" | "drafts" | "assets" | "brand_assets" | "client_portal" | "settings";
+function formInt(formData: FormData, key: string): number | null {
+  const raw = String(formData.get(key) ?? "").trim();
+  if (!raw) return null;
+  const parsed = Number(raw.replace(/\s/g, ""));
+  if (!Number.isFinite(parsed)) return null;
+  return Math.max(0, Math.round(parsed));
+}
+
+type WorkspaceView = "overview" | "clients" | "client_setup" | "approvals" | "calendar" | "drafts" | "assets" | "brand_assets" | "client_portal" | "reports" | "settings";
 
 function workspaceLocation(
   view: WorkspaceView,
@@ -4493,6 +4501,125 @@ export async function updateScheduledPublication(formData: FormData) {
 
   revalidatePath("/");
   redirect(workspaceLocation("calendar", { blueprintId: publication.blueprintId, planId: publication.monthlyPlanId, notice: "Параметры публикации обновлены." }));
+}
+
+export async function markPublicationPublishedManual(formData: FormData) {
+  const scheduledPublicationId = formText(formData, "scheduledPublicationId");
+  const externalUrl = formText(formData, "externalUrl");
+  const publishedAtRaw = formText(formData, "publishedAt");
+
+  if (!scheduledPublicationId) {
+    errorRedirect("Не выбрана публикация.", "reports");
+  }
+
+  const publication = await prisma.scheduledPublication.findUnique({
+    where: { id: scheduledPublicationId },
+    select: { id: true, blueprintId: true, monthlyPlanId: true, publishedAt: true },
+  });
+
+  if (!publication) {
+    errorRedirect("Публикация не найдена.", "reports");
+  }
+
+  const parsedDate = publishedAtRaw ? new Date(`${publishedAtRaw}T12:00:00`) : null;
+  const publishedAt =
+    parsedDate && !Number.isNaN(parsedDate.getTime())
+      ? parsedDate
+      : publication.publishedAt ?? new Date();
+
+  try {
+    await prisma.scheduledPublication.update({
+      where: { id: publication.id },
+      data: {
+        publishStatus: "published",
+        publishedAt,
+        externalUrl: externalUrl || null,
+      },
+    });
+  } catch {
+    errorRedirect("Не удалось сохранить отметку о публикации. Попробуйте ещё раз.", "reports");
+  }
+
+  revalidatePath("/");
+  redirect(
+    workspaceLocation("reports", {
+      blueprintId: publication.blueprintId,
+      planId: publication.monthlyPlanId,
+      notice: "Публикация отмечена как опубликованная.",
+    }),
+  );
+}
+
+export async function upsertPublicationMetric(formData: FormData) {
+  const scheduledPublicationId = formText(formData, "scheduledPublicationId");
+
+  if (!scheduledPublicationId) {
+    errorRedirect("Не выбрана публикация.", "reports");
+  }
+
+  const publication = await prisma.scheduledPublication.findUnique({
+    where: { id: scheduledPublicationId },
+    select: {
+      id: true,
+      blueprintId: true,
+      clientId: true,
+      monthlyPlanId: true,
+      plannedContentItemId: true,
+      platformName: true,
+    },
+  });
+
+  if (!publication) {
+    errorRedirect("Публикация не найдена.", "reports");
+  }
+
+  const metrics = {
+    likes: formInt(formData, "likes"),
+    comments: formInt(formData, "comments"),
+    shares: formInt(formData, "shares"),
+    reach: formInt(formData, "reach"),
+    views: formInt(formData, "views"),
+    saves: formInt(formData, "saves"),
+    clicks: formInt(formData, "clicks"),
+  };
+
+  try {
+    const existing = await prisma.publicationMetric.findFirst({
+      where: { scheduledPublicationId: publication.id, source: "manual" },
+      orderBy: { capturedAt: "desc" },
+      select: { id: true },
+    });
+
+    if (existing) {
+      await prisma.publicationMetric.update({
+        where: { id: existing.id },
+        data: { ...metrics, platformName: publication.platformName, capturedAt: new Date() },
+      });
+    } else {
+      await prisma.publicationMetric.create({
+        data: {
+          scheduledPublicationId: publication.id,
+          plannedContentItemId: publication.plannedContentItemId,
+          clientId: publication.clientId,
+          monthlyPlanId: publication.monthlyPlanId,
+          platformName: publication.platformName,
+          source: "manual",
+          ...metrics,
+        },
+      });
+    }
+  } catch {
+    errorRedirect("Не удалось сохранить метрики. Попробуйте ещё раз.", "reports");
+  }
+
+  revalidatePath("/");
+  redirect(
+    workspaceLocation("reports", {
+      blueprintId: publication.blueprintId,
+      planId: publication.monthlyPlanId,
+      notice: "Метрики публикации сохранены.",
+    }),
+  );
 }
 
 export async function markScheduledPublicationNeedsAssets(formData: FormData) {
