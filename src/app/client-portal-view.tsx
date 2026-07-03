@@ -84,13 +84,13 @@ type ClientPortalMaterial = {
 const inputClass =
   "w-full rounded-[22px] border border-slate-200/70 bg-white px-4 py-3 text-sm leading-6 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-violet-300 focus:ring-4 focus:ring-violet-100/80";
 const primaryButtonClass =
-  "inline-flex items-center justify-center rounded-full bg-violet-600 px-5 py-3 text-sm font-semibold text-white shadow-[0_16px_34px_rgba(124,58,237,0.20)] transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex items-center justify-center rounded-full bg-violet-600 px-5 py-3 text-sm font-semibold text-white shadow-[0_18px_38px_-14px_rgba(124,58,237,0.55)] transition duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-violet-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60";
 const secondaryButtonClass =
-  "inline-flex items-center justify-center rounded-full border border-slate-200/80 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-violet-200 hover:bg-violet-50/70 disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex items-center justify-center rounded-full border border-slate-200/80 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:border-violet-200 hover:bg-violet-50/70 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60";
 const ghostButtonClass =
-  "inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-900";
+  "inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold text-slate-500 transition duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-slate-100 hover:text-slate-900";
 const surfaceClass =
-  "rounded-[28px] border border-white/70 bg-white/90 shadow-[0_22px_70px_rgba(88,75,135,0.075)]";
+  "rounded-[28px] bg-white/90 ring-1 ring-slate-900/[0.05] shadow-[inset_0_1px_1px_rgba(255,255,255,0.75),0_20px_50px_-24px_rgba(88,75,135,0.35)]";
 
 function PortalStatusBadge({
   children,
@@ -159,10 +159,10 @@ function PortalMetric({
 
   return (
     <article
-      className="ap-rise group rounded-[24px] border border-white/80 bg-white/92 p-5 shadow-[0_18px_58px_rgba(88,75,135,0.07)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_72px_rgba(88,75,135,0.10)]"
+      className="ap-rise group rounded-[24px] bg-white/92 p-5 ring-1 ring-slate-900/[0.05] shadow-[inset_0_1px_1px_rgba(255,255,255,0.75),0_16px_44px_-20px_rgba(88,75,135,0.3)] transition duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-1 hover:shadow-[inset_0_1px_1px_rgba(255,255,255,0.85),0_28px_60px_-22px_rgba(88,75,135,0.36)]"
       style={{ animationDelay: `${index * 70}ms` }}
     >
-      <p className="text-[34px] font-semibold leading-none tracking-tight text-slate-950 tabular-nums">{display}</p>
+      <p className="text-[38px] font-semibold leading-none tracking-tight text-slate-950 tabular-nums">{display}</p>
       <p className="mt-2 text-sm font-semibold text-slate-700">{label}</p>
       <div className="mt-5 h-1 overflow-hidden rounded-full bg-slate-100">
         <div
@@ -544,20 +544,31 @@ export function ClientPortalView({
 
           {section === "overview" ? (
             <div className="grid gap-5">
-              <header className={`${surfaceClass} p-5 backdrop-blur-xl sm:p-6`}>
+              <header className={`${surfaceClass} ap-rise p-5 backdrop-blur-xl sm:p-7`}>
                 <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-violet-50 px-3 py-1 text-[11px] font-semibold text-violet-700">Месячный пакет</span>
+                      <span className="rounded-full bg-violet-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-700">Месячный пакет</span>
                       <span className="text-xs font-semibold text-slate-400">{monthLabel}</span>
                     </div>
-                    <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">{clientName || "Клиент"}</h1>
-                    <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500">
+                    <h1 className="mt-3.5 text-4xl font-semibold tracking-[-0.02em] text-slate-950 sm:text-5xl">{clientName || "Клиент"}</h1>
+                    <p className="mt-3 max-w-xl text-sm leading-6 text-slate-500">
                       Готовность пакета {progress}% · {stats.needsDecision > 0 ? `${stats.needsDecision} материалов ждут вашего решения` : "срочных решений нет"}.
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
-                    <button type="button" onClick={() => setSection("files")} className={primaryButtonClass}>Скачать пакет</button>
+                    <button
+                      type="button"
+                      onClick={() => setSection("files")}
+                      className="group inline-flex items-center gap-2 rounded-full bg-violet-600 py-2 pl-5 pr-2 text-sm font-semibold text-white shadow-[0_18px_38px_-14px_rgba(124,58,237,0.55)] transition duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-violet-700 active:scale-[0.98]"
+                    >
+                      Скачать пакет
+                      <span className="grid h-8 w-8 place-items-center rounded-full bg-white/15 transition duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:translate-y-0.5">
+                        <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" aria-hidden="true">
+                          <path d="M12 4v11m0 0 4-4m-4 4-4-4M5 20h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </span>
+                    </button>
                     <div className="grid h-12 w-12 place-items-center rounded-full bg-violet-600 text-base font-semibold text-white shadow-[0_14px_30px_rgba(124,58,237,0.25)]">
                       {(clientName || "C").slice(0, 1).toUpperCase()}
                     </div>
@@ -572,7 +583,7 @@ export function ClientPortalView({
                 <PortalMetric label="В работе" value={stats.inProgress} helper="Команда готовит материалы" progress={stats.total ? (stats.inProgress / stats.total) * 100 : 0} index={3} />
               </section>
 
-              <section className="grid gap-5 lg:grid-cols-12">
+              <section className="ap-rise grid gap-5 lg:grid-cols-12" style={{ animationDelay: "0.08s" }}>
                 <article className={`${surfaceClass} flex flex-col items-center p-6 lg:col-span-3`}>
                   <p className="self-start text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-600">Готовность</p>
                   <div className="my-3">
@@ -581,13 +592,13 @@ export function ClientPortalView({
                   <p className="text-center text-xs leading-5 text-slate-400">{stats.ready} из {stats.total} материалов готовы</p>
                 </article>
 
-                <article className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-violet-600 to-violet-500 p-6 text-white shadow-[0_26px_70px_rgba(124,58,237,0.28)] lg:col-span-5">
+                <article className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-violet-600 to-violet-500 p-6 text-white shadow-[inset_0_1px_1px_rgba(255,255,255,0.25),0_26px_70px_-18px_rgba(124,58,237,0.6)] ring-1 ring-white/10 lg:col-span-5">
                   {selectedMaterial ? (
                     <>
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-100">Рекомендуем посмотреть</p>
-                          <h2 className="mt-2 text-2xl font-semibold leading-tight">{selectedMaterial.item.topic}</h2>
+                          <h2 className="mt-2 text-[26px] font-semibold leading-tight tracking-[-0.01em]">{selectedMaterial.item.topic}</h2>
                           <p className="mt-1 text-sm text-violet-100">{selectedMaterial.dateLabel} · {selectedMaterial.item.platformName}</p>
                         </div>
                         <span className="shrink-0 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold text-white">
@@ -598,8 +609,17 @@ export function ClientPortalView({
                         <PortalImage variant={selectedMaterial.thumbnail} alt={selectedMaterial.item.topic} className="aspect-[16/9] w-full object-cover" />
                       </div>
                       <div className="mt-4 flex flex-wrap gap-2">
-                        <button type="button" onClick={() => setSection("materials")} className="inline-flex items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-violet-700 transition hover:bg-violet-50">
+                        <button
+                          type="button"
+                          onClick={() => setSection("materials")}
+                          className="group inline-flex items-center gap-2 rounded-full bg-white py-2 pl-5 pr-2 text-sm font-semibold text-violet-700 transition duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-violet-50 active:scale-[0.98]"
+                        >
                           Открыть материал
+                          <span className="grid h-8 w-8 place-items-center rounded-full bg-violet-100 transition duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:translate-x-0.5">
+                            <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" aria-hidden="true">
+                              <path d="M5 12h14m0 0-5-5m5 5-5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          </span>
                         </button>
                         {selectedDraft ? (
                           <form action={portalToken ? approveDraftFromPortal : approveDraft}>
@@ -654,7 +674,7 @@ export function ClientPortalView({
                 </article>
               </section>
 
-              <section className="grid gap-5 lg:grid-cols-12">
+              <section className="ap-rise grid gap-5 lg:grid-cols-12" style={{ animationDelay: "0.16s" }}>
                 <article className={`${surfaceClass} p-5 lg:col-span-8`}>
                   <div className="flex items-center justify-between gap-3">
                     <h2 className="font-semibold text-slate-950">Последние комментарии</h2>
