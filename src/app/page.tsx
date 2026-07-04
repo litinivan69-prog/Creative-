@@ -2749,6 +2749,7 @@ function MonthlyClientReport({
   assets,
   jobs,
   draftsHref,
+  downloadHref,
 }: {
   clientName?: string;
   month?: string;
@@ -2757,6 +2758,7 @@ function MonthlyClientReport({
   assets: CreativeAssetPreview[];
   jobs: GenerationJobPreview[];
   draftsHref: string;
+  downloadHref?: string;
 }) {
   if (!month) {
     return (
@@ -2993,12 +2995,22 @@ function MonthlyClientReport({
       </div>
 
       <div className="mt-6 grid gap-4">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">Результаты месяца</p>
-          <h2 className="mt-1 text-lg font-semibold text-stone-950">Отчёт по публикациям</h2>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-stone-500">
-            Запланировано {report.planned} · опубликовано {report.published} ({report.publishRate}%). Метрики вводятся вручную; позже их будет присылать n8n в те же поля.
-          </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">Результаты месяца</p>
+            <h2 className="mt-1 text-lg font-semibold text-stone-950">Отчёт по публикациям</h2>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-stone-500">
+              Запланировано {report.planned} · опубликовано {report.published} ({report.publishRate}%). Метрики вводятся вручную; позже их будет присылать n8n в те же поля.
+            </p>
+          </div>
+          {downloadHref ? (
+            <a href={downloadHref} className="inline-flex shrink-0 items-center gap-2 rounded-full bg-violet-600 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-violet-700">
+              Скачать отчёт за месяц
+              <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" aria-hidden="true">
+                <path d="M12 4v11m0 0 4-4m-4 4-4-4M5 20h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </a>
+          ) : null}
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -6245,6 +6257,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 assets={creativeAssets}
                 jobs={generationJobs}
                 draftsHref={workspaceLinks.drafts}
+                downloadHref={selectedMonthlyPlan ? `/api/reports/pptx?plan=${selectedMonthlyPlan.id}` : undefined}
               />
             ) : null}
 

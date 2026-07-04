@@ -1082,6 +1082,19 @@ export function ClientPortalView({
                       Запланировано {report.planned} · опубликовано {report.published} ({report.publishRate}%)
                     </p>
                   </div>
+                  {portalToken ? (
+                    <a
+                      href={`/portal/${portalToken}/report`}
+                      className="group inline-flex items-center gap-2 rounded-full bg-violet-600 py-2 pl-5 pr-2 text-sm font-semibold text-white shadow-[0_18px_38px_-14px_rgba(124,58,237,0.55)] transition duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-violet-700 active:scale-[0.98]"
+                    >
+                      Скачать отчёт за месяц
+                      <span className="grid h-8 w-8 place-items-center rounded-full bg-white/15 transition duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:translate-y-0.5">
+                        <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" aria-hidden="true">
+                          <path d="M12 4v11m0 0 4-4m-4 4-4-4M5 20h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </span>
+                    </a>
+                  ) : null}
                 </div>
               </header>
 
