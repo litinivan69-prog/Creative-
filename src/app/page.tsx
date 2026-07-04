@@ -39,6 +39,8 @@ import {
   rebuildCreativeAssetAsCarousel,
   reviseMonthlyPlanWithCopilot,
   regenerateCreativeAssetBrief,
+  markPublicationPublishedManual,
+  upsertPublicationMetric,
   rejectDraft,
   rejectCreativeVariant,
   rejectMonthlyPlanRevisionProposal,
@@ -63,6 +65,12 @@ import {
 } from "@/app/actions";
 import { BrandAssetFileInput } from "@/app/brand-asset-file-input";
 import { ClientPortalView } from "@/app/client-portal-view";
+import {
+  buildMonthlyReport,
+  formatReportNumber,
+  isPublicationPublished,
+  type ReportPublicationInput,
+} from "@/lib/report-metrics";
 import { MonthProductionAutoRunner } from "@/app/month-production-auto-runner";
 import {
   OverviewAttention,
@@ -1141,6 +1149,18 @@ type ScheduledPublicationPreview = {
   status: string;
   publishMode: string;
   notes: string | null;
+  publishStatus: string | null;
+  publishedAt: Date | null;
+  externalUrl: string | null;
+  metrics: Array<{
+    likes: number | null;
+    comments: number | null;
+    shares: number | null;
+    reach: number | null;
+    views: number | null;
+    saves: number | null;
+    clicks: number | null;
+  }>;
   contentDraft: {
     draftTitle: string;
   };
@@ -2665,6 +2685,62 @@ function suggestsVisualAsset(format: string) {
   );
 }
 
+function ReportPublicationRow({ publication }: { publication: ScheduledPublicationPreview }) {
+  const metric = publication.metrics[0];
+  const published = isPublicationPublished(publication);
+  const publishedDate = publication.publishedAt
+    ? new Date(publication.publishedAt).toISOString().slice(0, 10)
+    : "";
+  const metricFields: Array<[string, string, number | null]> = [
+    ["likes", "Лайки", metric?.likes ?? null],
+    ["comments", "Комментарии", metric?.comments ?? null],
+    ["shares", "Репосты", metric?.shares ?? null],
+    ["reach", "Охват", metric?.reach ?? null],
+    ["views", "Просмотры", metric?.views ?? null],
+    ["saves", "Сохранения", metric?.saves ?? null],
+    ["clicks", "Переходы", metric?.clicks ?? null],
+  ];
+
+  return (
+    <article className={`${panelClass} p-4`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-stone-950">{publication.topic}</p>
+          <p className="text-xs text-stone-400">{publication.platformName} · {publication.scheduledDate}</p>
+        </div>
+        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${published ? "bg-violet-50 text-violet-700" : "bg-stone-100 text-stone-500"}`}>
+          {published ? "Опубликовано" : "Не опубликовано"}
+        </span>
+      </div>
+
+      <form action={markPublicationPublishedManual} className="mt-3 flex flex-wrap items-center gap-2">
+        <input type="hidden" name="scheduledPublicationId" value={publication.id} />
+        <input type="date" name="publishedAt" defaultValue={publishedDate} className="rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900" />
+        <input type="url" name="externalUrl" defaultValue={publication.externalUrl ?? ""} placeholder="Ссылка на пост" className="min-w-0 flex-1 rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900" />
+        <button type="submit" className="rounded-full bg-violet-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-violet-700">Отметить опубликованным</button>
+      </form>
+      {publication.externalUrl ? (
+        <a href={publication.externalUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex text-xs font-semibold text-violet-700 hover:text-violet-900">Открыть пост ↗</a>
+      ) : null}
+
+      <form action={upsertPublicationMetric} className="mt-3 grid gap-2">
+        <input type="hidden" name="scheduledPublicationId" value={publication.id} />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-7">
+          {metricFields.map(([name, label, value]) => (
+            <label key={name} className="grid gap-1">
+              <span className="text-[11px] font-semibold text-stone-400">{label}</span>
+              <input type="number" min="0" inputMode="numeric" name={name} defaultValue={value ?? ""} placeholder="—" className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900" />
+            </label>
+          ))}
+        </div>
+        <div>
+          <button type="submit" className="rounded-full border border-stone-200 bg-white px-4 py-2 text-xs font-semibold text-stone-700 transition hover:border-violet-200 hover:text-violet-700">Сохранить метрики</button>
+        </div>
+      </form>
+    </article>
+  );
+}
+
 function MonthlyClientReport({
   clientName,
   month,
@@ -2779,6 +2855,22 @@ function MonthlyClientReport({
     : changesNeeded > 0
       ? "Команда внесёт правки и подготовит обновлённые материалы."
       : "Команда продолжает подготовку материалов по календарю.";
+  const reportInput: ReportPublicationInput[] = publications.map((pub) => ({
+    id: pub.id,
+    platformName: pub.platformName,
+    topic: pub.topic,
+    publishStatus: pub.publishStatus,
+    publishedAt: pub.publishedAt,
+    scheduledDate: pub.scheduledDate,
+    metric: pub.metrics[0] ?? null,
+  }));
+  const report = buildMonthlyReport(reportInput);
+  const reportKpiCards: Array<[string, number | null]> = [
+    ["Охват", report.kpis.reach],
+    ["Лайки", report.kpis.likes],
+    ["Комментарии", report.kpis.comments],
+    ["Переходы", report.kpis.clicks],
+  ];
 
   return (
     <section>
@@ -2898,6 +2990,33 @@ function MonthlyClientReport({
             <p>Визуалы в Base64 MVP: <span className="font-semibold text-stone-900">{base64Visuals}</span></p>
           </div>
         </article>
+      </div>
+
+      <div className="mt-6 grid gap-4">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">Результаты месяца</p>
+          <h2 className="mt-1 text-lg font-semibold text-stone-950">Отчёт по публикациям</h2>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-stone-500">
+            Запланировано {report.planned} · опубликовано {report.published} ({report.publishRate}%). Метрики вводятся вручную; позже их будет присылать n8n в те же поля.
+          </p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {reportKpiCards.map(([label, value]) => (
+            <article key={label} className={`${panelClass} p-4`}>
+              <p className="text-2xl font-semibold tracking-tight text-stone-950 tabular-nums">{formatReportNumber(value)}</p>
+              <p className="mt-1 text-sm font-semibold text-stone-600">{label}</p>
+            </article>
+          ))}
+        </div>
+
+        <div className="grid gap-2">
+          {publications.length > 0 ? (
+            publications.map((publication) => <ReportPublicationRow key={publication.id} publication={publication} />)
+          ) : (
+            <EmptyState>Публикации появятся после планирования календаря.</EmptyState>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -5658,6 +5777,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   include: {
                     contentDraft: true,
                     plannedContentItem: true,
+                    metrics: {
+                      orderBy: { capturedAt: "desc" },
+                      take: 1,
+                    },
                     creativeAssets: {
                       include: {
                         generatedVariants: {
@@ -5754,6 +5877,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   include: {
                     contentDraft: true,
                     plannedContentItem: true,
+                    metrics: {
+                      orderBy: { capturedAt: "desc" },
+                      take: 1,
+                    },
                     creativeAssets: {
                       include: {
                         generatedVariants: {
