@@ -1,13 +1,15 @@
 -- Monthly reports foundation.
--- Additive only: new optional columns on ScheduledPublication + new PublicationMetric table (manual entry now, n8n later).
+-- Additive + idempotent: the shared Neon DB may already carry an earlier metrics
+-- migration (different branch) with a stricter PublicationMetric shape, so every
+-- statement is guarded and the table shape is reconciled to this branch.
 
--- AlterTable
-ALTER TABLE "ScheduledPublication" ADD COLUMN     "externalUrl" TEXT,
-ADD COLUMN     "publishStatus" TEXT,
-ADD COLUMN     "publishedAt" TIMESTAMP(3);
+-- AlterTable: publish tracking on ScheduledPublication
+ALTER TABLE "ScheduledPublication" ADD COLUMN IF NOT EXISTS "externalUrl" TEXT;
+ALTER TABLE "ScheduledPublication" ADD COLUMN IF NOT EXISTS "publishStatus" TEXT;
+ALTER TABLE "ScheduledPublication" ADD COLUMN IF NOT EXISTS "publishedAt" TIMESTAMP(3);
 
--- CreateTable
-CREATE TABLE "PublicationMetric" (
+-- CreateTable: PublicationMetric (only when absent)
+CREATE TABLE IF NOT EXISTS "PublicationMetric" (
     "id" TEXT NOT NULL,
     "scheduledPublicationId" TEXT,
     "plannedContentItemId" TEXT,
@@ -28,21 +30,26 @@ CREATE TABLE "PublicationMetric" (
     CONSTRAINT "PublicationMetric_pkey" PRIMARY KEY ("id")
 );
 
--- CreateIndex
-CREATE INDEX "PublicationMetric_scheduledPublicationId_idx" ON "PublicationMetric"("scheduledPublicationId");
+-- Reconcile shape when the table pre-existed with the earlier definition
+ALTER TABLE "PublicationMetric" ADD COLUMN IF NOT EXISTS "plannedContentItemId" TEXT;
+ALTER TABLE "PublicationMetric" ALTER COLUMN "scheduledPublicationId" DROP NOT NULL;
 
--- CreateIndex
-CREATE INDEX "PublicationMetric_clientId_idx" ON "PublicationMetric"("clientId");
+-- CreateIndex (idempotent)
+CREATE INDEX IF NOT EXISTS "PublicationMetric_scheduledPublicationId_idx" ON "PublicationMetric"("scheduledPublicationId");
+CREATE INDEX IF NOT EXISTS "PublicationMetric_clientId_idx" ON "PublicationMetric"("clientId");
+CREATE INDEX IF NOT EXISTS "PublicationMetric_monthlyPlanId_idx" ON "PublicationMetric"("monthlyPlanId");
+CREATE INDEX IF NOT EXISTS "PublicationMetric_platformName_idx" ON "PublicationMetric"("platformName");
+CREATE INDEX IF NOT EXISTS "PublicationMetric_capturedAt_idx" ON "PublicationMetric"("capturedAt");
 
--- CreateIndex
-CREATE INDEX "PublicationMetric_monthlyPlanId_idx" ON "PublicationMetric"("monthlyPlanId");
-
--- CreateIndex
-CREATE INDEX "PublicationMetric_platformName_idx" ON "PublicationMetric"("platformName");
-
--- CreateIndex
-CREATE INDEX "PublicationMetric_capturedAt_idx" ON "PublicationMetric"("capturedAt");
-
--- AddForeignKey
-ALTER TABLE "PublicationMetric" ADD CONSTRAINT "PublicationMetric_scheduledPublicationId_fkey" FOREIGN KEY ("scheduledPublicationId") REFERENCES "ScheduledPublication"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
+-- AddForeignKey (only when absent)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'PublicationMetric_scheduledPublicationId_fkey'
+  ) THEN
+    ALTER TABLE "PublicationMetric"
+      ADD CONSTRAINT "PublicationMetric_scheduledPublicationId_fkey"
+      FOREIGN KEY ("scheduledPublicationId") REFERENCES "ScheduledPublication"("id")
+      ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;
