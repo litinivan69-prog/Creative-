@@ -128,6 +128,34 @@ Amber is only for real warnings.
 Red is only for real errors.
 Green can be used only as a small success signal, not as the main style.
 
+## Design system (tokens)
+
+Style: Calm Lavender SaaS. Subtle glass (`backdrop-blur`) only on chrome (sidebar, sticky header), not on content cards. Cards: white, soft shadow, 20–28px radius.
+
+Color tokens (also defined as CSS variables in `src/app/globals.css`, prefix `--ap-`):
+
+- primary / accent: `#7C3AED`
+- secondary: `#8B5CF6`
+- page background: `#FAF5FF`
+- card: `#FFFFFF`
+- muted bg / muted text: `#F7F3FD` / `#64748B`
+- border: `#EFE7FC`
+- ink (text): `#0F172A`
+- warning (real only): amber `#F59E0B`
+- error (real only): `#DC2626`
+- success (small signal only): `#059669`
+
+Never use green/teal as a primary or accent fill.
+
+Typography (full Cyrillic support — required for Russian UI):
+
+- headings: Manrope
+- body: Inter
+
+Both are wired via `next/font` in `src/app/layout.tsx` and exposed as `--font-heading` / `--font-sans`. Tailwind: `font-sans`, `font-heading`. Avoid Satoshi / General Sans (no Cyrillic).
+
+Design tooling: the global `ui-ux-pro-max` skill (`~/.claude/skills`) holds the searchable style/palette/font database — use it for new screens. Its green-accent and Satoshi/General Sans suggestions are overridden by the rules above.
+
 ## Client portal
 
 The client portal is the most important sales surface of the product.

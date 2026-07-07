@@ -39,6 +39,8 @@ import {
   rebuildCreativeAssetAsCarousel,
   reviseMonthlyPlanWithCopilot,
   regenerateCreativeAssetBrief,
+  markPublicationPublishedManual,
+  upsertPublicationMetric,
   rejectDraft,
   rejectCreativeVariant,
   rejectMonthlyPlanRevisionProposal,
@@ -63,7 +65,19 @@ import {
 } from "@/app/actions";
 import { BrandAssetFileInput } from "@/app/brand-asset-file-input";
 import { ClientPortalView } from "@/app/client-portal-view";
+import {
+  buildMonthlyReport,
+  formatReportNumber,
+  isPublicationPublished,
+  type ReportPublicationInput,
+} from "@/lib/report-metrics";
 import { MonthProductionAutoRunner } from "@/app/month-production-auto-runner";
+import {
+  OverviewAttention,
+  OverviewMetric,
+  OverviewMiniCalendar,
+  type OverviewCalendarItem,
+} from "@/app/overview-widgets";
 import { PendingSubmitButton } from "@/app/pending-submit-button";
 import { getAutopilotTextBatchLimit } from "@/lib/autopilot";
 import {
@@ -317,6 +331,12 @@ function SidebarIcon({ name, className = "h-4 w-4" }: { name: SidebarIconName; c
 
 const pageBackgroundClass = "min-h-screen bg-[#f7f5fb] text-stone-900";
 const panelClass = "rounded-lg border border-stone-200 bg-white shadow-[0_1px_2px_rgba(28,36,38,0.04)]";
+
+function integrationStatusTone(status: string) {
+  if (status === "failed") return "bg-rose-50 text-rose-700";
+  if (status === "sent" || status === "processed") return "bg-violet-50 text-violet-700";
+  return "bg-stone-100 text-stone-500";
+}
 const cardHeaderClass = "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between";
 const mutedTextClass = "text-sm leading-6 text-stone-500";
 const sectionClass = `${panelClass} mt-7 scroll-mt-24 p-5 sm:p-6`;
@@ -610,6 +630,8 @@ function OverviewDashboard({
   brandProfileReady,
   brandAssetsCount,
   generationJobs,
+  month,
+  calendarItems,
 }: {
   currentMonthLabel: string;
   workspaceLinks: Record<WorkspaceView, string>;
@@ -632,48 +654,17 @@ function OverviewDashboard({
   brandProfileReady: boolean;
   brandAssetsCount: number;
   generationJobs: GenerationJobPreview[];
+  month?: string;
+  calendarItems: OverviewCalendarItem[];
 }) {
   const clientName = latestBlueprint?.client.name ?? "Клиент";
-  const focus =
-    waitingForClientCount > 0
-      ? {
-          title: "Правки клиента",
-          value: waitingForClientCount,
-          copy: "Новая правка от клиента.",
-          href: workspaceLinks.approvals,
-          action: "Открыть правки",
-        }
-      : integrationTaskCount > 0
-      ? {
-          title: "Заблокировано",
-          value: integrationTaskCount,
-          copy: "Нужно настроить доступы.",
-          href: workspaceLinks.calendar,
-          action: "Открыть календарь",
-        }
-      : missingTextCount > 0
-        ? {
-            title: "Материалы без текста",
-            value: missingTextCount,
-            copy: `${missingTextCount} материала ждут текста.`,
-            href: workspaceLinks.drafts,
-            action: "Открыть материалы",
-          }
-        : missingVisualCount > 0
-          ? {
-              title: "Нужны визуалы",
-              value: missingVisualCount,
-              copy: "Подготовьте ТЗ или визуал.",
-              href: workspaceLinks.drafts,
-              action: "Открыть материалы",
-            }
-          : {
-              title: "Фокус",
-              value: "OK",
-              copy: "Критичных задач нет.",
-              href: workspaceLinks.reports,
-              action: "Открыть отчёт",
-            };
+  const attentionItems = [
+    { label: "На проверке", count: needsManagerReviewCount, href: workspaceLinks.drafts },
+    { label: "Правки клиента", count: waitingForClientCount, href: workspaceLinks.approvals },
+    { label: "Заблокировано", count: integrationTaskCount, href: workspaceLinks.calendar },
+    { label: "Нужны визуалы", count: missingVisualCount, href: workspaceLinks.drafts },
+    { label: "Без текста", count: missingTextCount, href: workspaceLinks.drafts },
+  ];
   const recentItems = [
     ...generationJobs.slice(0, 3).map((job) => ({
       title: formatGenerationJobType(job.jobType),
@@ -711,78 +702,52 @@ function OverviewDashboard({
         </div>
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <OverviewMetricCard label="Материалов" value={plannedContentCount} detail="В месячном плане" href={workspaceLinks.drafts} icon="calendar" />
-        <OverviewMetricCard label="На проверке" value={needsManagerReviewCount} detail="Внутренняя очередь" href={workspaceLinks.drafts} icon="review" />
-        <OverviewMetricCard label="Готово в пакет" value={readyToScheduleCount} detail="Можно собирать" href={workspaceLinks.reports} icon="check" />
-        <OverviewMetricCard label="Правки клиента" value={waitingForClientCount} detail="Нужно ответить" href={workspaceLinks.approvals} icon="client" />
+      <div className="mt-4">
+        <OverviewAttention items={attentionItems} />
       </div>
 
-      <div className="mt-3 grid gap-3 lg:grid-cols-12">
-        <OverviewProgressCard
-          progress={productionProgress}
-          plannedContentCount={plannedContentCount}
-          draftCount={draftCount}
-          approvalQueueCount={approvalQueueCount}
-          readyToScheduleCount={readyToScheduleCount}
-          integrationTaskCount={integrationTaskCount}
-          draftsHref={workspaceLinks.drafts}
-        />
-        <OverviewClientCard
-          clientName={latestBlueprint?.client.name ?? "Клиент не выбран"}
-          industry={latestBlueprint?.client.industry ?? "Создайте клиента и Blueprint"}
-          confidenceScore={latestBlueprint?.confidenceScore ?? null}
-          plannedContentCount={plannedContentCount}
-          brandProfileReady={brandProfileReady}
-          brandAssetsCount={brandAssetsCount}
-          clientHref={workspaceLinks.client_setup}
-          blueprintHref={workspaceLinks.client_setup}
-        />
+      <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <OverviewMetric label="Материалов" value={plannedContentCount} detail="В месячном плане" href={workspaceLinks.drafts} icon={<SidebarIcon name="calendar" className="h-4 w-4" />} index={0} />
+        <OverviewMetric label="Готово в пакет" value={readyToScheduleCount} detail={`${productionProgress}% готовности`} href={workspaceLinks.reports} icon={<SidebarIcon name="check" className="h-4 w-4" />} progress={productionProgress} index={1} />
+        <OverviewMetric label="На проверке" value={needsManagerReviewCount} detail="Внутренняя очередь" href={workspaceLinks.drafts} icon={<SidebarIcon name="review" className="h-4 w-4" />} tone={needsManagerReviewCount > 0 ? "amber" : "neutral"} index={2} />
+        <OverviewMetric label="Правки клиента" value={waitingForClientCount} detail="Нужно ответить" href={workspaceLinks.approvals} icon={<SidebarIcon name="client" className="h-4 w-4" />} tone={waitingForClientCount > 0 ? "amber" : "neutral"} index={3} />
       </div>
 
-      <div className="mt-3 grid gap-3 lg:grid-cols-12">
-        <OverviewSmallCard
-          title={focus.title}
-          value={focus.value}
-          copy={focus.copy}
-          href={focus.href}
-          action={focus.action}
-        />
-        <article className={`${overviewCardClass} p-4 lg:col-span-4 xl:col-span-4`}>
-          <p className="text-xs font-semibold text-slate-400">Очередь</p>
-          <div className="mt-3 grid gap-2">
-            {[
-              ["Проверка", needsManagerReviewCount],
-              ["Правки", waitingForClientCount],
-              ["Визуалы", missingVisualCount],
-              ["Доступы", integrationTaskCount],
-            ].map(([label, value]) => (
-              <div key={label} className="flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-2">
-                <span className="text-xs font-semibold text-slate-500">{label}</span>
-                <span className="text-sm font-semibold text-slate-950">{value}</span>
-              </div>
-            ))}
-          </div>
-        </article>
-        <article className={`${overviewCardClass} p-4 lg:col-span-4 xl:col-span-4`}>
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-xs font-semibold text-slate-400">Активность</p>
-            <a href={workspaceLinks.reports} className="text-xs font-semibold text-violet-700">Отчёт</a>
-          </div>
-          <div className="mt-3 grid gap-2">
-            {recentItems.map((item) => (
-              <div key={`${item.title}-${item.time}`} className="flex items-center gap-3">
-                <span className="h-2 w-2 shrink-0 rounded-full bg-violet-500" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-semibold text-slate-800">{item.title}</p>
-                  <p className="truncate text-[11px] text-slate-400">{item.meta}</p>
+      <div className="mt-3 grid items-start gap-3 lg:grid-cols-12">
+        <div className="min-w-0 lg:col-span-8">
+          <OverviewMiniCalendar month={month} items={calendarItems} calendarHref={workspaceLinks.calendar} />
+        </div>
+        <div className="grid content-start gap-3 lg:col-span-4">
+          <OverviewClientCard
+            clientName={latestBlueprint?.client.name ?? "Клиент не выбран"}
+            industry={latestBlueprint?.client.industry ?? "Создайте клиента и Blueprint"}
+            confidenceScore={latestBlueprint?.confidenceScore ?? null}
+            plannedContentCount={plannedContentCount}
+            brandProfileReady={brandProfileReady}
+            brandAssetsCount={brandAssetsCount}
+            clientHref={workspaceLinks.client_setup}
+            blueprintHref={workspaceLinks.client_setup}
+          />
+          <article className={`${overviewCardClass} ap-rise p-4`}>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-semibold text-slate-400">Активность</p>
+              <a href={workspaceLinks.reports} className="text-xs font-semibold text-violet-700">Отчёт</a>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {recentItems.map((item) => (
+                <div key={`${item.title}-${item.time}`} className="flex items-center gap-3">
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-violet-500" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-semibold text-slate-800">{item.title}</p>
+                    <p className="truncate text-[11px] text-slate-400">{item.meta}</p>
+                  </div>
+                  <span className="text-[11px] text-slate-400">{item.time}</span>
                 </div>
-                <span className="text-[11px] text-slate-400">{item.time}</span>
-              </div>
-            ))}
-            {recentItems.length === 0 ? <p className="text-xs leading-5 text-slate-400">Пока нет недавних событий.</p> : null}
-          </div>
-        </article>
+              ))}
+              {recentItems.length === 0 ? <p className="text-xs leading-5 text-slate-400">Пока нет недавних событий.</p> : null}
+            </div>
+          </article>
+        </div>
       </div>
     </section>
   );
@@ -1190,6 +1155,18 @@ type ScheduledPublicationPreview = {
   status: string;
   publishMode: string;
   notes: string | null;
+  publishStatus: string | null;
+  publishedAt: Date | null;
+  externalUrl: string | null;
+  metrics: Array<{
+    likes: number | null;
+    comments: number | null;
+    shares: number | null;
+    reach: number | null;
+    views: number | null;
+    saves: number | null;
+    clicks: number | null;
+  }>;
   contentDraft: {
     draftTitle: string;
   };
@@ -2714,6 +2691,62 @@ function suggestsVisualAsset(format: string) {
   );
 }
 
+function ReportPublicationRow({ publication }: { publication: ScheduledPublicationPreview }) {
+  const metric = publication.metrics[0];
+  const published = isPublicationPublished(publication);
+  const publishedDate = publication.publishedAt
+    ? new Date(publication.publishedAt).toISOString().slice(0, 10)
+    : "";
+  const metricFields: Array<[string, string, number | null]> = [
+    ["likes", "Лайки", metric?.likes ?? null],
+    ["comments", "Комментарии", metric?.comments ?? null],
+    ["shares", "Репосты", metric?.shares ?? null],
+    ["reach", "Охват", metric?.reach ?? null],
+    ["views", "Просмотры", metric?.views ?? null],
+    ["saves", "Сохранения", metric?.saves ?? null],
+    ["clicks", "Переходы", metric?.clicks ?? null],
+  ];
+
+  return (
+    <article className={`${panelClass} p-4`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-stone-950">{publication.topic}</p>
+          <p className="text-xs text-stone-400">{publication.platformName} · {publication.scheduledDate}</p>
+        </div>
+        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${published ? "bg-violet-50 text-violet-700" : "bg-stone-100 text-stone-500"}`}>
+          {published ? "Опубликовано" : "Не опубликовано"}
+        </span>
+      </div>
+
+      <form action={markPublicationPublishedManual} className="mt-3 flex flex-wrap items-center gap-2">
+        <input type="hidden" name="scheduledPublicationId" value={publication.id} />
+        <input type="date" name="publishedAt" defaultValue={publishedDate} className="rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900" />
+        <input type="url" name="externalUrl" defaultValue={publication.externalUrl ?? ""} placeholder="Ссылка на пост" className="min-w-0 flex-1 rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900" />
+        <button type="submit" className="rounded-full bg-violet-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-violet-700">Отметить опубликованным</button>
+      </form>
+      {publication.externalUrl ? (
+        <a href={publication.externalUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex text-xs font-semibold text-violet-700 hover:text-violet-900">Открыть пост ↗</a>
+      ) : null}
+
+      <form action={upsertPublicationMetric} className="mt-3 grid gap-2">
+        <input type="hidden" name="scheduledPublicationId" value={publication.id} />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-7">
+          {metricFields.map(([name, label, value]) => (
+            <label key={name} className="grid gap-1">
+              <span className="text-[11px] font-semibold text-stone-400">{label}</span>
+              <input type="number" min="0" inputMode="numeric" name={name} defaultValue={value ?? ""} placeholder="—" className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900" />
+            </label>
+          ))}
+        </div>
+        <div>
+          <button type="submit" className="rounded-full border border-stone-200 bg-white px-4 py-2 text-xs font-semibold text-stone-700 transition hover:border-violet-200 hover:text-violet-700">Сохранить метрики</button>
+        </div>
+      </form>
+    </article>
+  );
+}
+
 function MonthlyClientReport({
   clientName,
   month,
@@ -2722,6 +2755,7 @@ function MonthlyClientReport({
   assets,
   jobs,
   draftsHref,
+  downloadHref,
 }: {
   clientName?: string;
   month?: string;
@@ -2730,6 +2764,7 @@ function MonthlyClientReport({
   assets: CreativeAssetPreview[];
   jobs: GenerationJobPreview[];
   draftsHref: string;
+  downloadHref?: string;
 }) {
   if (!month) {
     return (
@@ -2828,6 +2863,22 @@ function MonthlyClientReport({
     : changesNeeded > 0
       ? "Команда внесёт правки и подготовит обновлённые материалы."
       : "Команда продолжает подготовку материалов по календарю.";
+  const reportInput: ReportPublicationInput[] = publications.map((pub) => ({
+    id: pub.id,
+    platformName: pub.platformName,
+    topic: pub.topic,
+    publishStatus: pub.publishStatus,
+    publishedAt: pub.publishedAt,
+    scheduledDate: pub.scheduledDate,
+    metric: pub.metrics[0] ?? null,
+  }));
+  const report = buildMonthlyReport(reportInput);
+  const reportKpiCards: Array<[string, number | null]> = [
+    ["Охват", report.kpis.reach],
+    ["Лайки", report.kpis.likes],
+    ["Комментарии", report.kpis.comments],
+    ["Переходы", report.kpis.clicks],
+  ];
 
   return (
     <section>
@@ -2947,6 +2998,43 @@ function MonthlyClientReport({
             <p>Визуалы в Base64 MVP: <span className="font-semibold text-stone-900">{base64Visuals}</span></p>
           </div>
         </article>
+      </div>
+
+      <div className="mt-6 grid gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-700">Результаты месяца</p>
+            <h2 className="mt-1 text-lg font-semibold text-stone-950">Отчёт по публикациям</h2>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-stone-500">
+              Запланировано {report.planned} · опубликовано {report.published} ({report.publishRate}%). Метрики вводятся вручную; позже их будет присылать n8n в те же поля.
+            </p>
+          </div>
+          {downloadHref ? (
+            <a href={downloadHref} className="inline-flex shrink-0 items-center gap-2 rounded-full bg-violet-600 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-violet-700">
+              Скачать отчёт за месяц
+              <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" aria-hidden="true">
+                <path d="M12 4v11m0 0 4-4m-4 4-4-4M5 20h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </a>
+          ) : null}
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {reportKpiCards.map(([label, value]) => (
+            <article key={label} className={`${panelClass} p-4`}>
+              <p className="text-2xl font-semibold tracking-tight text-stone-950 tabular-nums">{formatReportNumber(value)}</p>
+              <p className="mt-1 text-sm font-semibold text-stone-600">{label}</p>
+            </article>
+          ))}
+        </div>
+
+        <div className="grid gap-2">
+          {publications.length > 0 ? (
+            publications.map((publication) => <ReportPublicationRow key={publication.id} publication={publication} />)
+          ) : (
+            <EmptyState>Публикации появятся после планирования календаря.</EmptyState>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -5707,6 +5795,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   include: {
                     contentDraft: true,
                     plannedContentItem: true,
+                    metrics: {
+                      orderBy: { capturedAt: "desc" },
+                      take: 1,
+                    },
                     creativeAssets: {
                       include: {
                         generatedVariants: {
@@ -5803,6 +5895,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   include: {
                     contentDraft: true,
                     plannedContentItem: true,
+                    metrics: {
+                      orderBy: { capturedAt: "desc" },
+                      take: 1,
+                    },
                     creativeAssets: {
                       include: {
                         generatedVariants: {
@@ -5860,6 +5956,18 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
   const missingTextCount = Math.max(plannedContentCount - draftCount, 0);
   const creativeAssets = selectedMonthlyPlan?.creativeAssets ?? [];
   const generationJobs = selectedMonthlyPlan?.generationJobs ?? [];
+  const overviewCalendarItems: OverviewCalendarItem[] = (selectedMonthlyPlan?.plannedContentItems ?? []).map((item) => {
+    const publication = selectedMonthlyPlan?.scheduledPublications.find(
+      (pub) => pub.plannedContentItemId === item.id,
+    );
+    return {
+      id: item.id,
+      date: publication?.scheduledDate ?? item.plannedDate ?? null,
+      platformName: item.platformName,
+      topic: item.topic,
+      status: item.contentDraft?.status ?? null,
+    };
+  });
   const latestProductionRun = selectedMonthlyPlan?.productionRuns[0];
   const creativeAssetAttentionCount =
     creativeAssets.filter((asset) => ["needed", "brief_ready", "in_production", "needs_review"].includes(asset.status)).length +
@@ -5894,6 +6002,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
   const workspaceLinks = Object.fromEntries(
     workspaceViews.map((view) => [view, workspaceHref(view, workspaceContext)]),
   ) as Record<WorkspaceView, string>;
+  const n8nConfigured = Boolean(process.env.N8N_WEBHOOK_URL?.trim());
+  const integrationEvents = await prisma.integrationEvent
+    .findMany({
+      orderBy: { createdAt: "desc" },
+      take: 8,
+      select: { id: true, direction: true, eventType: true, status: true, createdAt: true },
+    })
+    .catch(() => [] as Array<{ id: string; direction: string; eventType: string; status: string; createdAt: Date }>);
 
   return (
     <div className={pageBackgroundClass}>
@@ -6024,6 +6140,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 brandProfileReady={brandProfileReady}
                 brandAssetsCount={brandAssetsCount}
                 generationJobs={generationJobs}
+                month={selectedMonthlyPlan?.month}
+                calendarItems={overviewCalendarItems}
               />
             ) : null}
 
@@ -6153,6 +6271,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 assets={creativeAssets}
                 jobs={generationJobs}
                 draftsHref={workspaceLinks.drafts}
+                downloadHref={selectedMonthlyPlan ? `/api/reports/pptx?plan=${selectedMonthlyPlan.id}` : undefined}
               />
             ) : null}
 
@@ -6244,7 +6363,44 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                       Долгие генерации сохраняют статус задачи, но полноценный background worker будет добавлен позже.
                     </p>
                   </article>
+                  <article className={`${panelClass} p-4`}>
+                    <p className="text-xs font-bold uppercase tracking-[0.1em] text-stone-400">Интеграция n8n</p>
+                    <h3 className="mt-2 font-semibold text-stone-950">{n8nConfigured ? "Webhook задан" : "Webhook не задан"}</h3>
+                    <p className="mt-2 text-sm leading-6 text-stone-500">
+                      {n8nConfigured
+                        ? "Платформа готова отправлять события в n8n. Адрес и секрет хранятся в переменных окружения и на экран не выводятся."
+                        : "Задайте N8N_WEBHOOK_URL и N8N_SHARED_SECRET в переменных окружения Vercel, чтобы включить обмен с n8n."}
+                    </p>
+                    <p className="mt-3 border-t border-stone-200 pt-3 text-xs leading-5 text-stone-400">
+                      Входящие: POST /api/integrations/n8n/ping и /publication-result с заголовком x-aps-secret.
+                    </p>
+                  </article>
                 </div>
+
+                <article className={`${panelClass} mt-4 p-4`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-bold uppercase tracking-[0.1em] text-stone-400">Последние события интеграций</p>
+                    <span className="text-xs font-semibold text-stone-400">{integrationEvents.length}</span>
+                  </div>
+                  {integrationEvents.length > 0 ? (
+                    <div className="mt-3 grid gap-2">
+                      {integrationEvents.map((event) => (
+                        <div key={event.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-stone-100 bg-stone-50/70 px-3 py-2">
+                          <p className="min-w-0 truncate text-sm font-semibold text-stone-800">
+                            <span className="text-stone-400">{event.direction === "inbound" ? "входящее" : "исходящее"} · </span>
+                            {event.eventType}
+                          </p>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${integrationStatusTone(event.status)}`}>{event.status}</span>
+                            <span className="text-xs text-stone-400">{event.createdAt.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-sm leading-6 text-stone-500">Событий пока нет — появятся, когда платформа начнёт обмениваться данными с n8n.</p>
+                  )}
+                </article>
               </section>
             ) : null}
           </div>

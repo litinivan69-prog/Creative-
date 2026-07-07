@@ -5,6 +5,19 @@
 :root {
   --background: #f4f5f2;
   --foreground: #1f292b;
+
+  /* Adaptive Presence OS — design tokens (Calm Lavender SaaS) */
+  --ap-primary: #7c3aed;
+  --ap-secondary: #8b5cf6;
+  --ap-bg: #faf5ff;
+  --ap-card: #ffffff;
+  --ap-muted: #f7f3fd;
+  --ap-muted-foreground: #64748b;
+  --ap-border: #efe7fc;
+  --ap-ink: #0f172a;
+  --ap-warning: #f59e0b;
+  --ap-danger: #dc2626;
+  --ap-success: #059669;
 }
 
 body {
@@ -12,9 +25,18 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+    var(--font-sans), Inter, ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
   text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family:
+    var(--font-heading), var(--font-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
 textarea,
@@ -29,6 +51,41 @@ html {
 }
 
 ::selection {
-  background: #ccfbf1;
-  color: #134e4a;
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+@keyframes ap-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ap-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.ap-rise {
+  animation: ap-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.ap-grow {
+  animation: ap-grow 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ap-rise,
+  .ap-grow {
+    animation: none;
+  }
 }
