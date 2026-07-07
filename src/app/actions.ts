@@ -13,6 +13,7 @@ import {
   generateMonthlyPlanRevisionProposal,
 } from "@/lib/openai";
 import { prisma } from "@/lib/prisma";
+import { emitIntegrationEvent } from "@/lib/integration-events";
 import { validateBlueprintForPersistence } from "@/lib/blueprint-schema";
 import {
   isSensitiveContent,
@@ -4618,6 +4619,41 @@ export async function upsertPublicationMetric(formData: FormData) {
       blueprintId: publication.blueprintId,
       planId: publication.monthlyPlanId,
       notice: "Метрики публикации сохранены.",
+    }),
+  );
+}
+
+export async function testN8nConnection() {
+  const created = await emitIntegrationEvent("connection_test", {
+    relatedType: "System",
+    payload: { source: "manager_settings", triggeredAt: new Date().toISOString() },
+  });
+
+  revalidatePath("/");
+
+  if (!created) {
+    redirect(workspaceLocation("settings", { error: "Не удалось создать тестовое событие. Попробуйте ещё раз." }));
+  }
+
+  const event = await prisma.integrationEvent
+    .findUnique({ where: { id: created.id }, select: { status: true, errorMessage: true } })
+    .catch(() => null);
+
+  if (event?.status === "sent") {
+    redirect(workspaceLocation("settings", { notice: "Связь с n8n работает: тестовое событие доставлено." }));
+  }
+
+  if (event?.status === "failed") {
+    redirect(
+      workspaceLocation("settings", {
+        error: "n8n не ответил на тестовое событие. Проверьте адрес вебхука и что workflow активен.",
+      }),
+    );
+  }
+
+  redirect(
+    workspaceLocation("settings", {
+      notice: "Тестовое событие поставлено в очередь. Задайте N8N_WEBHOOK_URL в Vercel, чтобы события уходили в n8n.",
     }),
   );
 }
