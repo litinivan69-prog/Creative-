@@ -297,6 +297,7 @@ model ScheduledPublication {
   publishMode          String
   notes                String?
   externalUrl          String?
+  externalId           String?
   publishedAt          DateTime?
   publishStatus        String?
   createdAt            DateTime                @default(now())
@@ -621,4 +622,24 @@ model PublicationMetric {
   @@index([monthlyPlanId])
   @@index([platformName])
   @@index([capturedAt])
+}
+
+model IntegrationEvent {
+  id           String    @id @default(cuid())
+  direction    String
+  eventType    String
+  relatedType  String?
+  relatedId    String?
+  payload      Json
+  status       String    @default("queued")
+  errorMessage String?
+  attempts     Int       @default(0)
+  createdAt    DateTime  @default(now())
+  sentAt       DateTime?
+  processedAt  DateTime?
+
+  @@index([eventType])
+  @@index([status])
+  @@index([relatedId])
+  @@index([createdAt])
 }

@@ -331,6 +331,12 @@ function SidebarIcon({ name, className = "h-4 w-4" }: { name: SidebarIconName; c
 
 const pageBackgroundClass = "min-h-screen bg-[#f7f5fb] text-stone-900";
 const panelClass = "rounded-lg border border-stone-200 bg-white shadow-[0_1px_2px_rgba(28,36,38,0.04)]";
+
+function integrationStatusTone(status: string) {
+  if (status === "failed") return "bg-rose-50 text-rose-700";
+  if (status === "sent" || status === "processed") return "bg-violet-50 text-violet-700";
+  return "bg-stone-100 text-stone-500";
+}
 const cardHeaderClass = "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between";
 const mutedTextClass = "text-sm leading-6 text-stone-500";
 const sectionClass = `${panelClass} mt-7 scroll-mt-24 p-5 sm:p-6`;
@@ -5996,6 +6002,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
   const workspaceLinks = Object.fromEntries(
     workspaceViews.map((view) => [view, workspaceHref(view, workspaceContext)]),
   ) as Record<WorkspaceView, string>;
+  const n8nConfigured = Boolean(process.env.N8N_WEBHOOK_URL?.trim());
+  const integrationEvents = await prisma.integrationEvent
+    .findMany({
+      orderBy: { createdAt: "desc" },
+      take: 8,
+      select: { id: true, direction: true, eventType: true, status: true, createdAt: true },
+    })
+    .catch(() => [] as Array<{ id: string; direction: string; eventType: string; status: string; createdAt: Date }>);
 
   return (
     <div className={pageBackgroundClass}>
@@ -6349,7 +6363,44 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                       Долгие генерации сохраняют статус задачи, но полноценный background worker будет добавлен позже.
                     </p>
                   </article>
+                  <article className={`${panelClass} p-4`}>
+                    <p className="text-xs font-bold uppercase tracking-[0.1em] text-stone-400">Интеграция n8n</p>
+                    <h3 className="mt-2 font-semibold text-stone-950">{n8nConfigured ? "Webhook задан" : "Webhook не задан"}</h3>
+                    <p className="mt-2 text-sm leading-6 text-stone-500">
+                      {n8nConfigured
+                        ? "Платформа готова отправлять события в n8n. Адрес и секрет хранятся в переменных окружения и на экран не выводятся."
+                        : "Задайте N8N_WEBHOOK_URL и N8N_SHARED_SECRET в переменных окружения Vercel, чтобы включить обмен с n8n."}
+                    </p>
+                    <p className="mt-3 border-t border-stone-200 pt-3 text-xs leading-5 text-stone-400">
+                      Входящие: POST /api/integrations/n8n/ping и /publication-result с заголовком x-aps-secret.
+                    </p>
+                  </article>
                 </div>
+
+                <article className={`${panelClass} mt-4 p-4`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-bold uppercase tracking-[0.1em] text-stone-400">Последние события интеграций</p>
+                    <span className="text-xs font-semibold text-stone-400">{integrationEvents.length}</span>
+                  </div>
+                  {integrationEvents.length > 0 ? (
+                    <div className="mt-3 grid gap-2">
+                      {integrationEvents.map((event) => (
+                        <div key={event.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-stone-100 bg-stone-50/70 px-3 py-2">
+                          <p className="min-w-0 truncate text-sm font-semibold text-stone-800">
+                            <span className="text-stone-400">{event.direction === "inbound" ? "входящее" : "исходящее"} · </span>
+                            {event.eventType}
+                          </p>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${integrationStatusTone(event.status)}`}>{event.status}</span>
+                            <span className="text-xs text-stone-400">{event.createdAt.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-sm leading-6 text-stone-500">Событий пока нет — появятся, когда платформа начнёт обмениваться данными с n8n.</p>
+                  )}
+                </article>
               </section>
             ) : null}
           </div>
