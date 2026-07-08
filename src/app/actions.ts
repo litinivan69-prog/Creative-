@@ -14,6 +14,15 @@ import {
 } from "@/lib/openai";
 import { prisma } from "@/lib/prisma";
 import { emitIntegrationEvent } from "@/lib/integration-events";
+import {
+  TELEGRAM_BOT_TOKEN_KEY,
+  TELEGRAM_BOT_USERNAME_KEY,
+  getTelegramBotToken,
+  sendTelegramPost,
+  setIntegrationSetting,
+  verifyTelegramBotToken,
+  verifyTelegramChannel,
+} from "@/lib/telegram";
 import { validateBlueprintForPersistence } from "@/lib/blueprint-schema";
 import {
   isSensitiveContent,
@@ -4656,6 +4665,205 @@ export async function testN8nConnection() {
       notice: "Тестовое событие поставлено в очередь. Задайте N8N_WEBHOOK_URL в Vercel, чтобы события уходили в n8n.",
     }),
   );
+}
+
+export async function saveTelegramBotToken(formData: FormData) {
+  const token = formText(formData, "botToken");
+
+  if (!token) {
+    errorRedirect("Вставьте токен бота из @BotFather.", "settings");
+  }
+
+  const check = await verifyTelegramBotToken(token);
+  if (!check.ok) {
+    errorRedirect("Telegram не принял токен. Проверьте, что скопировали его целиком.", "settings");
+  }
+
+  try {
+    await setIntegrationSetting(TELEGRAM_BOT_TOKEN_KEY, token);
+    if (check.username) {
+      await setIntegrationSetting(TELEGRAM_BOT_USERNAME_KEY, check.username);
+    }
+  } catch {
+    errorRedirect("Не удалось сохранить токен. Попробуйте ещё раз.", "settings");
+  }
+
+  revalidatePath("/");
+  redirect(workspaceLocation("settings", { notice: `Бот подключён: @${check.username ?? "bot"}.` }));
+}
+
+export async function addClientChannel(formData: FormData) {
+  const clientId = formText(formData, "clientId");
+  const channelId = formText(formData, "channelId");
+  const title = formText(formData, "title");
+
+  if (!clientId) {
+    errorRedirect("Не выбран клиент.", "settings");
+  }
+  if (!channelId) {
+    errorRedirect("Укажите адрес канала: @username или числовой ID.", "settings");
+  }
+
+  const token = await getTelegramBotToken();
+  if (!token) {
+    errorRedirect("Сначала подключите Telegram-бота в настройках.", "settings");
+  }
+
+  const check = await verifyTelegramChannel(token, channelId);
+  if (!check.ok) {
+    errorRedirect(check.error ?? "Бот не видит канал.", "settings");
+  }
+
+  try {
+    const existing = await prisma.clientChannel.findFirst({
+      where: { clientId, platform: "telegram", channelId },
+      select: { id: true },
+    });
+
+    if (existing) {
+      await prisma.clientChannel.update({
+        where: { id: existing.id },
+        data: { status: "active", title: title || check.chat?.title || null },
+      });
+    } else {
+      await prisma.clientChannel.create({
+        data: {
+          clientId,
+          platform: "telegram",
+          channelId,
+          title: title || check.chat?.title || null,
+        },
+      });
+    }
+  } catch {
+    errorRedirect("Не удалось сохранить канал. Попробуйте ещё раз.", "settings");
+  }
+
+  revalidatePath("/");
+  redirect(workspaceLocation("settings", { clientId, notice: `Канал «${check.chat?.title ?? channelId}» подключён.` }));
+}
+
+export async function archiveClientChannel(formData: FormData) {
+  const channelRecordId = formText(formData, "channelRecordId");
+
+  if (!channelRecordId) {
+    errorRedirect("Канал не найден.", "settings");
+  }
+
+  try {
+    await prisma.clientChannel.update({
+      where: { id: channelRecordId },
+      data: { status: "archived" },
+    });
+  } catch {
+    errorRedirect("Не удалось отключить канал.", "settings");
+  }
+
+  revalidatePath("/");
+  redirect(workspaceLocation("settings", { notice: "Канал отключён." }));
+}
+
+export async function publishPublicationToTelegram(formData: FormData) {
+  const scheduledPublicationId = formText(formData, "scheduledPublicationId");
+
+  if (!scheduledPublicationId) {
+    errorRedirect("Не выбрана публикация.", "reports");
+  }
+
+  const publication = await prisma.scheduledPublication.findUnique({
+    where: { id: scheduledPublicationId },
+    select: {
+      id: true,
+      clientId: true,
+      blueprintId: true,
+      monthlyPlanId: true,
+      topic: true,
+      publishStatus: true,
+      externalUrl: true,
+      contentDraft: { select: { draftTitle: true, draftBody: true } },
+    },
+  });
+
+  if (!publication) {
+    errorRedirect("Публикация не найдена.", "reports");
+  }
+
+  const backTo = { blueprintId: publication.blueprintId, planId: publication.monthlyPlanId };
+
+  // Idempotent: already published — do not double-post.
+  if (publication.publishStatus === "published" && publication.externalUrl) {
+    redirect(workspaceLocation("reports", { ...backTo, notice: "Материал уже опубликован — повторная отправка не требуется." }));
+  }
+
+  const token = await getTelegramBotToken();
+  if (!token) {
+    errorRedirect("Сначала подключите Telegram-бота в настройках.", "reports");
+  }
+
+  const channel = await prisma.clientChannel.findFirst({
+    where: { clientId: publication.clientId, platform: "telegram", status: "active" },
+    orderBy: { createdAt: "asc" },
+    select: { channelId: true, title: true },
+  });
+
+  if (!channel) {
+    errorRedirect("У клиента нет подключённого Telegram-канала. Добавьте канал в настройках.", "reports");
+  }
+
+  const result = await sendTelegramPost({
+    token,
+    channelId: channel.channelId,
+    title: publication.contentDraft?.draftTitle || publication.topic,
+    body: publication.contentDraft?.draftBody ?? "",
+  });
+
+  if (!result.ok) {
+    await prisma.integrationEvent
+      .create({
+        data: {
+          direction: "outbound",
+          eventType: "telegram_publish",
+          relatedType: "ScheduledPublication",
+          relatedId: publication.id,
+          payload: { channelId: channel.channelId, error: result.error },
+          status: "failed",
+          errorMessage: result.error.slice(0, 500),
+          attempts: 1,
+        },
+      })
+      .catch(() => {});
+    errorRedirect(`Telegram не принял публикацию: ${result.error}`, "reports");
+  }
+
+  try {
+    await prisma.scheduledPublication.update({
+      where: { id: publication.id },
+      data: {
+        publishStatus: "published",
+        publishedAt: new Date(),
+        externalUrl: result.url,
+        externalId: String(result.messageId),
+      },
+    });
+
+    await prisma.integrationEvent.create({
+      data: {
+        direction: "outbound",
+        eventType: "telegram_publish",
+        relatedType: "ScheduledPublication",
+        relatedId: publication.id,
+        payload: { channelId: channel.channelId, messageId: result.messageId, url: result.url },
+        status: "sent",
+        sentAt: new Date(),
+        attempts: 1,
+      },
+    });
+  } catch {
+    errorRedirect("Пост вышел в Telegram, но не удалось сохранить результат. Обновите страницу.", "reports");
+  }
+
+  revalidatePath("/");
+  redirect(workspaceLocation("reports", { ...backTo, notice: `Опубликовано в Telegram: ${result.url}` }));
 }
 
 export async function markScheduledPublicationNeedsAssets(formData: FormData) {

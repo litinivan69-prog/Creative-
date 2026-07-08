@@ -27,6 +27,7 @@ model Client {
   clientPortalLinks ClientPortalLink[]
   brandProfile ClientBrandProfile?
   brandAssets ClientBrandAsset[]
+  channels ClientChannel[]
 }
 
 model ClientBrief {
@@ -642,4 +643,28 @@ model IntegrationEvent {
   @@index([status])
   @@index([relatedId])
   @@index([createdAt])
+}
+
+model IntegrationSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ClientChannel {
+  id        String   @id @default(cuid())
+  clientId  String
+  platform  String   @default("telegram")
+  channelId String
+  title     String?
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([platform])
+  @@index([status])
 }

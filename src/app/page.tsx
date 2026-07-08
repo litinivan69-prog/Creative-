@@ -40,6 +40,10 @@ import {
   reviseMonthlyPlanWithCopilot,
   regenerateCreativeAssetBrief,
   markPublicationPublishedManual,
+  publishPublicationToTelegram,
+  saveTelegramBotToken,
+  addClientChannel,
+  archiveClientChannel,
   upsertPublicationMetric,
   rejectDraft,
   rejectCreativeVariant,
@@ -2720,11 +2724,23 @@ function ReportPublicationRow({ publication }: { publication: ScheduledPublicati
         </span>
       </div>
 
+      {!published ? (
+        <form action={publishPublicationToTelegram} className="mt-3">
+          <input type="hidden" name="scheduledPublicationId" value={publication.id} />
+          <PendingSubmitButton
+            pendingLabel="Публикуем в Telegram..."
+            className="rounded-full bg-violet-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-violet-700"
+          >
+            Опубликовать в Telegram
+          </PendingSubmitButton>
+        </form>
+      ) : null}
+
       <form action={markPublicationPublishedManual} className="mt-3 flex flex-wrap items-center gap-2">
         <input type="hidden" name="scheduledPublicationId" value={publication.id} />
         <input type="date" name="publishedAt" defaultValue={publishedDate} className="rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900" />
         <input type="url" name="externalUrl" defaultValue={publication.externalUrl ?? ""} placeholder="Ссылка на пост" className="min-w-0 flex-1 rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900" />
-        <button type="submit" className="rounded-full bg-violet-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-violet-700">Отметить опубликованным</button>
+        <button type="submit" className="rounded-full border border-stone-200 bg-white px-4 py-2 text-xs font-semibold text-stone-600 transition hover:border-violet-200 hover:text-violet-700">Отметить вручную</button>
       </form>
       {publication.externalUrl ? (
         <a href={publication.externalUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex text-xs font-semibold text-violet-700 hover:text-violet-900">Открыть пост ↗</a>
@@ -6011,6 +6027,25 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
       select: { id: true, direction: true, eventType: true, status: true, createdAt: true },
     })
     .catch(() => [] as Array<{ id: string; direction: string; eventType: string; status: string; createdAt: Date }>);
+  const telegramBotUsername = await prisma.integrationSetting
+    .findUnique({ where: { key: "telegram_bot_username" }, select: { value: true } })
+    .then((row) => row?.value ?? null)
+    .catch(() => null);
+  const telegramTokenSet = await prisma.integrationSetting
+    .findUnique({ where: { key: "telegram_bot_token" }, select: { id: true } })
+    .then(Boolean)
+    .catch(() => false);
+  const telegramClientId = workspaceContext.client ?? null;
+  const telegramClientName = clients.find((client) => client.id === telegramClientId)?.name ?? null;
+  const telegramChannels = telegramClientId
+    ? await prisma.clientChannel
+        .findMany({
+          where: { clientId: telegramClientId, platform: "telegram", status: "active" },
+          orderBy: { createdAt: "asc" },
+          select: { id: true, channelId: true, title: true },
+        })
+        .catch(() => [] as Array<{ id: string; channelId: string; title: string | null }>)
+    : [];
 
   return (
     <div className={pageBackgroundClass}>
@@ -6383,6 +6418,85 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                         Проверить связь
                       </PendingSubmitButton>
                     </form>
+                  </article>
+                  <article className={`${panelClass} p-4`}>
+                    <p className="text-xs font-bold uppercase tracking-[0.1em] text-stone-400">Telegram</p>
+                    <h3 className="mt-2 font-semibold text-stone-950">
+                      {telegramTokenSet ? `Бот подключён${telegramBotUsername ? `: @${telegramBotUsername}` : ""}` : "Бот не подключён"}
+                    </h3>
+                    <p className="mt-2 text-sm leading-6 text-stone-500">
+                      {telegramTokenSet
+                        ? "Один бот-мастер публикует во все каналы клиентов. Токен хранится в базе и на экран не выводится."
+                        : "Создайте бота в @BotFather и вставьте токен — он сохранится в платформе и будет публиковать во все каналы клиентов."}
+                    </p>
+                    <form action={saveTelegramBotToken} className="mt-3 grid gap-2">
+                      <input
+                        type="password"
+                        name="botToken"
+                        placeholder={telegramTokenSet ? "Вставьте новый токен, чтобы заменить" : "Токен из @BotFather"}
+                        className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900"
+                        autoComplete="off"
+                      />
+                      <div>
+                        <PendingSubmitButton
+                          pendingLabel="Проверяем токен..."
+                          className="rounded-full bg-violet-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-violet-700"
+                        >
+                          {telegramTokenSet ? "Заменить токен" : "Подключить бота"}
+                        </PendingSubmitButton>
+                      </div>
+                    </form>
+                  </article>
+                  <article className={`${panelClass} p-4`}>
+                    <p className="text-xs font-bold uppercase tracking-[0.1em] text-stone-400">Каналы клиента</p>
+                    <h3 className="mt-2 font-semibold text-stone-950">{telegramClientName ?? "Клиент не выбран"}</h3>
+                    {telegramChannels.length > 0 ? (
+                      <div className="mt-3 grid gap-2">
+                        {telegramChannels.map((channel) => (
+                          <div key={channel.id} className="flex items-center justify-between gap-2 rounded-md border border-stone-100 bg-stone-50/70 px-3 py-2">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-stone-800">{channel.title || channel.channelId}</p>
+                              <p className="truncate text-xs text-stone-400">{channel.channelId}</p>
+                            </div>
+                            <form action={archiveClientChannel}>
+                              <input type="hidden" name="channelRecordId" value={channel.id} />
+                              <button type="submit" className="rounded-full border border-stone-200 bg-white px-3 py-1 text-[11px] font-semibold text-stone-500 transition hover:border-rose-200 hover:text-rose-700">
+                                Отключить
+                              </button>
+                            </form>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm leading-6 text-stone-500">
+                        Каналы заполняются при онбординге клиента. Добавьте бота администратором канала, затем укажите адрес канала здесь.
+                      </p>
+                    )}
+                    {telegramClientId ? (
+                      <form action={addClientChannel} className="mt-3 grid gap-2">
+                        <input type="hidden" name="clientId" value={telegramClientId} />
+                        <input
+                          type="text"
+                          name="channelId"
+                          placeholder="@канал или -100..."
+                          className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900"
+                        />
+                        <input
+                          type="text"
+                          name="title"
+                          placeholder="Название (необязательно)"
+                          className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900"
+                        />
+                        <div>
+                          <PendingSubmitButton
+                            pendingLabel="Проверяем канал..."
+                            className="rounded-full border border-stone-200 bg-white px-4 py-2 text-xs font-semibold text-stone-700 transition hover:border-violet-200 hover:text-violet-700"
+                          >
+                            Добавить канал
+                          </PendingSubmitButton>
+                        </div>
+                      </form>
+                    ) : null}
                   </article>
                 </div>
 
