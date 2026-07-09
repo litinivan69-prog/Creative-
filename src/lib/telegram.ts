@@ -115,14 +115,22 @@ async function telegramUpload<T>(
 }
 
 export type TelegramPostResult =
-  | { ok: true; messageId: number; url: string; imagesSent: number }
+  | { ok: true; messageId: number; url: string; imagesSent: number; textTruncated?: boolean }
   | { ok: false; error: string };
 
+/** Trims text to the Telegram caption limit at a word boundary, adding an ellipsis. */
+function truncateCaption(text: string) {
+  const slice = text.slice(0, TELEGRAM_CAPTION_LIMIT - 1);
+  const lastBreak = Math.max(slice.lastIndexOf("\n"), slice.lastIndexOf(" "));
+  const cut = lastBreak > TELEGRAM_CAPTION_LIMIT * 0.6 ? slice.slice(0, lastBreak) : slice;
+  return `${cut.trimEnd()}…`;
+}
+
 /**
- * Posts a material to a channel: single visual -> sendPhoto (caption when it fits),
- * carousel -> sendMediaGroup album, no visuals -> plain text. When the text is too
- * long for a caption it follows as a separate message. Image failures gracefully
- * fall back to a text post so publishing never breaks because of a visual.
+ * Posts a material to a channel as ONE message: single visual -> sendPhoto with
+ * caption, carousel -> one sendMediaGroup album with caption on the first slide,
+ * no visuals -> plain text. Captions are trimmed to Telegram's 1024 limit
+ * (full text stays in the platform; VK will receive it untrimmed later).
  */
 export async function sendTelegramPost(options: {
   token: string;
@@ -144,13 +152,11 @@ export async function sendTelegramPost(options: {
     return { ok: false, error: "У материала нет текста для публикации." };
   }
 
-  const captionFits = text.length > 0 && text.length <= TELEGRAM_CAPTION_LIMIT;
-
-  const sendFollowUpText = async () => {
-    if (text && !captionFits) {
-      await telegramCall(options.token, "sendMessage", { chat_id: options.channelId, text });
-    }
-  };
+  // Telegram norm: a post is ONE message. Text rides as the caption (<=1024),
+  // longer texts are trimmed at a word boundary; the full text stays in the
+  // platform (and will be used as-is for VK later).
+  const caption = text.length <= TELEGRAM_CAPTION_LIMIT ? text : truncateCaption(text);
+  const textTruncated = caption.length < text.length;
 
   if (images.length > 0) {
     const prepared = (await Promise.all(images.map(fetchAndPrepareImage))).filter(
@@ -161,16 +167,16 @@ export async function sendTelegramPost(options: {
       const res = await telegramUpload<SentMessage>(
         options.token,
         "sendPhoto",
-        { chat_id: options.channelId, ...(captionFits ? { caption: text } : {}) },
+        { chat_id: options.channelId, ...(caption ? { caption } : {}) },
         [{ name: "photo", data: prepared[0], filename: "visual-1.jpg" }],
       );
       if (res.ok) {
-        await sendFollowUpText();
         return {
           ok: true,
           messageId: res.result.message_id,
           url: buildMessageUrl(res.result.chat, res.result.message_id),
           imagesSent: 1,
+          textTruncated,
         };
       }
     }
@@ -180,7 +186,7 @@ export async function sendTelegramPost(options: {
       const media = prepared.map((_, index) => ({
         type: "photo",
         media: `attach://photo${index}`,
-        ...(index === 0 && captionFits ? { caption: text } : {}),
+        ...(index === 0 && caption ? { caption } : {}),
       }));
       const res = await telegramUpload<SentMessage[]>(
         options.token,
@@ -189,13 +195,13 @@ export async function sendTelegramPost(options: {
         prepared.map((data, index) => ({ name: `photo${index}`, data, filename: `visual-${index + 1}.jpg` })),
       );
       if (res.ok && res.result.length > 0) {
-        await sendFollowUpText();
         const first = res.result[0];
         return {
           ok: true,
           messageId: first.message_id,
           url: buildMessageUrl(first.chat, first.message_id),
           imagesSent: res.result.length,
+          textTruncated,
         };
       }
     }
