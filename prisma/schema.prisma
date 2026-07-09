@@ -246,6 +246,7 @@ model ContentDraft {
   goal                 String
   draftTitle           String
   draftBody            String
+  telegramBody         String?
   draftNotes           Json                    @default("[]")
   status               String
   approvalRequired     Boolean
