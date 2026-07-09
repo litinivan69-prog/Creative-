@@ -47,7 +47,10 @@ async function collectPublicationImageUrls(scheduledPublicationId: string): Prom
  * the result on ScheduledPublication and logs an IntegrationEvent.
  * Idempotent: an already published item is not posted twice.
  */
-export async function publishScheduledPublication(scheduledPublicationId: string): Promise<TelegramPublishOutcome> {
+export async function publishScheduledPublication(
+  scheduledPublicationId: string,
+  options: { force?: boolean } = {},
+): Promise<TelegramPublishOutcome> {
   const publication = await prisma.scheduledPublication.findUnique({
     where: { id: scheduledPublicationId },
     select: {
@@ -64,7 +67,7 @@ export async function publishScheduledPublication(scheduledPublicationId: string
     return { ok: false, error: "Публикация не найдена." };
   }
 
-  if (publication.publishStatus === "published" && publication.externalUrl) {
+  if (!options.force && publication.publishStatus === "published" && publication.externalUrl) {
     return { ok: true, url: publication.externalUrl, alreadyPublished: true };
   }
 
