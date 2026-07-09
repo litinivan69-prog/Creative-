@@ -18,11 +18,11 @@ import {
   TELEGRAM_BOT_TOKEN_KEY,
   TELEGRAM_BOT_USERNAME_KEY,
   getTelegramBotToken,
-  sendTelegramPost,
   setIntegrationSetting,
   verifyTelegramBotToken,
   verifyTelegramChannel,
 } from "@/lib/telegram";
+import { publishScheduledPublication } from "@/lib/telegram-publish";
 import { validateBlueprintForPersistence } from "@/lib/blueprint-schema";
 import {
   isSensitiveContent,
@@ -4772,16 +4772,7 @@ export async function publishPublicationToTelegram(formData: FormData) {
 
   const publication = await prisma.scheduledPublication.findUnique({
     where: { id: scheduledPublicationId },
-    select: {
-      id: true,
-      clientId: true,
-      blueprintId: true,
-      monthlyPlanId: true,
-      topic: true,
-      publishStatus: true,
-      externalUrl: true,
-      contentDraft: { select: { draftTitle: true, draftBody: true } },
-    },
+    select: { blueprintId: true, monthlyPlanId: true },
   });
 
   if (!publication) {
@@ -4789,81 +4780,19 @@ export async function publishPublicationToTelegram(formData: FormData) {
   }
 
   const backTo = { blueprintId: publication.blueprintId, planId: publication.monthlyPlanId };
+  const outcome = await publishScheduledPublication(scheduledPublicationId);
 
-  // Idempotent: already published — do not double-post.
-  if (publication.publishStatus === "published" && publication.externalUrl) {
+  revalidatePath("/");
+
+  if (!outcome.ok) {
+    redirect(workspaceLocation("reports", { ...backTo, error: `Telegram: ${outcome.error}` }));
+  }
+
+  if (outcome.alreadyPublished) {
     redirect(workspaceLocation("reports", { ...backTo, notice: "Материал уже опубликован — повторная отправка не требуется." }));
   }
 
-  const token = await getTelegramBotToken();
-  if (!token) {
-    errorRedirect("Сначала подключите Telegram-бота в настройках.", "reports");
-  }
-
-  const channel = await prisma.clientChannel.findFirst({
-    where: { clientId: publication.clientId, platform: "telegram", status: "active" },
-    orderBy: { createdAt: "asc" },
-    select: { channelId: true, title: true },
-  });
-
-  if (!channel) {
-    errorRedirect("У клиента нет подключённого Telegram-канала. Добавьте канал в настройках.", "reports");
-  }
-
-  const result = await sendTelegramPost({
-    token,
-    channelId: channel.channelId,
-    title: publication.contentDraft?.draftTitle || publication.topic,
-    body: publication.contentDraft?.draftBody ?? "",
-  });
-
-  if (!result.ok) {
-    await prisma.integrationEvent
-      .create({
-        data: {
-          direction: "outbound",
-          eventType: "telegram_publish",
-          relatedType: "ScheduledPublication",
-          relatedId: publication.id,
-          payload: { channelId: channel.channelId, error: result.error },
-          status: "failed",
-          errorMessage: result.error.slice(0, 500),
-          attempts: 1,
-        },
-      })
-      .catch(() => {});
-    errorRedirect(`Telegram не принял публикацию: ${result.error}`, "reports");
-  }
-
-  try {
-    await prisma.scheduledPublication.update({
-      where: { id: publication.id },
-      data: {
-        publishStatus: "published",
-        publishedAt: new Date(),
-        externalUrl: result.url,
-        externalId: String(result.messageId),
-      },
-    });
-
-    await prisma.integrationEvent.create({
-      data: {
-        direction: "outbound",
-        eventType: "telegram_publish",
-        relatedType: "ScheduledPublication",
-        relatedId: publication.id,
-        payload: { channelId: channel.channelId, messageId: result.messageId, url: result.url },
-        status: "sent",
-        sentAt: new Date(),
-        attempts: 1,
-      },
-    });
-  } catch {
-    errorRedirect("Пост вышел в Telegram, но не удалось сохранить результат. Обновите страницу.", "reports");
-  }
-
-  revalidatePath("/");
-  redirect(workspaceLocation("reports", { ...backTo, notice: `Опубликовано в Telegram: ${result.url}` }));
+  redirect(workspaceLocation("reports", { ...backTo, notice: `Опубликовано в Telegram: ${outcome.url}` }));
 }
 
 export async function markScheduledPublicationNeedsAssets(formData: FormData) {
