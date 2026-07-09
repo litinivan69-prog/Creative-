@@ -34,9 +34,8 @@ async function collectPublicationImageUrls(scheduledPublicationId: string): Prom
 
   return activeAssets
     .map((asset) => {
-      const variant =
-        asset.generatedVariants.find((candidate) => candidate.status === "approved") ??
-        asset.generatedVariants[0];
+      const withUrl = asset.generatedVariants.filter((candidate) => Boolean(candidate.imageUrl));
+      const variant = withUrl.find((candidate) => candidate.status === "approved") ?? withUrl[0];
       return variant?.imageUrl ?? null;
     })
     .filter((url): url is string => Boolean(url));
