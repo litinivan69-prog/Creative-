@@ -66,7 +66,7 @@ export async function publishScheduledPublication(
       topic: true,
       publishStatus: true,
       externalUrl: true,
-      contentDraft: { select: { draftTitle: true, draftBody: true } },
+      contentDraft: { select: { draftTitle: true, draftBody: true, telegramBody: true } },
     },
   });
 
@@ -95,11 +95,15 @@ export async function publishScheduledPublication(
 
   const imageUrls = await collectPublicationImageUrls(publication.id);
 
+  // Prefer the generator's Telegram-length version (standalone post, fits the
+  // caption limit); the long draftBody is reserved for VK and the portal.
+  const telegramBody = publication.contentDraft?.telegramBody?.trim();
+
   const result = await sendTelegramPost({
     token,
     channelId: channel.channelId,
-    title: publication.contentDraft?.draftTitle || publication.topic,
-    body: publication.contentDraft?.draftBody ?? "",
+    title: telegramBody ? null : publication.contentDraft?.draftTitle || publication.topic,
+    body: telegramBody || publication.contentDraft?.draftBody || "",
     imageUrls,
   });
 

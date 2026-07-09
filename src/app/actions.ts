@@ -2642,6 +2642,7 @@ async function generateContentTextForPlannedItem(
       goal: item.goal,
       draftTitle: draft.draftTitle,
       draftBody: draft.draftBody,
+      telegramBody: draft.telegramBody,
       draftNotes: draft.draftNotes,
       status: draft.status,
       approvalRequired: draft.approvalRequired,
@@ -4227,6 +4228,9 @@ export async function updatePublicationText(formData: FormData) {
       data: {
         draftTitle,
         draftBody,
+        // Manual edit invalidates the generated Telegram version; publish falls
+        // back to a trimmed caption until the text is regenerated.
+        telegramBody: null,
         status: "needs_review",
       },
     }),

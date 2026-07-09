@@ -16,6 +16,13 @@ export const ContentDraftRiskLevelSchema = z.enum(["low", "medium", "high"]);
 export const ContentDraftSchema = z.object({
   draftTitle: nonEmptyText,
   draftBody: nonEmptyText,
+  telegramBody: z
+    .string()
+    .trim()
+    .nullable()
+    .describe(
+      "Самостоятельная версия поста для Telegram: до 900 символов, завершённая мысль, без обрывов. Тот же язык и тон, что и draftBody.",
+    ),
   draftNotes: z.array(nonEmptyText),
   status: ContentDraftStatusSchema,
   approvalRequired: z.boolean(),
@@ -49,6 +56,19 @@ export function isSensitiveContent(values: Array<string | null | undefined>) {
   ].some((keyword) => text.includes(keyword));
 }
 
+const TELEGRAM_BODY_LIMIT = 1024;
+
+/** Clamps the generated Telegram version to the caption limit at a word boundary. */
+export function clampTelegramBody(value: string | null | undefined): string | null {
+  const text = value?.trim();
+  if (!text) return null;
+  if (text.length <= TELEGRAM_BODY_LIMIT) return text;
+  const slice = text.slice(0, TELEGRAM_BODY_LIMIT - 1);
+  const lastBreak = Math.max(slice.lastIndexOf("\n"), slice.lastIndexOf(" "));
+  const cut = lastBreak > TELEGRAM_BODY_LIMIT * 0.6 ? slice.slice(0, lastBreak) : slice;
+  return `${cut.trimEnd()}…`;
+}
+
 export function validateContentDraftForPersistence(
   input: unknown,
   context: {
@@ -66,6 +86,7 @@ export function validateContentDraftForPersistence(
 
   return {
     ...draft,
+    telegramBody: clampTelegramBody(draft.telegramBody),
     status: needsReview ? "needs_review" : "draft",
     approvalRequired: needsReview,
     autopublishEligible:
