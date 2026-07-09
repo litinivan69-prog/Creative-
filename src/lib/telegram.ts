@@ -67,8 +67,52 @@ function buildMessageUrl(chat: TelegramChat, messageId: number) {
 const TELEGRAM_TEXT_LIMIT = 4096;
 const TELEGRAM_CAPTION_LIMIT = 1024;
 const TELEGRAM_ALBUM_LIMIT = 10;
+const TELEGRAM_IMAGE_MAX_SIDE = 2048;
 
 type SentMessage = { message_id: number; chat: TelegramChat };
+
+/**
+ * Downloads a visual and normalizes it for Telegram: EXIF rotation, longest
+ * side <= 2048, JPEG. Keeps every image well under Telegram's size limits so
+ * albums are never rejected because of oversized generator PNGs.
+ */
+async function fetchAndPrepareImage(url: string): Promise<Buffer | null> {
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(20000) });
+    if (!response.ok) return null;
+    const input = Buffer.from(await response.arrayBuffer());
+    const sharp = (await import("sharp")).default;
+    return await sharp(input)
+      .rotate()
+      .resize(TELEGRAM_IMAGE_MAX_SIDE, TELEGRAM_IMAGE_MAX_SIDE, { fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: 82 })
+      .toBuffer();
+  } catch {
+    return null;
+  }
+}
+
+async function telegramUpload<T>(
+  token: string,
+  method: string,
+  fields: Record<string, string>,
+  files: Array<{ name: string; data: Buffer; filename: string }>,
+): Promise<TelegramResult<T>> {
+  try {
+    const form = new FormData();
+    for (const [key, value] of Object.entries(fields)) form.append(key, value);
+    for (const file of files) {
+      form.append(file.name, new Blob([new Uint8Array(file.data)], { type: "image/jpeg" }), file.filename);
+    }
+    const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+      method: "POST",
+      body: form,
+    });
+    return (await response.json()) as TelegramResult<T>;
+  } catch {
+    return { ok: false, description: "Telegram API недоступен" };
+  }
+}
 
 export type TelegramPostResult =
   | { ok: true; messageId: number; url: string; imagesSent: number }
@@ -108,66 +152,52 @@ export async function sendTelegramPost(options: {
     }
   };
 
-  if (images.length === 1) {
-    const res = await telegramCall<SentMessage>(options.token, "sendPhoto", {
-      chat_id: options.channelId,
-      photo: images[0],
-      ...(captionFits ? { caption: text } : {}),
-    });
-    if (res.ok) {
-      await sendFollowUpText();
-      return {
-        ok: true,
-        messageId: res.result.message_id,
-        url: buildMessageUrl(res.result.chat, res.result.message_id),
-        imagesSent: 1,
-      };
-    }
-  }
+  if (images.length > 0) {
+    const prepared = (await Promise.all(images.map(fetchAndPrepareImage))).filter(
+      (buffer): buffer is Buffer => buffer !== null,
+    );
 
-  if (images.length > 1) {
-    const media = images.map((url, index) => ({
-      type: "photo",
-      media: url,
-      ...(index === 0 && captionFits ? { caption: text } : {}),
-    }));
-    const res = await telegramCall<SentMessage[]>(options.token, "sendMediaGroup", {
-      chat_id: options.channelId,
-      media,
-    });
-    if (res.ok && res.result.length > 0) {
-      await sendFollowUpText();
-      const first = res.result[0];
-      return {
-        ok: true,
-        messageId: first.message_id,
-        url: buildMessageUrl(first.chat, first.message_id),
-        imagesSent: res.result.length,
-      };
-    }
-
-    // Album rejected (often one oversized image) — post photos one by one, skipping bad ones.
-    let firstSent: SentMessage | null = null;
-    let sentCount = 0;
-    for (const [index, url] of images.entries()) {
-      const single = await telegramCall<SentMessage>(options.token, "sendPhoto", {
-        chat_id: options.channelId,
-        photo: url,
-        ...(index === 0 && captionFits ? { caption: text } : {}),
-      });
-      if (single.ok) {
-        firstSent = firstSent ?? single.result;
-        sentCount += 1;
+    if (prepared.length === 1) {
+      const res = await telegramUpload<SentMessage>(
+        options.token,
+        "sendPhoto",
+        { chat_id: options.channelId, ...(captionFits ? { caption: text } : {}) },
+        [{ name: "photo", data: prepared[0], filename: "visual-1.jpg" }],
+      );
+      if (res.ok) {
+        await sendFollowUpText();
+        return {
+          ok: true,
+          messageId: res.result.message_id,
+          url: buildMessageUrl(res.result.chat, res.result.message_id),
+          imagesSent: 1,
+        };
       }
     }
-    if (firstSent) {
-      await sendFollowUpText();
-      return {
-        ok: true,
-        messageId: firstSent.message_id,
-        url: buildMessageUrl(firstSent.chat, firstSent.message_id),
-        imagesSent: sentCount,
-      };
+
+    if (prepared.length > 1) {
+      // Carousel is always a single album post.
+      const media = prepared.map((_, index) => ({
+        type: "photo",
+        media: `attach://photo${index}`,
+        ...(index === 0 && captionFits ? { caption: text } : {}),
+      }));
+      const res = await telegramUpload<SentMessage[]>(
+        options.token,
+        "sendMediaGroup",
+        { chat_id: options.channelId, media: JSON.stringify(media) },
+        prepared.map((data, index) => ({ name: `photo${index}`, data, filename: `visual-${index + 1}.jpg` })),
+      );
+      if (res.ok && res.result.length > 0) {
+        await sendFollowUpText();
+        const first = res.result[0];
+        return {
+          ok: true,
+          messageId: first.message_id,
+          url: buildMessageUrl(first.chat, first.message_id),
+          imagesSent: res.result.length,
+        };
+      }
     }
   }
 
