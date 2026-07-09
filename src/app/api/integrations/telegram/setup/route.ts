@@ -39,13 +39,35 @@ export async function GET(request: Request) {
           scheduledPublications: {
             orderBy: { createdAt: "desc" },
             take: 10,
-            select: { id: true, topic: true, platformName: true, publishStatus: true, externalUrl: true },
+            select: {
+              id: true,
+              topic: true,
+              platformName: true,
+              publishStatus: true,
+              externalUrl: true,
+              creativeAssets: {
+                select: {
+                  assetType: true,
+                  generatedVariants: { select: { imageUrl: true }, orderBy: { createdAt: "desc" }, take: 1 },
+                },
+              },
+            },
           },
         },
       }),
     ]);
 
-    return Response.json({ ok: true, bot: { configured: tokenSet, username: botUsername }, clients });
+    const clientsWithCounts = clients.map((client) => ({
+      ...client,
+      scheduledPublications: client.scheduledPublications.map(({ creativeAssets, ...publication }) => ({
+        ...publication,
+        imagesAvailable: creativeAssets.filter((asset) =>
+          asset.generatedVariants.some((variant) => Boolean(variant.imageUrl)),
+        ).length,
+      })),
+    }));
+
+    return Response.json({ ok: true, bot: { configured: tokenSet, username: botUsername }, clients: clientsWithCounts });
   } catch (error) {
     console.error("telegram setup GET failed", error);
     return Response.json({ ok: false, error: "Не удалось получить статус." }, { status: 500 });
