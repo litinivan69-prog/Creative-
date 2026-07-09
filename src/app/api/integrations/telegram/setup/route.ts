@@ -9,6 +9,7 @@ import {
   verifyTelegramBotToken,
   verifyTelegramChannel,
 } from "@/lib/telegram";
+import { VK_ACCESS_TOKEN_KEY, VK_ACCOUNT_LABEL_KEY, verifyVkGroup, verifyVkToken } from "@/lib/vk";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,8 +34,8 @@ export async function GET(request: Request) {
           id: true,
           name: true,
           channels: {
-            where: { platform: "telegram", status: "active" },
-            select: { id: true, channelId: true, title: true },
+            where: { status: "active" },
+            select: { id: true, channelId: true, title: true, platform: true },
           },
           scheduledPublications: {
             orderBy: { createdAt: "desc" },
@@ -79,7 +80,11 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error: "Неверный секрет." }, { status: 401 });
   }
 
-  let body: { botToken?: unknown; channel?: { clientId?: unknown; channelId?: unknown; title?: unknown } };
+  let body: {
+    botToken?: unknown;
+    vkToken?: unknown;
+    channel?: { clientId?: unknown; channelId?: unknown; title?: unknown; platform?: unknown };
+  };
   try {
     body = await request.json();
   } catch {
@@ -100,41 +105,69 @@ export async function POST(request: Request) {
       summary.bot = { username: check.username };
     }
 
+    if (typeof body.vkToken === "string" && body.vkToken.trim()) {
+      const token = body.vkToken.trim();
+      const check = await verifyVkToken(token);
+      if (!check.ok) {
+        return Response.json({ ok: false, error: check.error ?? "VK не принял токен." }, { status: 400 });
+      }
+      await setIntegrationSetting(VK_ACCESS_TOKEN_KEY, token);
+      if (check.label) await setIntegrationSetting(VK_ACCOUNT_LABEL_KEY, check.label);
+      summary.vk = { label: check.label };
+    }
+
     if (body.channel && typeof body.channel.clientId === "string" && typeof body.channel.channelId === "string") {
       const clientId = body.channel.clientId.trim();
-      const channelId = body.channel.channelId.trim();
+      const channelReference = body.channel.channelId.trim();
       const title = typeof body.channel.title === "string" ? body.channel.title.trim() : "";
+      const platform = body.channel.platform === "vk" ? "vk" : "telegram";
 
       const client = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true } });
       if (!client) {
         return Response.json({ ok: false, error: "Клиент не найден." }, { status: 404 });
       }
 
-      const token = await getTelegramBotToken();
-      if (!token) {
-        return Response.json({ ok: false, error: "Сначала подключите Telegram-бота." }, { status: 400 });
-      }
+      let canonicalChannelId = channelReference;
+      let resolvedTitle = title;
 
-      const check = await verifyTelegramChannel(token, channelId);
-      if (!check.ok) {
-        return Response.json({ ok: false, error: check.error ?? "Бот не видит канал." }, { status: 400 });
+      if (platform === "vk") {
+        const vkToken = await getIntegrationSetting(VK_ACCESS_TOKEN_KEY);
+        if (!vkToken) {
+          return Response.json({ ok: false, error: "Сначала подключите VK." }, { status: 400 });
+        }
+        const check = await verifyVkGroup(vkToken, channelReference);
+        if (!check.ok || !check.groupId) {
+          return Response.json({ ok: false, error: check.error ?? "VK-сообщество не найдено." }, { status: 400 });
+        }
+        canonicalChannelId = String(check.groupId);
+        resolvedTitle = title || check.title || "";
+      } else {
+        const token = await getTelegramBotToken();
+        if (!token) {
+          return Response.json({ ok: false, error: "Сначала подключите Telegram-бота." }, { status: 400 });
+        }
+        const check = await verifyTelegramChannel(token, channelReference);
+        if (!check.ok) {
+          return Response.json({ ok: false, error: check.error ?? "Бот не видит канал." }, { status: 400 });
+        }
+        resolvedTitle = title || check.chat?.title || "";
       }
 
       const existing = await prisma.clientChannel.findFirst({
-        where: { clientId, platform: "telegram", channelId },
+        where: { clientId, platform, channelId: canonicalChannelId },
         select: { id: true },
       });
 
       const channel = existing
         ? await prisma.clientChannel.update({
             where: { id: existing.id },
-            data: { status: "active", title: title || check.chat?.title || null },
+            data: { status: "active", title: resolvedTitle || null },
           })
         : await prisma.clientChannel.create({
-            data: { clientId, platform: "telegram", channelId, title: title || check.chat?.title || null },
+            data: { clientId, platform, channelId: canonicalChannelId, title: resolvedTitle || null },
           });
 
-      summary.channel = { id: channel.id, channelId: channel.channelId, title: channel.title };
+      summary.channel = { id: channel.id, platform: channel.platform, channelId: channel.channelId, title: channel.title };
     }
 
     return Response.json({ ok: true, ...summary });

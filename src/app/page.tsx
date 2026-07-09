@@ -42,6 +42,7 @@ import {
   markPublicationPublishedManual,
   publishPublicationToTelegram,
   saveTelegramBotToken,
+  saveVkToken,
   addClientChannel,
   archiveClientChannel,
   upsertPublicationMetric,
@@ -2728,10 +2729,10 @@ function ReportPublicationRow({ publication }: { publication: ScheduledPublicati
         <form action={publishPublicationToTelegram} className="mt-3">
           <input type="hidden" name="scheduledPublicationId" value={publication.id} />
           <PendingSubmitButton
-            pendingLabel="Публикуем в Telegram..."
+            pendingLabel="Публикуем в канал клиента..."
             className="rounded-full bg-violet-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-violet-700"
           >
-            Опубликовать в Telegram
+            Опубликовать в канал клиента
           </PendingSubmitButton>
         </form>
       ) : null}
@@ -6035,16 +6036,24 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
     .findUnique({ where: { key: "telegram_bot_token" }, select: { id: true } })
     .then(Boolean)
     .catch(() => false);
+  const vkAccountLabel = await prisma.integrationSetting
+    .findUnique({ where: { key: "vk_account_label" }, select: { value: true } })
+    .then((row) => row?.value ?? null)
+    .catch(() => null);
+  const vkTokenSet = await prisma.integrationSetting
+    .findUnique({ where: { key: "vk_access_token" }, select: { id: true } })
+    .then(Boolean)
+    .catch(() => false);
   const telegramClientId = workspaceContext.client ?? null;
   const telegramClientName = clients.find((client) => client.id === telegramClientId)?.name ?? null;
   const telegramChannels = telegramClientId
     ? await prisma.clientChannel
         .findMany({
-          where: { clientId: telegramClientId, platform: "telegram", status: "active" },
+          where: { clientId: telegramClientId, status: "active" },
           orderBy: { createdAt: "asc" },
-          select: { id: true, channelId: true, title: true },
+          select: { id: true, channelId: true, title: true, platform: true },
         })
-        .catch(() => [] as Array<{ id: string; channelId: string; title: string | null }>)
+        .catch(() => [] as Array<{ id: string; channelId: string; title: string | null; platform: string }>)
     : [];
 
   return (
@@ -6448,6 +6457,34 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                     </form>
                   </article>
                   <article className={`${panelClass} p-4`}>
+                    <p className="text-xs font-bold uppercase tracking-[0.1em] text-stone-400">VK</p>
+                    <h3 className="mt-2 font-semibold text-stone-950">
+                      {vkTokenSet ? `VK подключён${vkAccountLabel ? `: ${vkAccountLabel}` : ""}` : "VK не подключён"}
+                    </h3>
+                    <p className="mt-2 text-sm leading-6 text-stone-500">
+                      {vkTokenSet
+                        ? "Токен агентства публикует в сообщества клиентов. Полный текст материала уходит без сокращений."
+                        : "Вставьте токен VK с правами wall, photos, groups, offline — платформа будет публиковать в сообщества клиентов."}
+                    </p>
+                    <form action={saveVkToken} className="mt-3 grid gap-2">
+                      <input
+                        type="password"
+                        name="vkToken"
+                        placeholder={vkTokenSet ? "Вставьте новый токен, чтобы заменить" : "Токен VK"}
+                        className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900"
+                        autoComplete="off"
+                      />
+                      <div>
+                        <PendingSubmitButton
+                          pendingLabel="Проверяем токен..."
+                          className="rounded-full bg-violet-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-violet-700"
+                        >
+                          {vkTokenSet ? "Заменить токен" : "Подключить VK"}
+                        </PendingSubmitButton>
+                      </div>
+                    </form>
+                  </article>
+                  <article className={`${panelClass} p-4`}>
                     <p className="text-xs font-bold uppercase tracking-[0.1em] text-stone-400">Каналы клиента</p>
                     <h3 className="mt-2 font-semibold text-stone-950">{telegramClientName ?? "Клиент не выбран"}</h3>
                     {telegramChannels.length > 0 ? (
@@ -6455,7 +6492,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                         {telegramChannels.map((channel) => (
                           <div key={channel.id} className="flex items-center justify-between gap-2 rounded-md border border-stone-100 bg-stone-50/70 px-3 py-2">
                             <div className="min-w-0">
-                              <p className="truncate text-sm font-semibold text-stone-800">{channel.title || channel.channelId}</p>
+                              <p className="truncate text-sm font-semibold text-stone-800">
+                                <span className="mr-1.5 rounded bg-violet-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-violet-700">{channel.platform === "vk" ? "VK" : "TG"}</span>
+                                {channel.title || channel.channelId}
+                              </p>
                               <p className="truncate text-xs text-stone-400">{channel.channelId}</p>
                             </div>
                             <form action={archiveClientChannel}>
@@ -6469,16 +6509,20 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                       </div>
                     ) : (
                       <p className="mt-2 text-sm leading-6 text-stone-500">
-                        Каналы заполняются при онбординге клиента. Добавьте бота администратором канала, затем укажите адрес канала здесь.
+                        Каналы заполняются при онбординге клиента. Для Telegram добавьте бота администратором канала; для VK токен агентства должен управлять сообществом.
                       </p>
                     )}
                     {telegramClientId ? (
                       <form action={addClientChannel} className="mt-3 grid gap-2">
                         <input type="hidden" name="clientId" value={telegramClientId} />
+                        <select name="platform" className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900">
+                          <option value="telegram">Telegram</option>
+                          <option value="vk">VK</option>
+                        </select>
                         <input
                           type="text"
                           name="channelId"
-                          placeholder="@канал или -100..."
+                          placeholder="@канал / vk.com/сообщество"
                           className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900"
                         />
                         <input

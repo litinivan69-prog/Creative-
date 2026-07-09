@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { fetchAndPrepareImage } from "@/lib/social-images";
 
 export const TELEGRAM_BOT_TOKEN_KEY = "telegram_bot_token";
 export const TELEGRAM_BOT_USERNAME_KEY = "telegram_bot_username";
@@ -67,30 +68,8 @@ function buildMessageUrl(chat: TelegramChat, messageId: number) {
 const TELEGRAM_TEXT_LIMIT = 4096;
 const TELEGRAM_CAPTION_LIMIT = 1024;
 const TELEGRAM_ALBUM_LIMIT = 10;
-const TELEGRAM_IMAGE_MAX_SIDE = 2048;
 
 type SentMessage = { message_id: number; chat: TelegramChat };
-
-/**
- * Downloads a visual and normalizes it for Telegram: EXIF rotation, longest
- * side <= 2048, JPEG. Keeps every image well under Telegram's size limits so
- * albums are never rejected because of oversized generator PNGs.
- */
-async function fetchAndPrepareImage(url: string): Promise<Buffer | null> {
-  try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(20000) });
-    if (!response.ok) return null;
-    const input = Buffer.from(await response.arrayBuffer());
-    const sharp = (await import("sharp")).default;
-    return await sharp(input)
-      .rotate()
-      .resize(TELEGRAM_IMAGE_MAX_SIDE, TELEGRAM_IMAGE_MAX_SIDE, { fit: "inside", withoutEnlargement: true })
-      .jpeg({ quality: 82 })
-      .toBuffer();
-  } catch {
-    return null;
-  }
-}
 
 async function telegramUpload<T>(
   token: string,

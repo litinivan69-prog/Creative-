@@ -1,5 +1,14 @@
 import { prisma } from "@/lib/prisma";
-import { getTelegramBotToken, sendTelegramPost } from "@/lib/telegram";
+import { getIntegrationSetting, getTelegramBotToken, sendTelegramPost } from "@/lib/telegram";
+import { VK_ACCESS_TOKEN_KEY, sendVkPost } from "@/lib/vk";
+
+/** Maps a planned platform name (free text from the plan) to a channel platform. */
+function mapPublicationPlatform(name?: string | null): "vk" | "telegram" | null {
+  if (!name) return null;
+  if (/vk|вконтакт/i.test(name)) return "vk";
+  if (/telegram|телеграм|\btg\b/i.test(name)) return "telegram";
+  return null;
+}
 
 export type TelegramPublishOutcome =
   | {
@@ -64,6 +73,7 @@ export async function publishScheduledPublication(
       id: true,
       clientId: true,
       topic: true,
+      platformName: true,
       publishStatus: true,
       externalUrl: true,
       contentDraft: { select: { draftTitle: true, draftBody: true, telegramBody: true } },
@@ -78,44 +88,85 @@ export async function publishScheduledPublication(
     return { ok: true, url: publication.externalUrl, alreadyPublished: true };
   }
 
-  const token = await getTelegramBotToken();
-  if (!token) {
-    return { ok: false, error: "Сначала подключите Telegram-бота в настройках." };
-  }
-
-  const channel = await prisma.clientChannel.findFirst({
-    where: { clientId: publication.clientId, platform: "telegram", status: "active" },
+  // Pick the client's channel: match the publication's planned platform when
+  // possible, otherwise fall back to Telegram, then to any active channel.
+  const channels = await prisma.clientChannel.findMany({
+    where: { clientId: publication.clientId, status: "active" },
     orderBy: { createdAt: "asc" },
-    select: { channelId: true },
+    select: { channelId: true, platform: true },
   });
 
-  if (!channel) {
-    return { ok: false, error: "У клиента нет подключённого Telegram-канала. Добавьте канал в настройках." };
+  if (channels.length === 0) {
+    return { ok: false, error: "У клиента нет подключённых каналов. Добавьте канал в настройках." };
   }
+
+  const mappedPlatform = mapPublicationPlatform(publication.platformName);
+  const channel =
+    (mappedPlatform ? channels.find((candidate) => candidate.platform === mappedPlatform) : undefined) ??
+    channels.find((candidate) => candidate.platform === "telegram") ??
+    channels[0];
 
   const imageUrls = await collectPublicationImageUrls(publication.id);
+  const eventType = channel.platform === "vk" ? "vk_publish" : "telegram_publish";
 
-  // Prefer the generator's Telegram-length version (standalone post, fits the
-  // caption limit); the long draftBody is reserved for VK and the portal.
-  const telegramBody = publication.contentDraft?.telegramBody?.trim();
+  let result:
+    | { ok: true; url: string; externalId: string; messageId?: number; imagesSent?: number; textTruncated?: boolean }
+    | { ok: false; error: string };
 
-  const result = await sendTelegramPost({
-    token,
-    channelId: channel.channelId,
-    title: telegramBody ? null : publication.contentDraft?.draftTitle || publication.topic,
-    body: telegramBody || publication.contentDraft?.draftBody || "",
-    imageUrls,
-  });
+  if (channel.platform === "vk") {
+    const vkToken = await getIntegrationSetting(VK_ACCESS_TOKEN_KEY);
+    if (!vkToken) {
+      return { ok: false, error: "Сначала подключите VK в настройках." };
+    }
+    // VK gets the FULL text — no caption limit there.
+    const message = [publication.contentDraft?.draftTitle || publication.topic, publication.contentDraft?.draftBody ?? ""]
+      .filter(Boolean)
+      .join("\n\n");
+    const vk = await sendVkPost({
+      token: vkToken,
+      groupId: Number(channel.channelId),
+      message,
+      imageUrls,
+    });
+    result = vk.ok
+      ? { ok: true, url: vk.url, externalId: String(vk.postId), imagesSent: vk.imagesSent }
+      : vk;
+  } else {
+    const token = await getTelegramBotToken();
+    if (!token) {
+      return { ok: false, error: "Сначала подключите Telegram-бота в настройках." };
+    }
+    // Prefer the generator's Telegram-length version (standalone post, fits the
+    // caption limit); the long draftBody is reserved for VK and the portal.
+    const telegramBody = publication.contentDraft?.telegramBody?.trim();
+    const tg = await sendTelegramPost({
+      token,
+      channelId: channel.channelId,
+      title: telegramBody ? null : publication.contentDraft?.draftTitle || publication.topic,
+      body: telegramBody || publication.contentDraft?.draftBody || "",
+      imageUrls,
+    });
+    result = tg.ok
+      ? {
+          ok: true,
+          url: tg.url,
+          externalId: String(tg.messageId),
+          messageId: tg.messageId,
+          imagesSent: tg.imagesSent,
+          textTruncated: tg.textTruncated,
+        }
+      : tg;
+  }
 
   if (!result.ok) {
     await prisma.integrationEvent
       .create({
         data: {
           direction: "outbound",
-          eventType: "telegram_publish",
+          eventType,
           relatedType: "ScheduledPublication",
           relatedId: publication.id,
-          payload: { channelId: channel.channelId, error: result.error },
+          payload: { channelId: channel.channelId, platform: channel.platform, error: result.error },
           status: "failed",
           errorMessage: result.error.slice(0, 500),
           attempts: 1,
@@ -132,19 +183,20 @@ export async function publishScheduledPublication(
         publishStatus: "published",
         publishedAt: new Date(),
         externalUrl: result.url,
-        externalId: String(result.messageId),
+        externalId: result.externalId,
       },
     });
 
     await prisma.integrationEvent.create({
       data: {
         direction: "outbound",
-        eventType: "telegram_publish",
+        eventType,
         relatedType: "ScheduledPublication",
         relatedId: publication.id,
         payload: {
           channelId: channel.channelId,
-          messageId: result.messageId,
+          platform: channel.platform,
+          externalId: result.externalId,
           url: result.url,
           imagesSent: result.imagesSent,
           textTruncated: result.textTruncated ?? false,
@@ -155,7 +207,7 @@ export async function publishScheduledPublication(
       },
     });
   } catch {
-    return { ok: false, error: "Пост вышел в Telegram, но не удалось сохранить результат. Обновите страницу." };
+    return { ok: false, error: "Пост вышел, но не удалось сохранить результат. Обновите страницу." };
   }
 
   return {

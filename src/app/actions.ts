@@ -17,12 +17,14 @@ import { emitIntegrationEvent } from "@/lib/integration-events";
 import {
   TELEGRAM_BOT_TOKEN_KEY,
   TELEGRAM_BOT_USERNAME_KEY,
+  getIntegrationSetting,
   getTelegramBotToken,
   setIntegrationSetting,
   verifyTelegramBotToken,
   verifyTelegramChannel,
 } from "@/lib/telegram";
 import { publishScheduledPublication } from "@/lib/telegram-publish";
+import { VK_ACCESS_TOKEN_KEY, VK_ACCOUNT_LABEL_KEY, verifyVkGroup, verifyVkToken } from "@/lib/vk";
 import { validateBlueprintForPersistence } from "@/lib/blueprint-schema";
 import {
   isSensitiveContent,
@@ -4696,46 +4698,88 @@ export async function saveTelegramBotToken(formData: FormData) {
   redirect(workspaceLocation("settings", { notice: `Бот подключён: @${check.username ?? "bot"}.` }));
 }
 
+export async function saveVkToken(formData: FormData) {
+  const token = formText(formData, "vkToken");
+
+  if (!token) {
+    errorRedirect("Вставьте токен VK (права: wall, photos, groups, offline).", "settings");
+  }
+
+  const check = await verifyVkToken(token);
+  if (!check.ok) {
+    errorRedirect(check.error ?? "VK не принял токен.", "settings");
+  }
+
+  try {
+    await setIntegrationSetting(VK_ACCESS_TOKEN_KEY, token);
+    if (check.label) {
+      await setIntegrationSetting(VK_ACCOUNT_LABEL_KEY, check.label);
+    }
+  } catch {
+    errorRedirect("Не удалось сохранить токен. Попробуйте ещё раз.", "settings");
+  }
+
+  revalidatePath("/");
+  redirect(workspaceLocation("settings", { notice: `VK подключён: ${check.label ?? "аккаунт"}.` }));
+}
+
 export async function addClientChannel(formData: FormData) {
   const clientId = formText(formData, "clientId");
   const channelId = formText(formData, "channelId");
   const title = formText(formData, "title");
+  const platform = formText(formData, "platform") === "vk" ? "vk" : "telegram";
 
   if (!clientId) {
     errorRedirect("Не выбран клиент.", "settings");
   }
   if (!channelId) {
-    errorRedirect("Укажите адрес канала: @username или числовой ID.", "settings");
+    errorRedirect("Укажите адрес канала или сообщества.", "settings");
   }
 
-  const token = await getTelegramBotToken();
-  if (!token) {
-    errorRedirect("Сначала подключите Telegram-бота в настройках.", "settings");
-  }
+  let canonicalChannelId = channelId;
+  let resolvedTitle = title;
 
-  const check = await verifyTelegramChannel(token, channelId);
-  if (!check.ok) {
-    errorRedirect(check.error ?? "Бот не видит канал.", "settings");
+  if (platform === "vk") {
+    const vkToken = await getIntegrationSetting(VK_ACCESS_TOKEN_KEY);
+    if (!vkToken) {
+      errorRedirect("Сначала подключите VK в настройках.", "settings");
+    }
+    const check = await verifyVkGroup(vkToken, channelId);
+    if (!check.ok || !check.groupId) {
+      errorRedirect(check.error ?? "VK-сообщество не найдено.", "settings");
+    }
+    canonicalChannelId = String(check.groupId);
+    resolvedTitle = title || check.title || "";
+  } else {
+    const token = await getTelegramBotToken();
+    if (!token) {
+      errorRedirect("Сначала подключите Telegram-бота в настройках.", "settings");
+    }
+    const check = await verifyTelegramChannel(token, channelId);
+    if (!check.ok) {
+      errorRedirect(check.error ?? "Бот не видит канал.", "settings");
+    }
+    resolvedTitle = title || check.chat?.title || "";
   }
 
   try {
     const existing = await prisma.clientChannel.findFirst({
-      where: { clientId, platform: "telegram", channelId },
+      where: { clientId, platform, channelId: canonicalChannelId },
       select: { id: true },
     });
 
     if (existing) {
       await prisma.clientChannel.update({
         where: { id: existing.id },
-        data: { status: "active", title: title || check.chat?.title || null },
+        data: { status: "active", title: resolvedTitle || null },
       });
     } else {
       await prisma.clientChannel.create({
         data: {
           clientId,
-          platform: "telegram",
-          channelId,
-          title: title || check.chat?.title || null,
+          platform,
+          channelId: canonicalChannelId,
+          title: resolvedTitle || null,
         },
       });
     }
@@ -4744,7 +4788,7 @@ export async function addClientChannel(formData: FormData) {
   }
 
   revalidatePath("/");
-  redirect(workspaceLocation("settings", { clientId, notice: `Канал «${check.chat?.title ?? channelId}» подключён.` }));
+  redirect(workspaceLocation("settings", { clientId, notice: `Канал «${resolvedTitle || canonicalChannelId}» подключён.` }));
 }
 
 export async function archiveClientChannel(formData: FormData) {
