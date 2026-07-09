@@ -2,8 +2,45 @@ import { prisma } from "@/lib/prisma";
 import { getTelegramBotToken, sendTelegramPost } from "@/lib/telegram";
 
 export type TelegramPublishOutcome =
-  | { ok: true; url: string; messageId?: number; alreadyPublished?: boolean }
+  | { ok: true; url: string; messageId?: number; alreadyPublished?: boolean; imagesSent?: number }
   | { ok: false; error: string };
+
+/**
+ * Active visuals for a publication, following the carousel rules:
+ * carousel_slide assets are the required visuals (one image per slide);
+ * otherwise non-legacy assets; best variant = approved one, else the latest.
+ */
+async function collectPublicationImageUrls(scheduledPublicationId: string): Promise<string[]> {
+  const assets = await prisma.creativeAsset
+    .findMany({
+      where: { scheduledPublicationId },
+      orderBy: { createdAt: "asc" },
+      select: {
+        assetType: true,
+        notes: true,
+        generatedVariants: {
+          orderBy: { createdAt: "desc" },
+          select: { imageUrl: true, status: true },
+        },
+      },
+    })
+    .catch(() => []);
+
+  const slides = assets.filter((asset) => asset.assetType === "carousel_slide");
+  const activeAssets =
+    slides.length > 0
+      ? slides
+      : assets.filter((asset) => !(asset.notes ?? "").includes("legacyCombinedCarouselAsset=true"));
+
+  return activeAssets
+    .map((asset) => {
+      const variant =
+        asset.generatedVariants.find((candidate) => candidate.status === "approved") ??
+        asset.generatedVariants[0];
+      return variant?.imageUrl ?? null;
+    })
+    .filter((url): url is string => Boolean(url));
+}
 
 /**
  * Core publish flow shared by the manager UI action and the integration API:
@@ -47,11 +84,14 @@ export async function publishScheduledPublication(scheduledPublicationId: string
     return { ok: false, error: "У клиента нет подключённого Telegram-канала. Добавьте канал в настройках." };
   }
 
+  const imageUrls = await collectPublicationImageUrls(publication.id);
+
   const result = await sendTelegramPost({
     token,
     channelId: channel.channelId,
     title: publication.contentDraft?.draftTitle || publication.topic,
     body: publication.contentDraft?.draftBody ?? "",
+    imageUrls,
   });
 
   if (!result.ok) {
@@ -89,7 +129,7 @@ export async function publishScheduledPublication(scheduledPublicationId: string
         eventType: "telegram_publish",
         relatedType: "ScheduledPublication",
         relatedId: publication.id,
-        payload: { channelId: channel.channelId, messageId: result.messageId, url: result.url },
+        payload: { channelId: channel.channelId, messageId: result.messageId, url: result.url, imagesSent: result.imagesSent },
         status: "sent",
         sentAt: new Date(),
         attempts: 1,
@@ -99,5 +139,5 @@ export async function publishScheduledPublication(scheduledPublicationId: string
     return { ok: false, error: "Пост вышел в Telegram, но не удалось сохранить результат. Обновите страницу." };
   }
 
-  return { ok: true, url: result.url, messageId: result.messageId };
+  return { ok: true, url: result.url, messageId: result.messageId, imagesSent: result.imagesSent };
 }
