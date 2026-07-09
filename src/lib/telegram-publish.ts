@@ -2,7 +2,14 @@ import { prisma } from "@/lib/prisma";
 import { getTelegramBotToken, sendTelegramPost } from "@/lib/telegram";
 
 export type TelegramPublishOutcome =
-  | { ok: true; url: string; messageId?: number; alreadyPublished?: boolean; imagesSent?: number }
+  | {
+      ok: true;
+      url: string;
+      messageId?: number;
+      alreadyPublished?: boolean;
+      imagesSent?: number;
+      textTruncated?: boolean;
+    }
   | { ok: false; error: string };
 
 /**
@@ -131,7 +138,13 @@ export async function publishScheduledPublication(
         eventType: "telegram_publish",
         relatedType: "ScheduledPublication",
         relatedId: publication.id,
-        payload: { channelId: channel.channelId, messageId: result.messageId, url: result.url, imagesSent: result.imagesSent },
+        payload: {
+          channelId: channel.channelId,
+          messageId: result.messageId,
+          url: result.url,
+          imagesSent: result.imagesSent,
+          textTruncated: result.textTruncated ?? false,
+        },
         status: "sent",
         sentAt: new Date(),
         attempts: 1,
@@ -141,5 +154,11 @@ export async function publishScheduledPublication(
     return { ok: false, error: "Пост вышел в Telegram, но не удалось сохранить результат. Обновите страницу." };
   }
 
-  return { ok: true, url: result.url, messageId: result.messageId, imagesSent: result.imagesSent };
+  return {
+    ok: true,
+    url: result.url,
+    messageId: result.messageId,
+    imagesSent: result.imagesSent,
+    textTruncated: result.textTruncated,
+  };
 }
