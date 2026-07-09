@@ -65,23 +65,94 @@ function buildMessageUrl(chat: TelegramChat, messageId: number) {
 }
 
 const TELEGRAM_TEXT_LIMIT = 4096;
+const TELEGRAM_CAPTION_LIMIT = 1024;
+const TELEGRAM_ALBUM_LIMIT = 10;
 
+type SentMessage = { message_id: number; chat: TelegramChat };
+
+export type TelegramPostResult =
+  | { ok: true; messageId: number; url: string; imagesSent: number }
+  | { ok: false; error: string };
+
+/**
+ * Posts a material to a channel: single visual -> sendPhoto (caption when it fits),
+ * carousel -> sendMediaGroup album, no visuals -> plain text. When the text is too
+ * long for a caption it follows as a separate message. Image failures gracefully
+ * fall back to a text post so publishing never breaks because of a visual.
+ */
 export async function sendTelegramPost(options: {
   token: string;
   channelId: string;
   title?: string | null;
   body: string;
-}): Promise<{ ok: true; messageId: number; url: string } | { ok: false; error: string }> {
+  imageUrls?: string[];
+}): Promise<TelegramPostResult> {
   const text = [options.title?.trim(), options.body.trim()]
     .filter(Boolean)
     .join("\n\n")
     .slice(0, TELEGRAM_TEXT_LIMIT);
 
-  if (!text) {
+  const images = (options.imageUrls ?? [])
+    .filter((url) => /^https?:\/\//.test(url))
+    .slice(0, TELEGRAM_ALBUM_LIMIT);
+
+  if (!text && images.length === 0) {
     return { ok: false, error: "У материала нет текста для публикации." };
   }
 
-  const res = await telegramCall<{ message_id: number; chat: TelegramChat }>(options.token, "sendMessage", {
+  const captionFits = text.length > 0 && text.length <= TELEGRAM_CAPTION_LIMIT;
+
+  const sendFollowUpText = async () => {
+    if (text && !captionFits) {
+      await telegramCall(options.token, "sendMessage", { chat_id: options.channelId, text });
+    }
+  };
+
+  if (images.length === 1) {
+    const res = await telegramCall<SentMessage>(options.token, "sendPhoto", {
+      chat_id: options.channelId,
+      photo: images[0],
+      ...(captionFits ? { caption: text } : {}),
+    });
+    if (res.ok) {
+      await sendFollowUpText();
+      return {
+        ok: true,
+        messageId: res.result.message_id,
+        url: buildMessageUrl(res.result.chat, res.result.message_id),
+        imagesSent: 1,
+      };
+    }
+  }
+
+  if (images.length > 1) {
+    const media = images.map((url, index) => ({
+      type: "photo",
+      media: url,
+      ...(index === 0 && captionFits ? { caption: text } : {}),
+    }));
+    const res = await telegramCall<SentMessage[]>(options.token, "sendMediaGroup", {
+      chat_id: options.channelId,
+      media,
+    });
+    if (res.ok && res.result.length > 0) {
+      await sendFollowUpText();
+      const first = res.result[0];
+      return {
+        ok: true,
+        messageId: first.message_id,
+        url: buildMessageUrl(first.chat, first.message_id),
+        imagesSent: res.result.length,
+      };
+    }
+  }
+
+  // No images, or the image send failed — post as text so publishing still succeeds.
+  if (!text) {
+    return { ok: false, error: "Telegram не принял визуалы материала." };
+  }
+
+  const res = await telegramCall<SentMessage>(options.token, "sendMessage", {
     chat_id: options.channelId,
     text,
   });
@@ -94,5 +165,6 @@ export async function sendTelegramPost(options: {
     ok: true,
     messageId: res.result.message_id,
     url: buildMessageUrl(res.result.chat, res.result.message_id),
+    imagesSent: 0,
   };
 }
