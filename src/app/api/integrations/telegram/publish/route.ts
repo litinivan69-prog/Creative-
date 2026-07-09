@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error: "Неверный секрет." }, { status: 401 });
   }
 
-  let body: { scheduledPublicationId?: unknown };
+  let body: { scheduledPublicationId?: unknown; force?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -27,7 +27,9 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error: "Не указан scheduledPublicationId." }, { status: 400 });
   }
 
-  const outcome = await publishScheduledPublication(scheduledPublicationId);
+  const outcome = await publishScheduledPublication(scheduledPublicationId, {
+    force: body.force === true,
+  });
 
   if (!outcome.ok) {
     return Response.json({ ok: false, error: outcome.error }, { status: 400 });

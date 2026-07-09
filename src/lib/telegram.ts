@@ -145,6 +145,30 @@ export async function sendTelegramPost(options: {
         imagesSent: res.result.length,
       };
     }
+
+    // Album rejected (often one oversized image) — post photos one by one, skipping bad ones.
+    let firstSent: SentMessage | null = null;
+    let sentCount = 0;
+    for (const [index, url] of images.entries()) {
+      const single = await telegramCall<SentMessage>(options.token, "sendPhoto", {
+        chat_id: options.channelId,
+        photo: url,
+        ...(index === 0 && captionFits ? { caption: text } : {}),
+      });
+      if (single.ok) {
+        firstSent = firstSent ?? single.result;
+        sentCount += 1;
+      }
+    }
+    if (firstSent) {
+      await sendFollowUpText();
+      return {
+        ok: true,
+        messageId: firstSent.message_id,
+        url: buildMessageUrl(firstSent.chat, firstSent.message_id),
+        imagesSent: sentCount,
+      };
+    }
   }
 
   // No images, or the image send failed — post as text so publishing still succeeds.
