@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getIntegrationSetting, getTelegramBotToken, sendTelegramPost } from "@/lib/telegram";
 import { VK_ACCESS_TOKEN_KEY, sendVkPost } from "@/lib/vk";
@@ -71,7 +72,7 @@ async function collectPublicationImageUrls(scheduledPublicationId: string): Prom
 async function logIntegrationEvent(data: {
   eventType: string;
   relatedId: string;
-  payload: Record<string, unknown>;
+  payload: Prisma.InputJsonValue;
   ok: boolean;
   errorMessage?: string;
 }) {
