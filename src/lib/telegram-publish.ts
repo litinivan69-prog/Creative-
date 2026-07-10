@@ -10,16 +10,27 @@ function mapPublicationPlatform(name?: string | null): "vk" | "telegram" | null 
   return null;
 }
 
+export type PlatformPublishResult = {
+  platform: string;
+  ok: boolean;
+  url?: string;
+  externalId?: string;
+  imagesSent?: number;
+  textTruncated?: boolean;
+  alreadyPublished?: boolean;
+  error?: string;
+};
+
 export type TelegramPublishOutcome =
   | {
       ok: true;
       url: string;
-      messageId?: number;
       alreadyPublished?: boolean;
       imagesSent?: number;
       textTruncated?: boolean;
+      results: PlatformPublishResult[];
     }
-  | { ok: false; error: string };
+  | { ok: false; error: string; results?: PlatformPublishResult[] };
 
 /**
  * Active visuals for a publication, following the carousel rules:
@@ -57,11 +68,36 @@ async function collectPublicationImageUrls(scheduledPublicationId: string): Prom
     .filter((url): url is string => Boolean(url));
 }
 
+async function logIntegrationEvent(data: {
+  eventType: string;
+  relatedId: string;
+  payload: Record<string, unknown>;
+  ok: boolean;
+  errorMessage?: string;
+}) {
+  await prisma.integrationEvent
+    .create({
+      data: {
+        direction: "outbound",
+        eventType: data.eventType,
+        relatedType: "ScheduledPublication",
+        relatedId: data.relatedId,
+        payload: data.payload,
+        status: data.ok ? "sent" : "failed",
+        sentAt: data.ok ? new Date() : null,
+        errorMessage: data.errorMessage?.slice(0, 500) ?? null,
+        attempts: 1,
+      },
+    })
+    .catch(() => {});
+}
+
 /**
- * Core publish flow shared by the manager UI action and the integration API:
- * resolves the client's active Telegram channel, posts the draft, persists
- * the result on ScheduledPublication and logs an IntegrationEvent.
- * Idempotent: an already published item is not posted twice.
+ * Cross-posting publish: sends the material to EVERY active client channel
+ * (one post per platform — Telegram gets the caption-length version, VK the
+ * full text). Idempotent per platform via PublicationResult; `force` re-posts.
+ * Legacy fields on ScheduledPublication keep pointing at the primary platform
+ * (the one planned for the material) for existing reports/UI.
  */
 export async function publishScheduledPublication(
   scheduledPublicationId: string,
@@ -77,6 +113,7 @@ export async function publishScheduledPublication(
       publishStatus: true,
       externalUrl: true,
       contentDraft: { select: { draftTitle: true, draftBody: true, telegramBody: true } },
+      results: { select: { platform: true, externalUrl: true, externalId: true } },
     },
   });
 
@@ -84,137 +121,160 @@ export async function publishScheduledPublication(
     return { ok: false, error: "Публикация не найдена." };
   }
 
-  if (!options.force && publication.publishStatus === "published" && publication.externalUrl) {
-    return { ok: true, url: publication.externalUrl, alreadyPublished: true };
-  }
-
-  // Pick the client's channel: match the publication's planned platform when
-  // possible, otherwise fall back to Telegram, then to any active channel.
   const channels = await prisma.clientChannel.findMany({
     where: { clientId: publication.clientId, status: "active" },
     orderBy: { createdAt: "asc" },
-    select: { channelId: true, platform: true },
+    select: { id: true, channelId: true, platform: true },
   });
 
   if (channels.length === 0) {
-    return { ok: false, error: "У клиента нет подключённых каналов. Добавьте канал в настройках." };
+    return { ok: false, error: "У клиента нет подключённых каналов. Добавьте каналы в настройках." };
   }
 
-  const mappedPlatform = mapPublicationPlatform(publication.platformName);
-  const channel =
-    (mappedPlatform ? channels.find((candidate) => candidate.platform === mappedPlatform) : undefined) ??
-    channels.find((candidate) => candidate.platform === "telegram") ??
-    channels[0];
+  // One target channel per platform (first added wins).
+  const targets = [...new Map(channels.map((channel) => [channel.platform, channel])).values()];
+  const primaryPlatform = mapPublicationPlatform(publication.platformName) ?? "telegram";
+  const existingByPlatform = new Map(publication.results.map((result) => [result.platform, result]));
 
   const imageUrls = await collectPublicationImageUrls(publication.id);
-  const eventType = channel.platform === "vk" ? "vk_publish" : "telegram_publish";
+  const results: PlatformPublishResult[] = [];
 
-  let result:
-    | { ok: true; url: string; externalId: string; messageId?: number; imagesSent?: number; textTruncated?: boolean }
-    | { ok: false; error: string };
+  for (const channel of targets) {
+    const existing = existingByPlatform.get(channel.platform);
+    if (existing && !options.force) {
+      results.push({
+        platform: channel.platform,
+        ok: true,
+        alreadyPublished: true,
+        url: existing.externalUrl,
+        externalId: existing.externalId,
+      });
+      continue;
+    }
 
-  if (channel.platform === "vk") {
-    const vkToken = await getIntegrationSetting(VK_ACCESS_TOKEN_KEY);
-    if (!vkToken) {
-      return { ok: false, error: "Сначала подключите VK в настройках." };
-    }
-    // VK gets the FULL text — no caption limit there.
-    const message = [publication.contentDraft?.draftTitle || publication.topic, publication.contentDraft?.draftBody ?? ""]
-      .filter(Boolean)
-      .join("\n\n");
-    const vk = await sendVkPost({
-      token: vkToken,
-      groupId: Number(channel.channelId),
-      message,
-      imageUrls,
-    });
-    result = vk.ok
-      ? { ok: true, url: vk.url, externalId: String(vk.postId), imagesSent: vk.imagesSent }
-      : vk;
-  } else {
-    const token = await getTelegramBotToken();
-    if (!token) {
-      return { ok: false, error: "Сначала подключите Telegram-бота в настройках." };
-    }
-    // Prefer the generator's Telegram-length version (standalone post, fits the
-    // caption limit); the long draftBody is reserved for VK and the portal.
-    const telegramBody = publication.contentDraft?.telegramBody?.trim();
-    const tg = await sendTelegramPost({
-      token,
-      channelId: channel.channelId,
-      title: telegramBody ? null : publication.contentDraft?.draftTitle || publication.topic,
-      body: telegramBody || publication.contentDraft?.draftBody || "",
-      imageUrls,
-    });
-    result = tg.ok
-      ? {
+    if (channel.platform === "vk") {
+      const vkToken = await getIntegrationSetting(VK_ACCESS_TOKEN_KEY);
+      if (!vkToken) {
+        results.push({ platform: "vk", ok: false, error: "VK не подключён в настройках." });
+        continue;
+      }
+      const message = [publication.contentDraft?.draftTitle || publication.topic, publication.contentDraft?.draftBody ?? ""]
+        .filter(Boolean)
+        .join("\n\n");
+      const vk = await sendVkPost({ token: vkToken, groupId: Number(channel.channelId), message, imageUrls });
+      if (vk.ok) {
+        results.push({ platform: "vk", ok: true, url: vk.url, externalId: String(vk.postId), imagesSent: vk.imagesSent });
+      } else {
+        results.push({ platform: "vk", ok: false, error: vk.error });
+      }
+      await logIntegrationEvent({
+        eventType: "vk_publish",
+        relatedId: publication.id,
+        payload: vk.ok
+          ? { channelId: channel.channelId, url: vk.url, imagesSent: vk.imagesSent }
+          : { channelId: channel.channelId, error: vk.error },
+        ok: vk.ok,
+        errorMessage: vk.ok ? undefined : vk.error,
+      });
+    } else {
+      const token = await getTelegramBotToken();
+      if (!token) {
+        results.push({ platform: "telegram", ok: false, error: "Telegram-бот не подключён в настройках." });
+        continue;
+      }
+      const telegramBody = publication.contentDraft?.telegramBody?.trim();
+      const tg = await sendTelegramPost({
+        token,
+        channelId: channel.channelId,
+        title: telegramBody ? null : publication.contentDraft?.draftTitle || publication.topic,
+        body: telegramBody || publication.contentDraft?.draftBody || "",
+        imageUrls,
+      });
+      if (tg.ok) {
+        results.push({
+          platform: "telegram",
           ok: true,
           url: tg.url,
           externalId: String(tg.messageId),
-          messageId: tg.messageId,
           imagesSent: tg.imagesSent,
           textTruncated: tg.textTruncated,
-        }
-      : tg;
+        });
+      } else {
+        results.push({ platform: "telegram", ok: false, error: tg.error });
+      }
+      await logIntegrationEvent({
+        eventType: "telegram_publish",
+        relatedId: publication.id,
+        payload: tg.ok
+          ? { channelId: channel.channelId, url: tg.url, imagesSent: tg.imagesSent, textTruncated: tg.textTruncated ?? false }
+          : { channelId: channel.channelId, error: tg.error },
+        ok: tg.ok,
+        errorMessage: tg.ok ? undefined : tg.error,
+      });
+    }
+
+    // Persist the per-platform result (idempotent upsert).
+    const sent = results[results.length - 1];
+    if (sent.ok && !sent.alreadyPublished && sent.url && sent.externalId) {
+      await prisma.publicationResult
+        .upsert({
+          where: {
+            scheduledPublicationId_platform: {
+              scheduledPublicationId: publication.id,
+              platform: sent.platform,
+            },
+          },
+          update: {
+            externalId: sent.externalId,
+            externalUrl: sent.url,
+            imagesSent: sent.imagesSent ?? 0,
+            textTruncated: sent.textTruncated ?? false,
+            channelRecordId: channel.id,
+            publishedAt: new Date(),
+          },
+          create: {
+            scheduledPublicationId: publication.id,
+            clientId: publication.clientId,
+            platform: sent.platform,
+            channelRecordId: channel.id,
+            externalId: sent.externalId,
+            externalUrl: sent.url,
+            imagesSent: sent.imagesSent ?? 0,
+            textTruncated: sent.textTruncated ?? false,
+          },
+        })
+        .catch(() => {});
+    }
   }
 
-  if (!result.ok) {
-    await prisma.integrationEvent
-      .create({
-        data: {
-          direction: "outbound",
-          eventType,
-          relatedType: "ScheduledPublication",
-          relatedId: publication.id,
-          payload: { channelId: channel.channelId, platform: channel.platform, error: result.error },
-          status: "failed",
-          errorMessage: result.error.slice(0, 500),
-          attempts: 1,
-        },
-      })
-      .catch(() => {});
-    return { ok: false, error: result.error };
+  const successes = results.filter((result) => result.ok && result.url);
+  if (successes.length === 0) {
+    const firstError = results.find((result) => !result.ok)?.error ?? "Не удалось опубликовать.";
+    return { ok: false, error: firstError, results };
   }
 
+  // Legacy single-value fields keep pointing at the primary (planned) platform.
+  const primary = successes.find((result) => result.platform === primaryPlatform) ?? successes[0];
   try {
     await prisma.scheduledPublication.update({
       where: { id: publication.id },
       data: {
         publishStatus: "published",
         publishedAt: new Date(),
-        externalUrl: result.url,
-        externalId: result.externalId,
-      },
-    });
-
-    await prisma.integrationEvent.create({
-      data: {
-        direction: "outbound",
-        eventType,
-        relatedType: "ScheduledPublication",
-        relatedId: publication.id,
-        payload: {
-          channelId: channel.channelId,
-          platform: channel.platform,
-          externalId: result.externalId,
-          url: result.url,
-          imagesSent: result.imagesSent,
-          textTruncated: result.textTruncated ?? false,
-        },
-        status: "sent",
-        sentAt: new Date(),
-        attempts: 1,
+        externalUrl: primary.url,
+        externalId: primary.externalId ?? null,
       },
     });
   } catch {
-    return { ok: false, error: "Пост вышел, но не удалось сохранить результат. Обновите страницу." };
+    // Result rows are already persisted; legacy pointers can be refreshed later.
   }
 
   return {
     ok: true,
-    url: result.url,
-    messageId: result.messageId,
-    imagesSent: result.imagesSent,
-    textTruncated: result.textTruncated,
+    url: primary.url as string,
+    alreadyPublished: successes.every((result) => result.alreadyPublished),
+    imagesSent: primary.imagesSent,
+    textTruncated: primary.textTruncated,
+    results,
   };
 }
