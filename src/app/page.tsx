@@ -45,6 +45,8 @@ import {
   saveVkToken,
   addClientChannel,
   archiveClientChannel,
+  collectMetricsNow,
+  toggleAutopublishOnApproval,
   upsertPublicationMetric,
   rejectDraft,
   rejectCreativeVariant,
@@ -1164,6 +1166,7 @@ type ScheduledPublicationPreview = {
   publishStatus: string | null;
   publishedAt: Date | null;
   externalUrl: string | null;
+  results: Array<{ platform: string; externalUrl: string }>;
   metrics: Array<{
     likes: number | null;
     comments: number | null;
@@ -2743,7 +2746,21 @@ function ReportPublicationRow({ publication }: { publication: ScheduledPublicati
         <input type="url" name="externalUrl" defaultValue={publication.externalUrl ?? ""} placeholder="Ссылка на пост" className="min-w-0 flex-1 rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900" />
         <button type="submit" className="rounded-full border border-stone-200 bg-white px-4 py-2 text-xs font-semibold text-stone-600 transition hover:border-violet-200 hover:text-violet-700">Отметить вручную</button>
       </form>
-      {publication.externalUrl ? (
+      {publication.results.length > 0 ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {publication.results.map((result) => (
+            <a
+              key={result.platform}
+              href={result.externalUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-semibold text-violet-700 hover:bg-violet-100"
+            >
+              {result.platform === "vk" ? "VK" : "Telegram"} ↗
+            </a>
+          ))}
+        </div>
+      ) : publication.externalUrl ? (
         <a href={publication.externalUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex text-xs font-semibold text-violet-700 hover:text-violet-900">Открыть пост ↗</a>
       ) : null}
 
@@ -3027,14 +3044,24 @@ function MonthlyClientReport({
               Запланировано {report.planned} · опубликовано {report.published} ({report.publishRate}%). Метрики вводятся вручную; позже их будет присылать n8n в те же поля.
             </p>
           </div>
-          {downloadHref ? (
-            <a href={downloadHref} className="inline-flex shrink-0 items-center gap-2 rounded-full bg-violet-600 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-violet-700">
-              Скачать отчёт за месяц
-              <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" aria-hidden="true">
-                <path d="M12 4v11m0 0 4-4m-4 4-4-4M5 20h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </a>
-          ) : null}
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <form action={collectMetricsNow}>
+              <PendingSubmitButton
+                pendingLabel="Собираем метрики..."
+                className="rounded-full border border-stone-200 bg-white px-4 py-2.5 text-xs font-semibold text-stone-700 transition hover:border-violet-200 hover:text-violet-700"
+              >
+                Обновить метрики
+              </PendingSubmitButton>
+            </form>
+            {downloadHref ? (
+              <a href={downloadHref} className="inline-flex items-center gap-2 rounded-full bg-violet-600 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-violet-700">
+                Скачать отчёт за месяц
+                <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" aria-hidden="true">
+                  <path d="M12 4v11m0 0 4-4m-4 4-4-4M5 20h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </a>
+            ) : null}
+          </div>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -5817,6 +5844,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                       orderBy: { capturedAt: "desc" },
                       take: 1,
                     },
+                    results: {
+                      select: { platform: true, externalUrl: true },
+                    },
                     creativeAssets: {
                       include: {
                         generatedVariants: {
@@ -5916,6 +5946,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                     metrics: {
                       orderBy: { capturedAt: "desc" },
                       take: 1,
+                    },
+                    results: {
+                      select: { platform: true, externalUrl: true },
                     },
                     creativeAssets: {
                       include: {
@@ -6043,6 +6076,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
   const vkTokenSet = await prisma.integrationSetting
     .findUnique({ where: { key: "vk_access_token" }, select: { id: true } })
     .then(Boolean)
+    .catch(() => false);
+  const autopublishEnabled = await prisma.integrationSetting
+    .findUnique({ where: { key: "autopublish_on_client_approval" }, select: { value: true } })
+    .then((row) => row?.value === "true")
     .catch(() => false);
   const telegramClientId = workspaceContext.client ?? null;
   const telegramClientName = clients.find((client) => client.id === telegramClientId)?.name ?? null;
@@ -6482,6 +6519,28 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                           {vkTokenSet ? "Заменить токен" : "Подключить VK"}
                         </PendingSubmitButton>
                       </div>
+                    </form>
+                  </article>
+                  <article className={`${panelClass} p-4`}>
+                    <p className="text-xs font-bold uppercase tracking-[0.1em] text-stone-400">Автопубликация</p>
+                    <h3 className="mt-2 font-semibold text-stone-950">{autopublishEnabled ? "Включена" : "Выключена"}</h3>
+                    <p className="mt-2 text-sm leading-6 text-stone-500">
+                      {autopublishEnabled
+                        ? "Согласованный клиентом материал сразу публикуется во все каналы. Работает только для материалов с допуском autopublish (чувствительные темы — всегда вручную)."
+                        : "Когда включено: клиент нажимает «Подтвердить» в портале — и материал сам уходит в Telegram и VK (если у материала есть допуск autopublish)."}
+                    </p>
+                    <form action={toggleAutopublishOnApproval} className="mt-3">
+                      <input type="hidden" name="enable" value={autopublishEnabled ? "false" : "true"} />
+                      <PendingSubmitButton
+                        pendingLabel="Сохраняем..."
+                        className={
+                          autopublishEnabled
+                            ? "rounded-full border border-stone-200 bg-white px-4 py-2 text-xs font-semibold text-stone-700 transition hover:border-rose-200 hover:text-rose-700"
+                            : "rounded-full bg-violet-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-violet-700"
+                        }
+                      >
+                        {autopublishEnabled ? "Выключить" : "Включить"}
+                      </PendingSubmitButton>
                     </form>
                   </article>
                   <article className={`${panelClass} p-4`}>

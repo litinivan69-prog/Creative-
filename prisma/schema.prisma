@@ -313,11 +313,32 @@ model ScheduledPublication {
   generatedCreativeVariants GeneratedCreativeVariant[]
   generationJobs             GenerationJob[]
   metrics                    PublicationMetric[]
+  results                    PublicationResult[]
 
   @@index([clientId])
   @@index([monthlyPlanId])
   @@index([contentDraftId])
   @@index([status])
+}
+
+model PublicationResult {
+  id                     String               @id @default(cuid())
+  scheduledPublicationId String
+  clientId               String
+  platform               String
+  channelRecordId        String?
+  externalId             String
+  externalUrl            String
+  imagesSent             Int                  @default(0)
+  textTruncated          Boolean              @default(false)
+  publishedAt            DateTime             @default(now())
+  createdAt              DateTime             @default(now())
+  scheduledPublication   ScheduledPublication @relation(fields: [scheduledPublicationId], references: [id], onDelete: Cascade)
+
+  @@unique([scheduledPublicationId, platform])
+  @@index([clientId])
+  @@index([platform])
+  @@index([publishedAt])
 }
 
 model CreativeAsset {

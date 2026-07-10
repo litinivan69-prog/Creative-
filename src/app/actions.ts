@@ -24,6 +24,7 @@ import {
   verifyTelegramChannel,
 } from "@/lib/telegram";
 import { publishScheduledPublication } from "@/lib/telegram-publish";
+import { collectPublicationMetrics } from "@/lib/metrics-collect";
 import { VK_ACCESS_TOKEN_KEY, VK_ACCOUNT_LABEL_KEY, verifyVkGroup, verifyVkToken } from "@/lib/vk";
 import { validateBlueprintForPersistence } from "@/lib/blueprint-schema";
 import {
@@ -678,6 +679,41 @@ async function updateDraftWorkflow(
   redirect(workspaceLocation(returnViewFromForm(formData, "approvals"), { blueprintId: draft.blueprintId, planId: draft.monthlyPlanId, notice: update.notice }));
 }
 
+const AUTOPUBLISH_SETTING_KEY = "autopublish_on_client_approval";
+
+/**
+ * Auto-publish after client approval: only when the manager enabled the toggle
+ * AND the draft is autopublish-eligible (risk gates from generation stay in force).
+ * Returns a replacement notice, or null when nothing was published.
+ */
+async function maybeAutopublishAfterApproval(contentDraftId: string): Promise<string | null> {
+  try {
+    const enabled = (await getIntegrationSetting(AUTOPUBLISH_SETTING_KEY)) === "true";
+    if (!enabled) return null;
+
+    const draft = await prisma.contentDraft.findUnique({
+      where: { id: contentDraftId },
+      select: {
+        autopublishEligible: true,
+        scheduledPublications: { select: { id: true }, take: 1 },
+      },
+    });
+
+    if (!draft?.autopublishEligible) return null;
+    const publicationId = draft.scheduledPublications[0]?.id;
+    if (!publicationId) return null;
+
+    const outcome = await publishScheduledPublication(publicationId);
+    if (outcome.ok) {
+      const platforms = outcome.results.filter((r) => r.ok).map((r) => (r.platform === "vk" ? "VK" : "Telegram"));
+      return `Материал согласован и опубликован: ${platforms.join(" + ")}.`;
+    }
+    return "Материал согласован. Автопубликация не удалась — команда опубликует вручную.";
+  } catch {
+    return null;
+  }
+}
+
 async function updateDraftWorkflowFromPortal(
   formData: FormData,
   update: {
@@ -738,9 +774,14 @@ async function updateDraftWorkflowFromPortal(
     }),
   ]);
 
+  let notice = update.notice;
+  if (update.status === "approved") {
+    notice = (await maybeAutopublishAfterApproval(draft.id)) ?? update.notice;
+  }
+
   revalidatePath("/");
   revalidatePath(portalLocation(token));
-  redirect(portalLocation(token, { notice: update.notice }));
+  redirect(portalLocation(token, { notice }));
 }
 
 export async function createClientPortalLink(formData: FormData) {
@@ -4696,6 +4737,41 @@ export async function saveTelegramBotToken(formData: FormData) {
 
   revalidatePath("/");
   redirect(workspaceLocation("settings", { notice: `Бот подключён: @${check.username ?? "bot"}.` }));
+}
+
+export async function toggleAutopublishOnApproval(formData: FormData) {
+  const enable = formText(formData, "enable") === "true";
+
+  try {
+    await setIntegrationSetting(AUTOPUBLISH_SETTING_KEY, enable ? "true" : "false");
+  } catch {
+    errorRedirect("Не удалось сохранить настройку.", "settings");
+  }
+
+  revalidatePath("/");
+  redirect(
+    workspaceLocation("settings", {
+      notice: enable
+        ? "Автопубликация включена: согласованные клиентом материалы будут публиковаться сами (только с допуском autopublish)."
+        : "Автопубликация выключена — публикация только вручную.",
+    }),
+  );
+}
+
+export async function collectMetricsNow() {
+  const summary = await collectPublicationMetrics().catch(() => null);
+
+  revalidatePath("/");
+
+  if (!summary) {
+    redirect(workspaceLocation("reports", { error: "Не удалось собрать метрики. Попробуйте ещё раз." }));
+  }
+
+  redirect(
+    workspaceLocation("reports", {
+      notice: `Метрики обновлены: VK ${summary.vkCollected}, Telegram ${summary.telegramCollected}${summary.skipped ? `, пропущено ${summary.skipped}` : ""}.`,
+    }),
+  );
 }
 
 export async function saveVkToken(formData: FormData) {
