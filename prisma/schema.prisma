@@ -28,6 +28,7 @@ model Client {
   brandProfile ClientBrandProfile?
   brandAssets ClientBrandAsset[]
   channels ClientChannel[]
+  articles Article[]
 }
 
 model ClientBrief {
@@ -673,6 +674,42 @@ model IntegrationSetting {
   value     String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model Article {
+  id                   String   @id @default(cuid())
+  clientId             String
+  blueprintId          String?
+  monthlyPlanId        String?
+  plannedContentItemId String?
+  title                String
+  angle                String?
+  geoFocus             String?
+  targetQueries        Json     @default("[]")
+  briefJson            Json?
+  bodyMarkdown         String   @default("")
+  faq                  Json     @default("[]")
+  schemaJsonLd         Json?
+  metaTitle            String?
+  metaDescription      String?
+  sources              Json     @default("[]")
+  images               Json     @default("[]")
+  calloutNotes         Json     @default("[]")
+  wordCount            Int?
+  model                String   @default("")
+  provider             String   @default("")
+  platformTarget       String?
+  stage                String   @default("brief")
+  status               String   @default("draft")
+  errorMessage         String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  client               Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([monthlyPlanId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model ClientChannel {
