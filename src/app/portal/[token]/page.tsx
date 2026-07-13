@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { ClientPortalView } from "@/app/client-portal-view";
+import { ClientPortalView, type ClientPortalArticle } from "@/app/client-portal-view";
+import type { ArticleCallout, ArticleFaqItem, ArticleImage, ArticleSource } from "@/lib/article-schema";
 import { hashPortalToken } from "@/lib/client-portal-links";
 import { prisma } from "@/lib/prisma";
 
@@ -40,6 +41,7 @@ export default async function ClientPortalPage({
     },
     select: {
       id: true,
+      clientId: true,
       status: true,
       expiresAt: true,
       client: {
@@ -147,12 +149,33 @@ export default async function ClientPortalPage({
     data: { lastOpenedAt: new Date() },
   });
 
+  const articles: ClientPortalArticle[] = await prisma.article
+    .findMany({
+      where: { clientId: portalLink.clientId, status: { not: "archived" }, stage: "done" },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    })
+    .then((rows) =>
+      rows.map((article) => ({
+        id: article.id,
+        title: article.title,
+        bodyMarkdown: article.bodyMarkdown,
+        images: (article.images as ArticleImage[]) ?? [],
+        callouts: (article.calloutNotes as ArticleCallout[]) ?? [],
+        faq: (article.faq as ArticleFaqItem[]) ?? [],
+        sources: (article.sources as ArticleSource[]) ?? [],
+        wordCount: article.wordCount,
+      })),
+    )
+    .catch(() => []);
+
   return (
     <ClientPortalView
       clientName={portalLink.client.name}
       month={portalLink.monthlyPlan.month}
       items={portalLink.monthlyPlan.plannedContentItems}
       publications={portalLink.monthlyPlan.scheduledPublications}
+      articles={articles}
       portalToken={token}
       notice={query.notice}
       error={query.error}

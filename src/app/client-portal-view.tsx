@@ -7,8 +7,10 @@ import {
   requestDraftChanges,
   requestDraftChangesFromPortal,
 } from "@/app/actions";
+import { ArticleReader } from "@/app/article-reader";
 import { PendingSubmitButton } from "@/app/pending-submit-button";
 import { getGeneratedVariantImageSrc } from "@/lib/generated-visuals";
+import type { ArticleCallout, ArticleFaqItem, ArticleImage, ArticleSource } from "@/lib/article-schema";
 import {
   buildMonthlyReport,
   formatReportNumber,
@@ -445,9 +447,21 @@ const portalSections = [
   { key: "calendar", label: "Календарь" },
   { key: "visuals", label: "Визуалы" },
   { key: "materials", label: "Материалы" },
+  { key: "articles", label: "Статьи" },
   { key: "revisions", label: "Правки" },
   { key: "files", label: "Файлы" },
 ] as const;
+
+export type ClientPortalArticle = {
+  id: string;
+  title: string;
+  bodyMarkdown: string;
+  images: ArticleImage[];
+  callouts: ArticleCallout[];
+  faq: ArticleFaqItem[];
+  sources: ArticleSource[];
+  wordCount: number | null;
+};
 
 type PortalSection = (typeof portalSections)[number]["key"];
 
@@ -456,6 +470,7 @@ export function ClientPortalView({
   month,
   items,
   publications,
+  articles = [],
   portalToken,
   notice,
   error,
@@ -465,6 +480,7 @@ export function ClientPortalView({
   month?: string;
   items: ClientPortalItem[];
   publications: ClientPortalPublication[];
+  articles?: ClientPortalArticle[];
   portalToken?: string;
   notice?: string;
   error?: string;
@@ -496,6 +512,9 @@ export function ClientPortalView({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [textExpanded, setTextExpanded] = useState(false);
   const [section, setSection] = useState<PortalSection>("overview");
+  const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
+  const activeArticle = articles.find((article) => article.id === selectedArticleId) ?? articles[0] ?? null;
+  const visibleSections = portalSections.filter((entry) => entry.key !== "articles" || articles.length > 0);
   const handleSelectMaterial = (id: string) => {
     setSelectedId(id);
     setTextExpanded(false);
@@ -555,7 +574,7 @@ export function ClientPortalView({
             <p className="mt-1 text-xs font-semibold text-slate-500">Adaptive Presence OS</p>
           </div>
           <nav className="mt-6 grid gap-1.5">
-            {portalSections.map((entry) => (
+            {visibleSections.map((entry) => (
               <button
                 key={entry.key}
                 type="button"
@@ -1017,6 +1036,46 @@ export function ClientPortalView({
                 </div>
               )}
             </article>
+          ) : null}
+
+          {section === "articles" ? (
+            <section className="grid gap-5 xl:grid-cols-[300px_minmax(0,1fr)]">
+              <aside className="grid content-start gap-2">
+                {articles.map((article) => (
+                  <button
+                    key={article.id}
+                    type="button"
+                    onClick={() => setSelectedArticleId(article.id)}
+                    aria-current={activeArticle?.id === article.id}
+                    className={`rounded-[20px] p-4 text-left transition duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] active:scale-[0.99] ${
+                      activeArticle?.id === article.id
+                        ? "bg-white shadow-[0_18px_50px_rgba(88,75,135,0.10)] ring-1 ring-violet-200"
+                        : "bg-white/60 ring-1 ring-white/70 hover:bg-white"
+                    }`}
+                  >
+                    <p className="line-clamp-2 text-sm font-semibold text-slate-950">{article.title}</p>
+                    <p className="mt-1 text-xs text-slate-400">
+                      Экспертная статья{article.wordCount ? ` · ${article.wordCount} слов` : ""}
+                    </p>
+                  </button>
+                ))}
+              </aside>
+
+              {activeArticle ? (
+                <article className="rounded-[28px] border border-white/70 bg-white/90 p-6 shadow-[0_24px_80px_rgba(88,75,135,0.08)] sm:p-10">
+                  <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-600">Экспертная статья</p>
+                    <a
+                      href={portalToken ? `/portal/${encodeURIComponent(portalToken)}/article/${activeArticle.id}/docx` : `/api/articles/${activeArticle.id}/docx`}
+                      className="rounded-full bg-violet-600 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-violet-700 active:scale-[0.98]"
+                    >
+                      Скачать статью (Word)
+                    </a>
+                  </div>
+                  <ArticleReader article={activeArticle} />
+                </article>
+              ) : null}
+            </section>
           ) : null}
 
           {section === "revisions" ? (

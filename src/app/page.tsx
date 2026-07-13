@@ -70,7 +70,15 @@ import {
   updatePlannedContentItemManual,
   updatePublicationText,
   updateScheduledPublication,
+  createArticleAction,
+  continueArticleAction,
+  regenerateArticleAction,
+  archiveArticleAction,
 } from "@/app/actions";
+import { ArticleReader } from "@/app/article-reader";
+import { ARTICLE_STAGES, ARTICLE_STAGE_LABELS, type ArticleStage } from "@/lib/article-engine";
+import type { ArticleCallout, ArticleFaqItem, ArticleImage, ArticleSource } from "@/lib/article-schema";
+import { anthropicAvailable, openaiAvailable } from "@/lib/writer";
 import { BrandAssetFileInput } from "@/app/brand-asset-file-input";
 import { ClientPortalView } from "@/app/client-portal-view";
 import {
@@ -97,6 +105,8 @@ import { getTextModelSettings } from "@/lib/openai";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
+// Article engine server actions run 4 sequential model passes + image generation.
+export const maxDuration = 300;
 
 type SearchParams = Promise<{
   view?: string;
@@ -113,6 +123,7 @@ type SearchParams = Promise<{
   material?: string;
   materialId?: string;
   filter?: string;
+  article?: string;
 }>;
 
 const workspaceViews = [
@@ -125,6 +136,7 @@ const workspaceViews = [
   "assets",
   "brand_assets",
   "client_portal",
+  "articles",
   "reports",
   "settings",
 ] as const;
@@ -201,6 +213,7 @@ const viewTitles: Record<WorkspaceView, string> = {
   assets: "Креативы",
   brand_assets: "Бренд",
   client_portal: "Клиентский календарь",
+  articles: "Статьи",
   reports: "Отчёты",
   settings: "Настройки",
 };
@@ -3306,6 +3319,7 @@ function WorkspaceSwitcher({
     { label: "Календарь", view: "calendar" as const },
     { label: "Материалы", view: "drafts" as const },
     { label: "Бренд", view: "brand_assets" as const },
+    { label: "Статьи", view: "articles" as const },
     { label: "Клиентский вид", view: "client_portal" as const },
     { label: "Отчёт", view: "reports" as const },
   ];
@@ -5746,6 +5760,320 @@ async function safeLoadSelectedBrandClient(clientId: string) {
   }
 }
 
+type ArticleRecord = {
+  id: string;
+  clientId: string;
+  title: string;
+  angle: string | null;
+  geoFocus: string | null;
+  targetQueries: unknown;
+  bodyMarkdown: string;
+  faq: unknown;
+  schemaJsonLd: unknown;
+  metaTitle: string | null;
+  metaDescription: string | null;
+  sources: unknown;
+  images: unknown;
+  calloutNotes: unknown;
+  wordCount: number | null;
+  model: string;
+  provider: string;
+  platformTarget: string | null;
+  stage: string;
+  status: string;
+  errorMessage: string | null;
+  createdAt: Date;
+};
+
+const articlePlatformOptions = [
+  { value: "", label: "Сайт / блог" },
+  { value: "zen", label: "Дзен" },
+  { value: "vcru", label: "VC.ru" },
+  { value: "vk", label: "VK Статьи" },
+];
+
+function articleHref(context: WorkspaceContext, articleId?: string) {
+  const searchParams = new URLSearchParams({ view: "articles" });
+  if (context.blueprint) searchParams.set("blueprint", context.blueprint);
+  if (context.plan) searchParams.set("plan", context.plan);
+  if (context.client) searchParams.set("client", context.client);
+  if (articleId) searchParams.set("article", articleId);
+  return `/?${searchParams.toString()}`;
+}
+
+function articleStatusBadge(article: ArticleRecord) {
+  if (article.status === "failed") {
+    return <span className="rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700">Ошибка</span>;
+  }
+  if (article.status === "generating") {
+    return <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-bold text-violet-700">Генерируется…</span>;
+  }
+  if (article.stage === "done") {
+    return <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">Готова</span>;
+  }
+  return <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-bold text-stone-600">Черновик</span>;
+}
+
+function ArticleStageTrack({ article }: { article: ArticleRecord }) {
+  const stageIndex = ARTICLE_STAGES.indexOf(article.stage as ArticleStage);
+  const steps = ARTICLE_STAGES.filter((stage) => stage !== "done");
+
+  return (
+    <ol className="flex flex-wrap gap-1.5">
+      {steps.map((step, index) => {
+        const completed = article.stage === "done" || index < stageIndex;
+        const current = article.stage !== "done" && step === article.stage;
+        return (
+          <li
+            key={step}
+            className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+              completed
+                ? "bg-emerald-50 text-emerald-700"
+                : current
+                  ? article.status === "failed"
+                    ? "bg-rose-50 text-rose-700"
+                    : "bg-violet-100 text-violet-700"
+                  : "bg-stone-100 text-stone-400"
+            }`}
+          >
+            {ARTICLE_STAGE_LABELS[step]}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function ArticlesView({
+  articles,
+  selectedArticle,
+  clientId,
+  clientName,
+  workspaceContext,
+}: {
+  articles: ArticleRecord[];
+  selectedArticle: ArticleRecord | null;
+  clientId: string | null;
+  clientName: string | null;
+  workspaceContext: WorkspaceContext;
+}) {
+  const claudeReady = anthropicAvailable();
+  const gptReady = openaiAvailable();
+  const defaultProvider = claudeReady ? "anthropic" : "openai";
+  const targetQueries = (selectedArticle?.targetQueries as string[] | null) ?? [];
+
+  return (
+    <section>
+      <WorkspaceViewHeader
+        eyebrow="GEO-контент"
+        title="Статьи"
+        description="Экспертные статьи с нативным упоминанием бренда и гео: 4 прохода движка — бриф, черновик, очеловечивание, GEO. Готовый материал уходит клиенту в reader-виде и в Word."
+      />
+
+      {!claudeReady && !gptReady ? (
+        <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+          Не настроен ни один AI-провайдер. Добавьте ANTHROPIC_API_KEY или OPENAI_API_KEY в переменные окружения.
+        </div>
+      ) : null}
+
+      <div className="mt-6 grid gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
+        <div className="grid content-start gap-4">
+          <article className={`${panelClass} p-5`}>
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-violet-700">Новая статья</p>
+            <h3 className="mt-1 font-semibold text-stone-950">{clientName ?? "Клиент не выбран"}</h3>
+            {clientId ? (
+              <form action={createArticleAction} className="mt-4 grid gap-3">
+                <input type="hidden" name="clientId" value={clientId} />
+                <label className="grid gap-1.5 text-xs font-semibold text-stone-600">
+                  Тема статьи
+                  <input name="topic" required placeholder="Например: Как выбрать клинику чек-апа" className={inputClass} />
+                </label>
+                <label className="grid gap-1.5 text-xs font-semibold text-stone-600">
+                  Угол (необязательно)
+                  <input name="angle" placeholder="Экспертный разбор, чек-лист, сравнение…" className={inputClass} />
+                </label>
+                <label className="grid gap-1.5 text-xs font-semibold text-stone-600">
+                  Гео (город/регион)
+                  <input name="geoFocus" placeholder="Москва, Сочи, Краснодарский край…" className={inputClass} />
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="grid gap-1.5 text-xs font-semibold text-stone-600">
+                    Площадка
+                    <select name="platformTarget" className={inputClass} defaultValue="">
+                      {articlePlatformOptions.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="grid gap-1.5 text-xs font-semibold text-stone-600">
+                    Модель
+                    <select name="provider" className={inputClass} defaultValue={defaultProvider}>
+                      <option value="anthropic" disabled={!claudeReady}>Claude{claudeReady ? "" : " (нет ключа)"}</option>
+                      <option value="openai" disabled={!gptReady}>GPT{gptReady ? "" : " (нет ключа)"}</option>
+                    </select>
+                  </label>
+                </div>
+                <PendingSubmitButton className={primaryButtonClass} pendingLabel="Движок пишет статью… это 2-5 минут">
+                  Сгенерировать статью
+                </PendingSubmitButton>
+                <p className="text-xs leading-5 text-stone-400">
+                  Движок сделает 4 прохода и иллюстрации. Если генерация оборвётся — статья сохранит прогресс, продолжите с того же места.
+                </p>
+              </form>
+            ) : (
+              <p className={`mt-3 ${mutedTextClass}`}>Сначала выберите клиента в разделе «Клиенты».</p>
+            )}
+          </article>
+
+          <article className={`${panelClass} p-5`}>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-violet-700">Статьи клиента</p>
+              <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-bold text-stone-600">{articles.length}</span>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {articles.map((article) => (
+                <a
+                  key={article.id}
+                  href={articleHref(workspaceContext, article.id)}
+                  className={`rounded-lg border p-3 transition ${
+                    selectedArticle?.id === article.id
+                      ? "border-violet-300 bg-violet-50/60"
+                      : "border-stone-200 bg-white hover:border-violet-200"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="line-clamp-2 text-sm font-semibold text-stone-950">{article.title}</p>
+                    {articleStatusBadge(article)}
+                  </div>
+                  <p className="mt-1 text-xs text-stone-500">
+                    {article.provider === "anthropic" ? "Claude" : article.provider === "openai" ? "GPT" : "Авто"}
+                    {article.wordCount ? ` · ${article.wordCount} слов` : ""}
+                    {article.platformTarget ? ` · ${articlePlatformOptions.find((option) => option.value === article.platformTarget)?.label ?? article.platformTarget}` : ""}
+                  </p>
+                </a>
+              ))}
+              {articles.length === 0 ? <p className={mutedTextClass}>Статей пока нет — создайте первую.</p> : null}
+            </div>
+          </article>
+        </div>
+
+        <div className="grid content-start gap-4">
+          {selectedArticle ? (
+            <>
+              <article className={`${panelClass} p-5`}>
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {articleStatusBadge(selectedArticle)}
+                      <span className="text-xs font-semibold text-stone-400">
+                        {selectedArticle.provider === "anthropic" ? `Claude · ${selectedArticle.model}` : selectedArticle.provider === "openai" ? `GPT · ${selectedArticle.model}` : "Модель не назначена"}
+                      </span>
+                    </div>
+                    <div className="mt-3">
+                      <ArticleStageTrack article={selectedArticle} />
+                    </div>
+                    {selectedArticle.errorMessage ? (
+                      <p className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold leading-5 text-rose-800">
+                        {selectedArticle.errorMessage}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {selectedArticle.status === "failed" || (selectedArticle.stage !== "done" && selectedArticle.status !== "generating") ? (
+                      <form action={continueArticleAction}>
+                        <input type="hidden" name="articleId" value={selectedArticle.id} />
+                        <PendingSubmitButton className={primaryButtonClass} pendingLabel="Продолжаю…">
+                          Продолжить генерацию
+                        </PendingSubmitButton>
+                      </form>
+                    ) : null}
+                    {selectedArticle.stage === "done" ? (
+                      <a href={`/api/articles/${selectedArticle.id}/docx`} className={primaryButtonClass}>
+                        Скачать Word
+                      </a>
+                    ) : null}
+                    <form action={regenerateArticleAction} className="flex items-center gap-2">
+                      <input type="hidden" name="articleId" value={selectedArticle.id} />
+                      <select name="provider" className={`${inputClass} py-2 text-xs`} defaultValue={selectedArticle.provider || defaultProvider}>
+                        <option value="anthropic" disabled={!claudeReady}>Claude</option>
+                        <option value="openai" disabled={!gptReady}>GPT</option>
+                      </select>
+                      <PendingSubmitButton className={secondaryButtonClass} pendingLabel="Пишу заново…">
+                        Перегенерировать
+                      </PendingSubmitButton>
+                    </form>
+                    <form action={archiveArticleAction}>
+                      <input type="hidden" name="articleId" value={selectedArticle.id} />
+                      <PendingSubmitButton className={destructiveButtonClass} pendingLabel="Архивирую…">
+                        В архив
+                      </PendingSubmitButton>
+                    </form>
+                  </div>
+                </div>
+
+                {selectedArticle.metaTitle || targetQueries.length > 0 ? (
+                  <div className="mt-4 grid gap-3 border-t border-stone-100 pt-4 lg:grid-cols-2">
+                    <div className="grid gap-2 text-sm">
+                      {selectedArticle.metaTitle ? (
+                        <p><span className="font-bold text-stone-700">Meta title:</span> <span className="text-stone-600">{selectedArticle.metaTitle}</span></p>
+                      ) : null}
+                      {selectedArticle.metaDescription ? (
+                        <p><span className="font-bold text-stone-700">Meta description:</span> <span className="text-stone-600">{selectedArticle.metaDescription}</span></p>
+                      ) : null}
+                      {selectedArticle.schemaJsonLd ? (
+                        <p className="text-xs font-semibold text-emerald-700">JSON-LD: Article + FAQPage готовы к вставке</p>
+                      ) : null}
+                    </div>
+                    {targetQueries.length > 0 ? (
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-[0.08em] text-stone-400">Целевые запросы</p>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {targetQueries.slice(0, 10).map((query) => (
+                            <span key={query} className="rounded-full bg-[#f7f3fd] px-2.5 py-1 text-[11px] font-semibold text-violet-700">{query}</span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </article>
+
+              {selectedArticle.bodyMarkdown ? (
+                <article className={`${panelClass} p-6 sm:p-10`}>
+                  <ArticleReader
+                    article={{
+                      title: selectedArticle.title,
+                      bodyMarkdown: selectedArticle.bodyMarkdown,
+                      images: (selectedArticle.images as ArticleImage[]) ?? [],
+                      callouts: (selectedArticle.calloutNotes as ArticleCallout[]) ?? [],
+                      faq: (selectedArticle.faq as ArticleFaqItem[]) ?? [],
+                      sources: (selectedArticle.sources as ArticleSource[]) ?? [],
+                    }}
+                  />
+                </article>
+              ) : (
+                <article className={`${panelClass} p-8 text-center`}>
+                  <p className="font-semibold text-stone-950">Текста пока нет</p>
+                  <p className={`mt-2 ${mutedTextClass}`}>
+                    {selectedArticle.status === "generating"
+                      ? "Движок работает. Обновите страницу через минуту-другую."
+                      : "Запустите или продолжите генерацию — движок пройдёт все 4 прохода."}
+                  </p>
+                </article>
+              )}
+            </>
+          ) : (
+            <article className={`${panelClass} p-8 text-center`}>
+              <p className="font-semibold text-stone-950">Выберите или создайте статью</p>
+              <p className={`mt-2 ${mutedTextClass}`}>Слева — форма генерации и список статей клиента.</p>
+            </article>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default async function Dashboard({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   const activeView = getActiveView(params);
@@ -6104,6 +6432,38 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
     .catch(() => false);
   const telegramClientId = workspaceContext.client ?? null;
   const telegramClientName = clients.find((client) => client.id === telegramClientId)?.name ?? null;
+  const articlesClientId = workspaceContext.client ?? null;
+  const articles: ArticleRecord[] =
+    activeView === "articles" && articlesClientId
+      ? await prisma.article
+          .findMany({
+            where: { clientId: articlesClientId, status: { not: "archived" } },
+            orderBy: { createdAt: "desc" },
+            take: 30,
+          })
+          .catch(() => [] as ArticleRecord[])
+      : [];
+  const selectedArticle = articles.find((article) => article.id === params.article) ?? articles[0] ?? null;
+  const portalArticles = (
+    !isProductionBuild && activeView === "client_portal" && articlesClientId
+      ? await prisma.article
+          .findMany({
+            where: { clientId: articlesClientId, status: { not: "archived" }, stage: "done" },
+            orderBy: { createdAt: "desc" },
+            take: 20,
+          })
+          .catch(() => [] as ArticleRecord[])
+      : []
+  ).map((article) => ({
+    id: article.id,
+    title: article.title,
+    bodyMarkdown: article.bodyMarkdown,
+    images: (article.images as ArticleImage[]) ?? [],
+    callouts: (article.calloutNotes as ArticleCallout[]) ?? [],
+    faq: (article.faq as ArticleFaqItem[]) ?? [],
+    sources: (article.sources as ArticleSource[]) ?? [],
+    wordCount: article.wordCount,
+  }));
   const telegramChannels = telegramClientId
     ? await prisma.clientChannel
         .findMany({
@@ -6332,9 +6692,20 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   month={selectedMonthlyPlan?.month}
                   items={selectedMonthlyPlan?.plannedContentItems ?? []}
                   publications={selectedMonthlyPlan?.scheduledPublications ?? []}
+                  articles={portalArticles}
                   showPreviewNotice
                 />
               </>
+            ) : null}
+
+            {activeView === "articles" ? (
+              <ArticlesView
+                articles={articles}
+                selectedArticle={selectedArticle}
+                clientId={articlesClientId}
+                clientName={telegramClientName}
+                workspaceContext={workspaceContext}
+              />
             ) : null}
 
             {activeView === "brand_assets" ? (
