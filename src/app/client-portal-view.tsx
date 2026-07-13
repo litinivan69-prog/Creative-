@@ -639,56 +639,49 @@ export function ClientPortalView({
                   <p className="text-center text-xs leading-5 text-slate-400">{stats.ready} из {stats.total} материалов готовы</p>
                 </article>
 
-                <article className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-violet-600 to-violet-500 p-6 text-white shadow-[inset_0_1px_1px_rgba(255,255,255,0.25),0_26px_70px_-18px_rgba(124,58,237,0.6)] ring-1 ring-white/10 lg:col-span-5">
-                  {selectedMaterial ? (
-                    <>
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-100">Рекомендуем посмотреть</p>
-                          <h2 className="mt-2 text-[26px] font-semibold leading-tight tracking-[-0.01em]">{selectedMaterial.item.topic}</h2>
-                          <p className="mt-1 text-sm text-violet-100">{selectedMaterial.dateLabel} · {selectedMaterial.item.platformName}</p>
-                        </div>
-                        <span className="shrink-0 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold text-white">
-                          {formatClientPortalStatus(selectedMaterial.status)}
-                        </span>
-                      </div>
-                      <div className="mt-4 overflow-hidden rounded-[20px] bg-white/10">
-                        <PortalImage variant={selectedMaterial.thumbnail} alt={selectedMaterial.item.topic} className="aspect-[16/9] w-full object-cover" />
-                      </div>
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setSection("materials")}
-                          className="group inline-flex items-center gap-2 rounded-full bg-white py-2 pl-5 pr-2 text-sm font-semibold text-violet-700 transition duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-violet-50 active:scale-[0.98]"
-                        >
-                          Открыть материал
-                          <span className="grid h-8 w-8 place-items-center rounded-full bg-violet-100 transition duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:translate-x-0.5">
-                            <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" aria-hidden="true">
-                              <path d="M5 12h14m0 0-5-5m5 5-5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                          </span>
-                        </button>
-                        {selectedDraft ? (
-                          <form action={portalToken ? approveDraftFromPortal : approveDraft}>
-                            <PortalActionFields contentDraftId={selectedDraft.id} portalToken={portalToken} />
-                            <PendingSubmitButton pendingLabel="Подтверждаем..." className="inline-flex items-center justify-center rounded-full border border-white/40 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/20">
-                              Подтвердить
-                            </PendingSubmitButton>
-                          </form>
-                        ) : null}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="grid min-h-[220px] place-items-center text-center">
-                      <div>
-                        <p className="font-semibold">Пакет месяца ещё собирается</p>
-                        <p className="mt-2 text-sm text-violet-100">Материалы появятся здесь после подготовки.</p>
-                      </div>
+                <article className={`${surfaceClass} min-w-0 p-5 lg:col-span-4`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-600">Ваше решение</p>
+                      <h2 className="mt-1 text-lg font-semibold tracking-tight text-slate-950">Требуют внимания</h2>
                     </div>
-                  )}
+                    <span className="text-xs font-semibold text-slate-400">{stats.needsDecision}</span>
+                  </div>
+                  <div className="mt-4 grid gap-2">
+                    {materials
+                      .filter((material) => material.status === "awaiting_approval" || material.status === "changes_requested")
+                      .slice(0, 4)
+                      .map((material) => {
+                        const src = material.thumbnail ? getGeneratedVariantImageSrc(material.thumbnail) : null;
+                        return (
+                          <button
+                            key={material.item.id}
+                            type="button"
+                            onClick={() => openMaterial(material.item.id)}
+                            className="flex min-w-0 items-center gap-3 rounded-[18px] bg-slate-50/70 p-3 text-left transition hover:bg-violet-50"
+                          >
+                            {src ? (
+                              <img src={src} alt="" className="h-10 w-10 shrink-0 rounded-xl object-cover" />
+                            ) : (
+                              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-[10px] font-semibold text-slate-400">—</span>
+                            )}
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-semibold text-slate-900">{material.item.topic}</span>
+                              <span className="block text-xs text-slate-400">{material.dateLabel} · {material.item.platformName}</span>
+                            </span>
+                            <span className="shrink-0 text-violet-400">›</span>
+                          </button>
+                        );
+                      })}
+                    {stats.needsDecision === 0 ? (
+                      <p className="rounded-[18px] bg-slate-50/70 p-4 text-sm leading-6 text-slate-500">
+                        Срочных решений нет — всё идёт по плану.
+                      </p>
+                    ) : null}
+                  </div>
                 </article>
 
-                <article className={`${surfaceClass} min-w-0 p-5 lg:col-span-4`}>
+                <article className={`${surfaceClass} min-w-0 p-5 lg:col-span-5`}>
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-600">Календарь</p>
@@ -702,21 +695,37 @@ export function ClientPortalView({
                     {weekDays.map((day) => <div key={day}>{day}</div>)}
                   </div>
                   <div className="mt-1.5 grid grid-cols-7 gap-1">
-                    {calendarDays.map((day) => (
-                      <div
-                        key={day.key}
-                        className={`flex aspect-square flex-col items-center justify-center rounded-lg text-[11px] ${
-                          day.day ? (day.materials.length > 0 ? "bg-violet-50 font-semibold text-violet-800" : "text-slate-500") : ""
-                        }`}
-                      >
-                        {day.day ? (
-                          <>
-                            <span>{day.day}</span>
-                            {day.materials.length > 0 ? <span className="mt-0.5 h-1 w-1 rounded-full bg-violet-500" /> : null}
-                          </>
-                        ) : null}
-                      </div>
-                    ))}
+                    {calendarDays.map((day) => {
+                      const thumb = day.materials[0]?.thumbnail
+                        ? getGeneratedVariantImageSrc(day.materials[0].thumbnail!)
+                        : null;
+                      return (
+                        <button
+                          key={day.key}
+                          type="button"
+                          disabled={!day.day || day.materials.length === 0}
+                          onClick={() => day.materials[0] && openMaterial(day.materials[0].item.id)}
+                          className={`flex aspect-square flex-col items-center justify-center rounded-lg text-[11px] ${
+                            day.day
+                              ? day.materials.length > 0
+                                ? "cursor-pointer bg-violet-50 font-semibold text-violet-800 transition hover:bg-violet-100"
+                                : "text-slate-500"
+                              : ""
+                          }`}
+                        >
+                          {day.day ? (
+                            <>
+                              <span>{day.day}</span>
+                              {thumb ? (
+                                <img src={thumb} alt="" className="mt-0.5 h-6 w-6 rounded-md object-cover" />
+                              ) : day.materials.length > 0 ? (
+                                <span className="mt-0.5 h-1 w-1 rounded-full bg-violet-500" />
+                              ) : null}
+                            </>
+                          ) : null}
+                        </button>
+                      );
+                    })}
                   </div>
                 </article>
               </section>

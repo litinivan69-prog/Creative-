@@ -11,6 +11,7 @@ export type OverviewCalendarItem = {
   platformName: string;
   topic: string;
   status: string | null;
+  thumbnail?: string | null;
 };
 
 function useCountUp(value: number) {
@@ -241,7 +242,13 @@ export function OverviewMiniCalendar({
                   {cell.day ? (
                     <>
                       <span>{cell.day}</span>
-                      {dayItems.length > 0 ? (
+                      {dayItems[0]?.thumbnail ? (
+                        <img
+                          src={dayItems[0].thumbnail}
+                          alt=""
+                          className={`mt-0.5 h-5 w-5 rounded-md object-cover ${amber ? "ring-2 ring-amber-400" : isToday ? "ring-2 ring-white/70" : ""}`}
+                        />
+                      ) : dayItems.length > 0 ? (
                         <span
                           className={`mt-0.5 h-1 w-1 rounded-full ${
                             isToday ? "bg-white" : amber ? "bg-amber-400" : "bg-violet-500"
