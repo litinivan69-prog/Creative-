@@ -531,7 +531,7 @@ export function ClientPortalView({
     return (
       <main className="min-h-screen bg-[#f7f5fb] bg-[radial-gradient(circle_at_20%_0%,rgba(139,92,246,0.15),transparent_34%)] p-6">
         <section className="mx-auto max-w-3xl rounded-[28px] border border-white/80 bg-white/90 p-8 shadow-[0_24px_80px_rgba(88,75,135,0.10)]">
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-violet-700">Adaptive Presence OS · by Creative Command</p>
+          <p className="font-heading text-base font-extrabold lowercase tracking-tight text-violet-600">creative command<span className="text-slate-900">.</span></p>
           <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950">Клиентский пакет ещё собирается</h1>
           {showPreviewNotice ? (
             <div className="mt-5 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm leading-6 text-violet-900">
@@ -549,8 +549,10 @@ export function ClientPortalView({
       <div className="grid min-h-screen lg:grid-cols-[280px_minmax(0,1fr)]">
         <aside className="flex flex-col border-r border-white/70 bg-white/60 px-5 py-6 backdrop-blur-xl">
           <div className="rounded-[24px] border border-white/80 bg-white/82 p-5 shadow-[0_18px_60px_rgba(88,75,135,0.055)]">
-            <p className="text-lg font-semibold tracking-tight text-slate-950">Adaptive Presence OS</p>
-            <p className="mt-1 text-xs font-semibold text-violet-700">by Creative Command</p>
+            <p className="font-heading text-[19px] font-extrabold lowercase leading-tight tracking-tight text-violet-600">
+              creative command<span className="text-slate-900">.</span>
+            </p>
+            <p className="mt-1 text-xs font-semibold text-slate-500">Adaptive Presence OS</p>
           </div>
           <nav className="mt-6 grid gap-1.5">
             {portalSections.map((entry) => (
@@ -575,7 +577,7 @@ export function ClientPortalView({
             <a href="mailto:hello@creative-command.local" className={`${secondaryButtonClass} mt-4 w-full`}>Написать</a>
           </div>
           <div className="mt-auto pt-8 text-xs leading-5 text-slate-400">
-            <p className="font-semibold text-slate-500">Creative Command</p>
+            <p className="font-heading text-sm font-extrabold lowercase tracking-tight text-violet-600">creative command<span className="text-slate-900">.</span></p>
             <p>Ваш продакшн-партнёр</p>
           </div>
         </aside>
