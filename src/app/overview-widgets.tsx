@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 const cardClass =
-  "rounded-[22px] border border-slate-200/80 bg-white shadow-[0_10px_28px_rgba(88,75,135,0.055)]";
+  "rounded-[22px] bg-white ring-1 ring-slate-900/[0.045] shadow-[inset_0_1px_1px_rgba(255,255,255,0.7),0_16px_40px_-22px_rgba(88,75,135,0.28)]";
 
 export type OverviewCalendarItem = {
   id: string;

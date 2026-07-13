@@ -559,7 +559,7 @@ export function ClientPortalView({
                 type="button"
                 onClick={() => setSection(entry.key)}
                 aria-current={section === entry.key}
-                className={`rounded-2xl px-4 py-3 text-left text-sm font-semibold transition ${
+                className={`rounded-2xl px-4 py-3 text-left text-sm font-semibold transition duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] active:scale-[0.98] ${
                   section === entry.key
                     ? "bg-violet-600 text-white shadow-[0_14px_30px_rgba(124,58,237,0.22)]"
                     : "text-slate-500 hover:bg-white/80 hover:text-violet-700"
