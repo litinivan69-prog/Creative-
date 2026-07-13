@@ -337,8 +337,10 @@ function SidebarIcon({ name, className = "h-4 w-4" }: { name: SidebarIconName; c
   );
 }
 
-const pageBackgroundClass = "min-h-screen bg-[#f7f5fb] text-stone-900";
-const panelClass = "rounded-lg border border-stone-200 bg-white shadow-[0_1px_2px_rgba(28,36,38,0.04)]";
+const pageBackgroundClass =
+  "min-h-screen bg-[#f7f5fb] bg-[radial-gradient(circle_at_20%_-10%,rgba(139,92,246,0.08),transparent_36%),radial-gradient(circle_at_95%_0%,rgba(196,181,253,0.07),transparent_30%)] text-stone-900";
+const panelClass =
+  "rounded-xl bg-white ring-1 ring-slate-900/[0.045] shadow-[inset_0_1px_1px_rgba(255,255,255,0.7),0_1px_2px_rgba(28,36,38,0.04),0_14px_36px_-20px_rgba(88,75,135,0.22)]";
 
 function integrationStatusTone(status: string) {
   if (status === "failed") return "bg-rose-50 text-rose-700";
@@ -443,7 +445,8 @@ function MetricCard({
   );
 }
 
-const overviewCardClass = "rounded-[22px] border border-slate-200/80 bg-white shadow-[0_10px_28px_rgba(88,75,135,0.055)]";
+const overviewCardClass =
+  "rounded-[22px] bg-white ring-1 ring-slate-900/[0.045] shadow-[inset_0_1px_1px_rgba(255,255,255,0.7),0_16px_40px_-22px_rgba(88,75,135,0.28)]";
 const overviewAccentTextClass = "text-violet-700";
 const overviewAccentBgClass = "bg-violet-50 text-violet-700";
 
