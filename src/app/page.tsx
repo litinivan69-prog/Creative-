@@ -697,7 +697,7 @@ function OverviewDashboard({
             <span className="rounded-full bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700">
               {currentMonthLabel}
             </span>
-            <span className="text-sm text-slate-400">Adaptive Presence OS</span>
+            <span className="font-heading text-sm font-extrabold lowercase tracking-tight text-violet-600">creative command<span className="text-slate-900">.</span></span>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -6118,8 +6118,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
     <div className={pageBackgroundClass}>
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-20 border-r border-slate-200 bg-white text-slate-700 lg:flex lg:flex-col">
         <div className="flex justify-center px-3 py-5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-600 text-sm font-bold text-white" title="Adaptive Presence OS">
-            AP
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-600 text-sm font-extrabold lowercase text-white" title="creative command. — Adaptive Presence OS">
+            cc.
           </div>
         </div>
 
@@ -6171,8 +6171,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
         <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90 backdrop-blur">
           <div className="flex min-h-16 flex-col gap-3 px-5 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-7 xl:px-9">
             <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-2xl bg-violet-600 text-xs font-bold text-white lg:hidden">
-                AP
+              <div className="flex h-8 w-8 items-center justify-center rounded-2xl bg-violet-600 text-xs font-extrabold lowercase text-white lg:hidden">
+                cc.
               </div>
               <div>
                 <div className="flex flex-wrap items-center gap-2">

@@ -59,7 +59,8 @@ export async function buildReportPptx(data: ReportDeckData): Promise<Buffer> {
   cover.addText("ОТЧЁТ ЗА МЕСЯЦ", { x: 0.7, y: 2.3, w: 12, h: 0.5, fontSize: 16, color: VIOLET_SOFT, charSpacing: 6 });
   cover.addText(data.clientName || "Клиент", { x: 0.7, y: 2.85, w: 12, h: 1.3, fontSize: 48, bold: true, color: "FFFFFF" });
   cover.addText(data.monthLabel, { x: 0.7, y: 4.2, w: 12, h: 0.7, fontSize: 24, color: VIOLET_SOFT });
-  cover.addText("Adaptive Presence OS · Creative Command", { x: 0.7, y: 6.8, w: 12, h: 0.4, fontSize: 12, color: VIOLET_FAINT });
+  cover.addText("creative command.", { x: 0.7, y: 6.6, w: 12, h: 0.5, fontSize: 18, bold: true, color: "FFFFFF" });
+  cover.addText("Adaptive Presence OS", { x: 0.7, y: 7.05, w: 12, h: 0.35, fontSize: 11, color: VIOLET_FAINT });
 
   // 2. KPI
   const kpi = pptx.addSlide();
