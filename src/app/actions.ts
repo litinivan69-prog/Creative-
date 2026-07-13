@@ -56,6 +56,7 @@ import {
 import { storeGeneratedVisual } from "@/lib/visual-storage";
 import { storeClientBrandAssetFile } from "@/lib/brand-asset-storage";
 import { getClientBrandContext } from "@/lib/brand-context";
+import { runArticlePipeline } from "@/lib/article-engine";
 
 function formText(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -69,7 +70,7 @@ function formInt(formData: FormData, key: string): number | null {
   return Math.max(0, Math.round(parsed));
 }
 
-type WorkspaceView = "overview" | "clients" | "client_setup" | "approvals" | "calendar" | "drafts" | "assets" | "brand_assets" | "client_portal" | "reports" | "settings";
+type WorkspaceView = "overview" | "clients" | "client_setup" | "approvals" | "calendar" | "drafts" | "assets" | "brand_assets" | "client_portal" | "articles" | "reports" | "settings";
 
 function workspaceLocation(
   view: WorkspaceView,
@@ -87,6 +88,7 @@ function workspaceLocation(
     notice?: string;
     portalLink?: string;
     productionRunId?: string;
+    articleId?: string;
   } = {},
 ) {
   const searchParams = new URLSearchParams({ view });
@@ -104,6 +106,7 @@ function workspaceLocation(
   if (options.notice) searchParams.set("notice", options.notice);
   if (options.portalLink) searchParams.set("portalLink", options.portalLink);
   if (options.productionRunId) searchParams.set("productionRunId", options.productionRunId);
+  if (options.articleId) searchParams.set("article", options.articleId);
 
   return `/?${searchParams.toString()}`;
 }
@@ -5782,4 +5785,153 @@ export async function markCreativeVariantQualityPassed(formData: FormData) {
 
 export async function markCreativeVariantQualityFailed(formData: FormData) {
   await updateCreativeVariantQuality(formData, "failed", "Для варианта визуала отмечены проблемы качества.");
+}
+
+// ─── Article engine ─────────────────────────────────────────────────────────
+
+function articleRedirect(
+  articleId: string | null,
+  clientId: string | null,
+  outcome: { error?: string; notice?: string },
+): never {
+  revalidatePath("/");
+  redirect(
+    workspaceLocation("articles", {
+      articleId: articleId ?? undefined,
+      clientId: clientId ?? undefined,
+      ...outcome,
+    }),
+  );
+}
+
+export async function createArticleAction(formData: FormData) {
+  const clientId = formText(formData, "clientId");
+  const topic = formText(formData, "topic");
+  const angle = formText(formData, "angle");
+  const geoFocus = formText(formData, "geoFocus");
+  const platformTarget = formText(formData, "platformTarget");
+  const provider = formText(formData, "provider");
+
+  if (!clientId) {
+    errorRedirect("Выберите клиента для статьи.", "articles");
+  }
+
+  if (!topic) {
+    articleRedirect(null, clientId, { error: "Укажите тему статьи." });
+  }
+
+  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true } });
+  if (!client) {
+    errorRedirect("Клиент не найден.", "articles");
+  }
+
+  const article = await prisma.article.create({
+    data: {
+      clientId,
+      title: topic,
+      angle: angle || null,
+      geoFocus: geoFocus || null,
+      platformTarget: platformTarget || null,
+      provider: provider === "anthropic" || provider === "openai" ? provider : "",
+      stage: "brief",
+      status: "generating",
+    },
+  });
+
+  const outcome = await runArticlePipeline(article.id);
+
+  articleRedirect(article.id, clientId, outcome.ok
+    ? { notice: "Статья готова: все проходы движка выполнены." }
+    : { error: outcome.error });
+}
+
+export async function continueArticleAction(formData: FormData) {
+  const articleId = formText(formData, "articleId");
+
+  if (!articleId) {
+    errorRedirect("Не выбрана статья.", "articles");
+  }
+
+  const article = await prisma.article.findUnique({
+    where: { id: articleId },
+    select: { clientId: true },
+  });
+
+  if (!article) {
+    errorRedirect("Статья не найдена.", "articles");
+  }
+
+  const outcome = await runArticlePipeline(articleId);
+
+  articleRedirect(articleId, article.clientId, outcome.ok
+    ? { notice: "Статья готова: все проходы движка выполнены." }
+    : { error: outcome.error });
+}
+
+export async function regenerateArticleAction(formData: FormData) {
+  const articleId = formText(formData, "articleId");
+  const provider = formText(formData, "provider");
+
+  if (!articleId) {
+    errorRedirect("Не выбрана статья.", "articles");
+  }
+
+  const article = await prisma.article.findUnique({
+    where: { id: articleId },
+    select: { clientId: true },
+  });
+
+  if (!article) {
+    errorRedirect("Статья не найдена.", "articles");
+  }
+
+  await prisma.article.update({
+    where: { id: articleId },
+    data: {
+      stage: "brief",
+      status: "generating",
+      errorMessage: null,
+      briefJson: Prisma.DbNull,
+      bodyMarkdown: "",
+      faq: [],
+      sources: [],
+      images: [],
+      calloutNotes: [],
+      schemaJsonLd: Prisma.DbNull,
+      metaTitle: null,
+      metaDescription: null,
+      wordCount: null,
+      ...(provider === "anthropic" || provider === "openai" ? { provider } : {}),
+    },
+  });
+
+  const outcome = await runArticlePipeline(articleId);
+
+  articleRedirect(articleId, article.clientId, outcome.ok
+    ? { notice: "Статья перегенерирована." }
+    : { error: outcome.error });
+}
+
+export async function archiveArticleAction(formData: FormData) {
+  const articleId = formText(formData, "articleId");
+
+  if (!articleId) {
+    errorRedirect("Не выбрана статья.", "articles");
+  }
+
+  const article = await prisma.article.findUnique({
+    where: { id: articleId },
+    select: { clientId: true },
+  });
+
+  if (!article) {
+    errorRedirect("Статья не найдена.", "articles");
+  }
+
+  await prisma.article.update({
+    where: { id: articleId },
+    data: { status: "archived" },
+  });
+
+  articleRedirect(null, article.clientId, { notice: "Статья перенесена в архив." })
 }
