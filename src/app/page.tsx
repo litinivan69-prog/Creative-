@@ -6007,6 +6007,23 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
   const missingTextCount = Math.max(plannedContentCount - draftCount, 0);
   const creativeAssets = selectedMonthlyPlan?.creativeAssets ?? [];
   const generationJobs = selectedMonthlyPlan?.generationJobs ?? [];
+  const pickOverviewThumbnail = (
+    assets?: Array<{
+      assetType?: string;
+      notes?: string | null;
+      generatedVariants: Array<{ imageUrl: string | null; status?: string }>;
+    }>,
+  ): string | null => {
+    if (!assets || assets.length === 0) return null;
+    const slides = assets.filter((asset) => asset.assetType === "carousel_slide");
+    const active = slides.length > 0 ? slides : assets.filter((asset) => !(asset.notes ?? "").includes("legacyCombinedCarouselAsset=true"));
+    for (const asset of active) {
+      const withUrl = asset.generatedVariants.filter((variant) => Boolean(variant.imageUrl));
+      const variant = withUrl.find((candidate) => candidate.status === "approved") ?? withUrl[0];
+      if (variant?.imageUrl) return variant.imageUrl;
+    }
+    return null;
+  };
   const overviewCalendarItems: OverviewCalendarItem[] = (selectedMonthlyPlan?.plannedContentItems ?? []).map((item) => {
     const publication = selectedMonthlyPlan?.scheduledPublications.find(
       (pub) => pub.plannedContentItemId === item.id,
@@ -6017,6 +6034,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
       platformName: item.platformName,
       topic: item.topic,
       status: item.contentDraft?.status ?? null,
+      thumbnail: pickOverviewThumbnail(publication?.creativeAssets ?? item.creativeAssets),
     };
   });
   const latestProductionRun = selectedMonthlyPlan?.productionRuns[0];
