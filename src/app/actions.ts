@@ -1351,6 +1351,102 @@ export async function generateBlueprint(formData: FormData) {
 
 const ARTICLE_ITEM_PLATFORM_NAME = "Сайт / Блог";
 
+function isTelegramPlatformName(name: string) {
+  return /telegram|телег/i.test(name);
+}
+
+function isVkPlatformName(name: string) {
+  return /(\bvk\b|vkontakte|вконтакте|(^|\s)вк(\s|$))/i.test(name);
+}
+
+type PairablePlanItem = {
+  moduleType: string;
+  platformName: string;
+  format: string;
+  topic: string;
+  goal: string;
+  plannedDate: string;
+  week?: string | null;
+  campaignTheme?: string | null;
+  contentPillar?: string | null;
+  channelRole?: string | null;
+  sequenceReason?: string | null;
+  approvalRequired: boolean;
+  autopublishEligible: boolean;
+  requiredInputs?: unknown;
+  status: string;
+};
+
+/**
+ * One content idea → a VK+Telegram pair: same topic and date, platform-native
+ * formats, shared pairGroupId. Items already covered on both platforms are
+ * linked instead of duplicated. Non-VK/TG items pass through untouched.
+ */
+function pairVkTgPlanItems<T extends PairablePlanItem>(
+  items: T[],
+  allowedPlatformNames: string[],
+): Array<T & { pairGroupId: string | null }> {
+  const tgPlatform = allowedPlatformNames.find(isTelegramPlatformName);
+  const vkPlatform = allowedPlatformNames.find(isVkPlatformName);
+
+  if (!tgPlatform || !vkPlatform) {
+    return items.map((item) => ({ ...item, pairGroupId: null }));
+  }
+
+  const topicKey = (topic: string) => topic.trim().toLowerCase().replace(/\s+/g, " ");
+  const result: Array<T & { pairGroupId: string | null }> = [];
+  const used = new Set<number>();
+
+  items.forEach((item, index) => {
+    if (used.has(index)) return;
+
+    const itemIsTg = isTelegramPlatformName(item.platformName);
+    const itemIsVk = !itemIsTg && isVkPlatformName(item.platformName);
+
+    if (!itemIsTg && !itemIsVk) {
+      result.push({ ...item, pairGroupId: null });
+      return;
+    }
+
+    const counterpartIndex = items.findIndex(
+      (candidate, candidateIndex) =>
+        candidateIndex !== index &&
+        !used.has(candidateIndex) &&
+        topicKey(candidate.topic) === topicKey(item.topic) &&
+        (itemIsTg ? isVkPlatformName(candidate.platformName) : isTelegramPlatformName(candidate.platformName)),
+    );
+
+    const pairGroupId = crypto.randomUUID();
+    used.add(index);
+
+    if (counterpartIndex >= 0) {
+      used.add(counterpartIndex);
+      const counterpart = items[counterpartIndex];
+      result.push(
+        { ...item, pairGroupId },
+        { ...counterpart, plannedDate: item.plannedDate, pairGroupId },
+      );
+      return;
+    }
+
+    const cloneIsTg = itemIsVk;
+    result.push(
+      { ...item, pairGroupId },
+      {
+        ...item,
+        platformName: cloneIsTg ? tgPlatform : vkPlatform,
+        format: cloneIsTg
+          ? "пост Telegram (короткий, с разметкой)"
+          : "пост VK (расширенный текст, хэштеги)",
+        sequenceReason: "Парная публикация VK+Telegram: одна идея, две площадки.",
+        pairGroupId,
+      },
+    );
+  });
+
+  return result;
+}
+
 function resolveArticlesPerMonth(formData: FormData) {
   const fromForm = formInt(formData, "articlesPerMonth");
   if (fromForm !== null) return Math.min(10, fromForm);
@@ -1593,6 +1689,8 @@ async function createMonthlyPlanForBlueprint(
     });
     const scopeGuardrails = enforceProductionScope(plan, productionScope);
     normalizeMonthlyPlanDates(plan.plannedContentItems, plan.month);
+    const pairedContentItems = pairVkTgPlanItems(plan.plannedContentItems, allowedPlatformNames);
+    const totalPlannedUnitsWithPairs = Math.max(plan.totalPlannedUnits, pairedContentItems.length);
 
     const created = await prisma.monthlyOperatingPlan.create({
       data: {
@@ -1602,7 +1700,7 @@ async function createMonthlyPlanForBlueprint(
         version: nextVersion,
         status: plan.status,
         summary: plan.summary,
-        totalPlannedUnits: plan.totalPlannedUnits,
+        totalPlannedUnits: totalPlannedUnitsWithPairs,
         approvalStrategy: plan.approvalStrategy,
         autopublishStrategy: plan.autopublishStrategy,
         riskSummary: plan.riskSummary,
@@ -1635,7 +1733,7 @@ async function createMonthlyPlanForBlueprint(
           })),
         },
         plannedContentItems: {
-          create: plan.plannedContentItems.map((item) => ({
+          create: pairedContentItems.map((item) => ({
             moduleType: item.moduleType,
             platformName: item.platformName,
             format: item.format,
@@ -1651,6 +1749,7 @@ async function createMonthlyPlanForBlueprint(
             autopublishEligible: item.autopublishEligible,
             requiredInputs: item.requiredInputs,
             status: item.status,
+            pairGroupId: item.pairGroupId,
           })),
         },
         managerTasks: {

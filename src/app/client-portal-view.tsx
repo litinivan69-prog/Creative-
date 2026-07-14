@@ -48,6 +48,7 @@ export type ClientPortalItem = {
   topic: string;
   goal?: string | null;
   deliverableKind?: string;
+  pairGroupId?: string | null;
   campaignTheme?: string | null;
   contentPillar?: string | null;
   channelRole?: string | null;
@@ -981,6 +982,7 @@ export function ClientPortalView({
                             <p className="truncate text-[11px] font-semibold text-slate-400">
                               {material.dateLabel} · {material.item.platformName}
                               {material.isArticle ? " · Статья" : ""}
+                              {material.item.pairGroupId ? " · VK+TG" : ""}
                             </p>
                             <h3 className="mt-1 line-clamp-2 text-sm font-semibold leading-5 text-slate-950">{material.item.topic}</h3>
                             <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">

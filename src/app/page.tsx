@@ -1221,6 +1221,7 @@ type MaterialPlannedItem = {
   topic: string;
   goal: string;
   deliverableKind?: string;
+  pairGroupId?: string | null;
   status: string;
   approvalRequired: boolean;
   campaignTheme: string | null;
@@ -5058,6 +5059,7 @@ function ContentCalendar({
         <div className="p-2.5">
           <div className="flex items-center justify-between gap-2">
             <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700">{shortPlatformName(item.platformName)}</span>
+            {item.pairGroupId ? <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700">VK+TG</span> : null}
             {slideCount > 1 ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">{slideCount} карточки</span> : null}
             <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${nextActionBadgeClass(action)}`}>{action}</span>
           </div>

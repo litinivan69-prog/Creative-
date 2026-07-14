@@ -61,6 +61,7 @@ export default async function ClientPortalPage({
               format: true,
               topic: true,
               deliverableKind: true,
+              pairGroupId: true,
               contentDraft: {
                 select: {
                   id: true,
