@@ -47,6 +47,7 @@ export type ClientPortalItem = {
   format: string;
   topic: string;
   goal?: string | null;
+  deliverableKind?: string;
   campaignTheme?: string | null;
   contentPillar?: string | null;
   channelRole?: string | null;
@@ -98,6 +99,9 @@ type ClientPortalMaterial = {
   groupLabel: string;
   dateLabel: string;
   isCarousel: boolean;
+  isArticle: boolean;
+  articleHeroUrl: string | null;
+  articleId: string | null;
   readySlides: number;
   totalSlides: number;
 };
@@ -415,7 +419,7 @@ function PortalImage({ variant, alt, className }: { variant?: ClientPortalVarian
 }
 
 function PortalTinyThumbnail({ material }: { material: ClientPortalMaterial }) {
-  const src = material.thumbnail ? getGeneratedVariantImageSrc(material.thumbnail) : null;
+  const src = (material.thumbnail ? getGeneratedVariantImageSrc(material.thumbnail) : null) ?? material.articleHeroUrl;
 
   if (src) {
     return <img src={src} alt="" className="h-7 w-7 shrink-0 rounded-lg object-cover" />;
@@ -454,6 +458,7 @@ const portalSections = [
 
 export type ClientPortalArticle = {
   id: string;
+  plannedContentItemId?: string | null;
   title: string;
   bodyMarkdown: string;
   images: ArticleImage[];
@@ -486,15 +491,19 @@ export function ClientPortalView({
   error?: string;
   showPreviewNotice?: boolean;
 }) {
+  const articleByItemId = new Map(
+    articles.filter((article) => article.plannedContentItemId).map((article) => [article.plannedContentItemId, article]),
+  );
   const materials: ClientPortalMaterial[] = items.map((item) => {
     const publication = publications.find((candidate) => candidate.plannedContentItemId === item.id);
     const visualAssets = activeVisualAssets(publication);
     const thumbnail = getMaterialThumbnail(publication);
     const slides = getCarouselSlides(publication);
     const totalSlides = slides.length > 0 ? slides.length : visualAssets.length;
-    const readySlides = visualAssets.filter((asset) => Boolean(visualForAsset(asset))).length;
     const status = getClientPortalStatus(item, publication);
     const dateLabel = formatDateLabel(publication?.scheduledDate || item.plannedDate);
+    const isArticle = item.deliverableKind === "article";
+    const linkedArticle = isArticle ? articleByItemId.get(item.id) : undefined;
 
     return {
       item,
@@ -504,8 +513,11 @@ export function ClientPortalView({
       thumbnail,
       dateLabel,
       groupLabel: formatClientCalendarGroup(publication?.scheduledDate || item.week || item.plannedDate || "Без даты"),
-      isCarousel: slides.length > 0 || /(карус|carousel|карточ|слайд)/i.test(`${item.format} ${item.topic}`),
-      readySlides,
+      isCarousel: !isArticle && (slides.length > 0 || /(карус|carousel|карточ|слайд)/i.test(`${item.format} ${item.topic}`)),
+      isArticle,
+      articleHeroUrl: linkedArticle?.images.find((image) => image.role === "hero" && image.url)?.url ?? null,
+      articleId: linkedArticle?.id ?? null,
+      readySlides: visualAssets.filter((asset) => Boolean(visualForAsset(asset))).length,
       totalSlides,
     };
   });
@@ -520,6 +532,12 @@ export function ClientPortalView({
     setTextExpanded(false);
   };
   const openMaterial = (id: string) => {
+    const material = materials.find((candidate) => candidate.item.id === id);
+    if (material?.isArticle && material.articleId) {
+      setSelectedArticleId(material.articleId);
+      setSection("articles");
+      return;
+    }
     handleSelectMaterial(id);
     setSection("materials");
   };
@@ -944,25 +962,32 @@ export function ClientPortalView({
                         role="button"
                         tabIndex={0}
                         aria-pressed={selected}
-                        onClick={() => handleSelectMaterial(material.item.id)}
+                        onClick={() => openMaterial(material.item.id)}
                         onKeyDown={(event) => {
                           if (event.key === "Enter" || event.key === " ") {
                             event.preventDefault();
-                            handleSelectMaterial(material.item.id);
+                            openMaterial(material.item.id);
                           }
                         }}
                         className={`min-w-0 cursor-pointer rounded-[22px] border p-3 outline-none transition focus-visible:ring-4 focus-visible:ring-violet-100 ${selected ? "border-violet-200 bg-violet-50/70 shadow-[0_14px_34px_rgba(124,58,237,0.10)]" : "border-transparent bg-slate-50/70 hover:bg-white"}`}
                       >
                         <div className="flex min-w-0 gap-3">
-                          {src ? (
-                            <img src={src} alt={material.item.topic} className="h-14 w-14 shrink-0 rounded-[18px] object-cover" />
+                          {src ?? material.articleHeroUrl ? (
+                            <img src={src ?? material.articleHeroUrl ?? ""} alt={material.item.topic} className="h-14 w-14 shrink-0 rounded-[18px] object-cover" />
                           ) : (
                             <div className="grid h-14 w-14 shrink-0 place-items-center rounded-[18px] bg-white text-[10px] font-semibold text-slate-400">Soon</div>
                           )}
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-[11px] font-semibold text-slate-400">{material.dateLabel} · {material.item.platformName}</p>
+                            <p className="truncate text-[11px] font-semibold text-slate-400">
+                              {material.dateLabel} · {material.item.platformName}
+                              {material.isArticle ? " · Статья" : ""}
+                            </p>
                             <h3 className="mt-1 line-clamp-2 text-sm font-semibold leading-5 text-slate-950">{material.item.topic}</h3>
-                            <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{material.item.contentDraft?.draftBody || "Материал готовится."}</p>
+                            <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
+                              {material.isArticle
+                                ? "Экспертная статья — откройте, чтобы прочитать."
+                                : material.item.contentDraft?.draftBody || "Материал готовится."}
+                            </p>
                           </div>
                         </div>
                         <div className="mt-3 flex items-center justify-between gap-2">
@@ -1006,10 +1031,12 @@ export function ClientPortalView({
                         className="group min-w-0 overflow-hidden rounded-[22px] border border-white bg-white text-left shadow-[0_12px_30px_rgba(88,75,135,0.06)] outline-none transition hover:-translate-y-0.5 hover:shadow-[0_20px_44px_rgba(88,75,135,0.12)] focus-visible:ring-4 focus-visible:ring-violet-100"
                       >
                         <div className="relative">
-                          {src ? (
-                            <img src={src} alt={material.item.topic} className="aspect-[4/5] w-full object-cover" />
+                          {src ?? material.articleHeroUrl ? (
+                            <img src={src ?? material.articleHeroUrl ?? ""} alt={material.item.topic} className="aspect-[4/5] w-full object-cover" />
                           ) : (
-                            <div className="grid aspect-[4/5] w-full place-items-center bg-slate-50 text-xs font-semibold text-slate-400">Визуал готовится</div>
+                            <div className="grid aspect-[4/5] w-full place-items-center bg-slate-50 text-xs font-semibold text-slate-400">
+                              {material.isArticle ? "Статья готовится" : "Визуал готовится"}
+                            </div>
                           )}
                           <span className="absolute left-3 top-3">
                             <PortalStatusBadge tone={clientPortalStatusTone(material.status)}>
@@ -1019,6 +1046,11 @@ export function ClientPortalView({
                           {material.isCarousel ? (
                             <span className="absolute right-3 top-3 rounded-full bg-slate-900/45 px-2 py-1 text-[11px] font-semibold text-white backdrop-blur">
                               Карусель · {material.totalSlides}
+                            </span>
+                          ) : null}
+                          {material.isArticle ? (
+                            <span className="absolute right-3 top-3 rounded-full bg-violet-600/85 px-2 py-1 text-[11px] font-semibold text-white backdrop-blur">
+                              Статья
                             </span>
                           ) : null}
                         </div>

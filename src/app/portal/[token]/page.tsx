@@ -60,6 +60,7 @@ export default async function ClientPortalPage({
               platformName: true,
               format: true,
               topic: true,
+              deliverableKind: true,
               contentDraft: {
                 select: {
                   id: true,
@@ -158,6 +159,7 @@ export default async function ClientPortalPage({
     .then((rows) =>
       rows.map((article) => ({
         id: article.id,
+        plannedContentItemId: article.plannedContentItemId,
         title: article.title,
         bodyMarkdown: article.bodyMarkdown,
         images: (article.images as ArticleImage[]) ?? [],

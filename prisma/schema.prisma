@@ -215,6 +215,7 @@ model PlannedContentItem {
   topic               String
   goal                String
   plannedDate         String
+  deliverableKind     String               @default("post")
   week                String?
   campaignTheme       String?
   contentPillar       String?
