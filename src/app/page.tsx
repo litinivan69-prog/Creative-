@@ -76,7 +76,7 @@ import {
   archiveArticleAction,
 } from "@/app/actions";
 import { ArticleReader } from "@/app/article-reader";
-import { ARTICLE_STAGES, ARTICLE_STAGE_LABELS, type ArticleStage } from "@/lib/article-engine";
+import { ARTICLE_STAGES, ARTICLE_STAGE_LABELS, articleHeroUrl, type ArticleStage } from "@/lib/article-engine";
 import type { ArticleCallout, ArticleFaqItem, ArticleImage, ArticleSource } from "@/lib/article-schema";
 import { anthropicAvailable, openaiAvailable } from "@/lib/writer";
 import { BrandAssetFileInput } from "@/app/brand-asset-file-input";
@@ -1014,10 +1014,11 @@ function shortPlatformName(platform: string) {
   return platform.slice(0, 8);
 }
 
-function materialNextActionLabel(item: { contentDraft: { status: string } | null }, publication?: { status: string; creativeAssets: Array<{ generatedVariants: GeneratedCreativeVariantPreview[] }> }) {
+function materialNextActionLabel(item: { contentDraft: { status: string } | null; deliverableKind?: string }, publication?: { status: string; creativeAssets: Array<{ generatedVariants: GeneratedCreativeVariantPreview[] }> }) {
   const assets = publication?.creativeAssets ?? [];
   const draftStatus = item.contentDraft?.status;
 
+  if (item.deliverableKind === "article") return "Статья";
   if (!item.contentDraft) return "Нужен текст";
   if (draftStatus === "client_changes_requested") return "Есть правки";
   if (draftStatus === "sent_to_client") return "На проверке";
@@ -1219,6 +1220,8 @@ type MaterialPlannedItem = {
   format: string;
   topic: string;
   goal: string;
+  deliverableKind?: string;
+  pairGroupId?: string | null;
   status: string;
   approvalRequired: boolean;
   campaignTheme: string | null;
@@ -3457,9 +3460,14 @@ type MaterialNextStepKind =
   | "generate_visual"
   | "check_visual"
   | "approve_visual"
+  | "article"
   | "ready";
 
 function materialNextStep(item: MaterialPlannedItem, publication?: ScheduledPublicationPreview) {
+  if (item.deliverableKind === "article") {
+    return { kind: "article" as const, label: "Статью готовит движок статей — смотрите вкладку «Статьи»" };
+  }
+
   const draft = item.contentDraft;
   const asset = item.creativeAssets[0] ?? publication?.creativeAssets[0];
   const variants = asset?.generatedVariants.length ? asset.generatedVariants : item.generatedCreativeVariants;
@@ -3510,6 +3518,7 @@ function MaterialPrimaryAction({
 }) {
   const nextStep = materialNextStep(item, publication);
   const asset = item.creativeAssets[0] ?? publication?.creativeAssets[0];
+  const articlesViewHref = "/?view=articles";
   const primaryActionClass =
     "inline-flex w-full justify-center rounded-full bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:bg-slate-300";
   const secondaryActionClass =
@@ -3567,6 +3576,10 @@ function MaterialPrimaryAction({
         </PendingSubmitButton>
       </form>
     );
+  }
+
+  if (nextStep.kind === "article") {
+    return <a href={articlesViewHref} className={secondaryActionClass}>Открыть статьи</a>;
   }
 
   if (nextStep.kind === "ready") {
@@ -4895,6 +4908,7 @@ function ContentCalendar({
   activeFilter,
   activeCalendarView,
   activeCalendarDate,
+  articleInfoByItemId = {},
 }: {
   groups: Array<{ label: string; items: MaterialPlannedItem[] }>;
   publications: ScheduledPublicationPreview[];
@@ -4908,6 +4922,7 @@ function ContentCalendar({
   activeFilter?: string;
   activeCalendarView?: string;
   activeCalendarDate?: string;
+  articleInfoByItemId?: Record<string, ArticleItemInfo>;
 }) {
   const items = groups.flatMap((group) => group.items);
   const publicationByItemId = new Map(publications.map((publication) => [publication.plannedContentItemId, publication]));
@@ -4946,6 +4961,7 @@ function ContentCalendar({
     const publication = publicationByItemId.get(item.id);
     const draftStatus = item.contentDraft?.status;
 
+    if (item.deliverableKind === "article") return currentFilter === "all";
     if (currentFilter === "missing_text") return !item.contentDraft;
     if (currentFilter === "missing_visual") return Boolean(publication) && !materialVisualComplete(item, publication);
     if (currentFilter === "review") return draftStatus === "draft" || draftStatus === "needs_review";
@@ -4993,6 +5009,36 @@ function ContentCalendar({
     const slideCount = assets.length > 1 ? assets.length : 0;
     const action = materialNextActionLabel(item, publication);
 
+    if (item.deliverableKind === "article") {
+      const info = articleInfoByItemId[item.id];
+      const articleAction = info?.failed ? "Ошибка" : info?.done ? "Готова" : "Готовится";
+
+      return (
+        <a
+          key={item.id}
+          href={info ? `/?view=articles&article=${info.articleId}` : "/?view=articles"}
+          className="group block overflow-hidden rounded-2xl border border-violet-100 bg-white text-left shadow-[0_4px_14px_rgba(88,75,135,0.045)] transition hover:border-violet-300 hover:shadow-[0_10px_26px_rgba(88,75,135,0.11)]"
+        >
+          {info?.heroUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={info.heroUrl} alt="" className={`${compact ? "h-16" : "h-20"} w-full bg-slate-100 object-cover`} />
+          ) : (
+            <div className={`${compact ? "h-16" : "h-20"} flex items-center justify-center bg-[#f7f3fd] px-3 text-center text-[11px] font-semibold text-violet-500`}>
+              Статья готовится
+            </div>
+          )}
+          <div className="p-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-semibold text-white">Статья</span>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${info?.failed ? "bg-rose-50 text-rose-700" : "bg-violet-50 text-violet-700"}`}>{articleAction}</span>
+            </div>
+            <p className="mt-2 line-clamp-2 text-xs font-semibold leading-4 text-slate-950">{item.topic}</p>
+            <span className="mt-2 inline-flex text-[10px] font-semibold text-violet-600 opacity-0 transition group-hover:opacity-100">Открыть статью</span>
+          </div>
+        </a>
+      );
+    }
+
     return (
       <a
         key={item.id}
@@ -5013,6 +5059,7 @@ function ContentCalendar({
         <div className="p-2.5">
           <div className="flex items-center justify-between gap-2">
             <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700">{shortPlatformName(item.platformName)}</span>
+            {item.pairGroupId ? <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700">VK+TG</span> : null}
             {slideCount > 1 ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">{slideCount} карточки</span> : null}
             <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${nextActionBadgeClass(action)}`}>{action}</span>
           </div>
@@ -5760,9 +5807,110 @@ async function safeLoadSelectedBrandClient(clientId: string) {
   }
 }
 
+type ArticleItemInfo = { articleId: string; heroUrl: string | null; done: boolean; failed: boolean };
+
+function MonthBriefPanel({
+  month,
+  items,
+  articleInfoByItemId,
+  channels,
+  brandProfileReady,
+  hasLogo,
+}: {
+  month?: string;
+  items: Array<{
+    id: string;
+    platformName: string;
+    plannedDate: string;
+    topic: string;
+    deliverableKind?: string;
+    pairGroupId?: string | null;
+  }>;
+  articleInfoByItemId: Record<string, ArticleItemInfo>;
+  channels: Array<{ platform: string }>;
+  brandProfileReady: boolean;
+  hasLogo: boolean;
+}) {
+  if (items.length === 0) return null;
+
+  const posts = items.filter((item) => item.deliverableKind !== "article");
+  const articles = items.filter((item) => item.deliverableKind === "article");
+  const platformCounts = new Map<string, number>();
+  for (const post of posts) {
+    const key = shortPlatformName(post.platformName);
+    platformCounts.set(key, (platformCounts.get(key) ?? 0) + 1);
+  }
+  const pairCount = new Set(posts.map((post) => post.pairGroupId).filter(Boolean)).size;
+  const readyArticles = articles.filter((item) => articleInfoByItemId[item.id]?.done).length;
+  const articleDates = articles
+    .map((item) => item.plannedDate)
+    .filter(Boolean)
+    .sort()
+    .map((date) => date.slice(8, 10))
+    .join(", ");
+  const usesTelegram = posts.some((post) => shortPlatformName(post.platformName) === "TG");
+  const usesVk = posts.some((post) => shortPlatformName(post.platformName) === "VK");
+  const hasTelegramChannel = channels.some((channel) => channel.platform === "telegram");
+  const hasVkChannel = channels.some((channel) => channel.platform === "vk");
+
+  const missing: string[] = [];
+  if (usesTelegram && !hasTelegramChannel) missing.push("Не подключён Telegram-канал клиента — публикация в один клик не сработает (Настройки → Каналы клиента).");
+  if (usesVk && !hasVkChannel) missing.push("Не подключена VK-группа клиента — кросс-постинг в VK не сработает (Настройки → Каналы клиента).");
+  if (!brandProfileReady) missing.push("Профиль бренда не заполнен — тексты и визуалы будут менее точными (Бренд → Профиль).");
+  if (!hasLogo) missing.push("В библиотеке бренда нет логотипа — визуалы выходят без фирменной обложки (Бренд → Материалы).");
+
+  return (
+    <section className={`${panelClass} mb-5 p-5`}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-violet-700">Бриф месяца</p>
+          <h3 className="mt-1 font-semibold text-stone-950">Что запланировано{month ? ` на ${month}` : ""}</h3>
+        </div>
+        <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-bold text-violet-700">{items.length} единиц контента</span>
+      </div>
+      <div className="mt-4 grid gap-4 lg:grid-cols-3">
+        <div className="rounded-lg bg-stone-50/80 p-4">
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-stone-400">Посты</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {[...platformCounts.entries()].map(([platform, count]) => (
+              <span key={platform} className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-stone-700 ring-1 ring-stone-200">{platform}: {count}</span>
+            ))}
+            {platformCounts.size === 0 ? <span className="text-xs text-stone-400">Постов нет</span> : null}
+          </div>
+          {pairCount > 0 ? (
+            <p className="mt-2 text-xs font-semibold text-violet-700">Парных публикаций VK+TG: {pairCount}</p>
+          ) : null}
+        </div>
+        <div className="rounded-lg bg-stone-50/80 p-4">
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-stone-400">Статьи</p>
+          <p className="mt-2 text-sm font-semibold text-stone-900">{articles.length} за месяц · готово {readyArticles}/{articles.length}</p>
+          {articleDates ? <p className="mt-1 text-xs text-stone-500">Числа месяца: {articleDates}</p> : null}
+          {articles.length === 0 ? <p className="mt-1 text-xs text-stone-400">Появятся после «Подготовить месяц».</p> : null}
+        </div>
+        <div className="rounded-lg bg-stone-50/80 p-4">
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-stone-400">Чего не хватает</p>
+          {missing.length > 0 ? (
+            <ul className="mt-2 grid gap-1.5">
+              {missing.map((entry) => (
+                <li key={entry} className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-900">{entry}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-xs font-semibold text-emerald-700">Всё на месте: каналы, бренд-профиль и логотип подключены.</p>
+          )}
+        </div>
+      </div>
+      <p className="mt-3 text-xs leading-5 text-stone-400">
+        Посмотрите план, поправьте темы и даты при необходимости — дальше «Подготовить месяц» доведёт всё до готовых материалов автоматически.
+      </p>
+    </section>
+  );
+}
+
 type ArticleRecord = {
   id: string;
   clientId: string;
+  plannedContentItemId: string | null;
   title: string;
   angle: string | null;
   geoFocus: string | null;
@@ -6333,9 +6481,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
       ),
     ).length ?? 0;
   const plannedContentCount = selectedMonthlyPlan?.plannedContentItems.length ?? 0;
+  const plannedPostCount =
+    selectedMonthlyPlan?.plannedContentItems.filter((item) => item.deliverableKind !== "article").length ?? 0;
   const productionProgress =
-    plannedContentCount > 0 ? Math.round((draftCount / plannedContentCount) * 100) : 0;
-  const missingTextCount = Math.max(plannedContentCount - draftCount, 0);
+    plannedPostCount > 0 ? Math.round((draftCount / plannedPostCount) * 100) : 0;
+  const missingTextCount = Math.max(plannedPostCount - draftCount, 0);
   const creativeAssets = selectedMonthlyPlan?.creativeAssets ?? [];
   const generationJobs = selectedMonthlyPlan?.generationJobs ?? [];
   const pickOverviewThumbnail = (
@@ -6365,7 +6515,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
       platformName: item.platformName,
       topic: item.topic,
       status: item.contentDraft?.status ?? null,
-      thumbnail: pickOverviewThumbnail(publication?.creativeAssets ?? item.creativeAssets),
+      thumbnail:
+        pickOverviewThumbnail(publication?.creativeAssets ?? item.creativeAssets) ??
+        articleInfoByItemId[item.id]?.heroUrl ??
+        null,
     };
   });
   const latestProductionRun = selectedMonthlyPlan?.productionRuns[0];
@@ -6433,6 +6586,25 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
   const telegramClientId = workspaceContext.client ?? null;
   const telegramClientName = clients.find((client) => client.id === telegramClientId)?.name ?? null;
   const articlesClientId = workspaceContext.client ?? null;
+  const planArticleRows = selectedMonthlyPlan && !isProductionBuild
+    ? await prisma.article
+        .findMany({
+          where: { monthlyPlanId: selectedMonthlyPlan.id },
+          select: { id: true, plannedContentItemId: true, images: true, stage: true, status: true },
+        })
+        .catch(() => [] as Array<{ id: string; plannedContentItemId: string | null; images: unknown; stage: string; status: string }>)
+    : [];
+  const articleInfoByItemId: Record<string, ArticleItemInfo> = {};
+  for (const row of planArticleRows) {
+    if (row.plannedContentItemId) {
+      articleInfoByItemId[row.plannedContentItemId] = {
+        articleId: row.id,
+        heroUrl: articleHeroUrl(row.images),
+        done: row.stage === "done" && row.status !== "failed",
+        failed: row.status === "failed",
+      };
+    }
+  }
   const articles: ArticleRecord[] =
     activeView === "articles" && articlesClientId
       ? await prisma.article
@@ -6456,6 +6628,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
       : []
   ).map((article) => ({
     id: article.id,
+    plannedContentItemId: article.plannedContentItemId,
     title: article.title,
     bodyMarkdown: article.bodyMarkdown,
     images: (article.images as ArticleImage[]) ?? [],
@@ -6634,6 +6807,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   activeFilter={params.filter}
                   activeCalendarView={params.calendarView}
                   activeCalendarDate={params.calendarDate}
+                  articleInfoByItemId={articleInfoByItemId}
                 />
               </>
             ) : null}
@@ -6654,6 +6828,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
             ) : null}
 
             {activeView === "drafts" ? (
+              <>
+              <MonthBriefPanel
+                month={selectedMonthlyPlan?.month}
+                items={selectedMonthlyPlan?.plannedContentItems ?? []}
+                articleInfoByItemId={articleInfoByItemId}
+                channels={telegramChannels}
+                brandProfileReady={brandProfileReady}
+                hasLogo={Boolean(selectedBrandClient?.brandAssets.some((asset) => asset.assetType === "logo"))}
+              />
               <DraftsView
                 items={selectedMonthlyPlan?.plannedContentItems ?? []}
 	                publications={selectedMonthlyPlan?.scheduledPublications ?? []}
@@ -6676,6 +6859,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 brandProfileReady={brandProfileReady}
                 latestRevisionProposal={selectedMonthlyPlan?.revisionProposals[0]}
               />
+              </>
             ) : null}
 
             {activeView === "client_portal" ? (

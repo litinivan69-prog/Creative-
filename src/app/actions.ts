@@ -56,7 +56,7 @@ import {
 import { storeGeneratedVisual } from "@/lib/visual-storage";
 import { storeClientBrandAssetFile } from "@/lib/brand-asset-storage";
 import { getClientBrandContext } from "@/lib/brand-context";
-import { runArticlePipeline } from "@/lib/article-engine";
+import { runArticlePipeline, runArticleForPlannedItem } from "@/lib/article-engine";
 
 function formText(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -1349,6 +1349,196 @@ export async function generateBlueprint(formData: FormData) {
   redirect(workspaceLocation("client_setup", { blueprintId: createdId, clientId: brief.clientId, setupStep: "monthly_plan", notice: "Blueprint сгенерирован. Следующий шаг — месячный план." }));
 }
 
+const ARTICLE_ITEM_PLATFORM_NAME = "Сайт / Блог";
+
+function isTelegramPlatformName(name: string) {
+  return /telegram|телег/i.test(name);
+}
+
+function isVkPlatformName(name: string) {
+  return /(\bvk\b|vkontakte|вконтакте|(^|\s)вк(\s|$))/i.test(name);
+}
+
+type PairablePlanItem = {
+  moduleType: string;
+  platformName: string;
+  format: string;
+  topic: string;
+  goal: string;
+  plannedDate: string;
+  week?: string | null;
+  campaignTheme?: string | null;
+  contentPillar?: string | null;
+  channelRole?: string | null;
+  sequenceReason?: string | null;
+  approvalRequired: boolean;
+  autopublishEligible: boolean;
+  requiredInputs?: unknown;
+  status: string;
+};
+
+/**
+ * One content idea → a VK+Telegram pair: same topic and date, platform-native
+ * formats, shared pairGroupId. Items already covered on both platforms are
+ * linked instead of duplicated. Non-VK/TG items pass through untouched.
+ */
+function pairVkTgPlanItems<T extends PairablePlanItem>(
+  items: T[],
+  allowedPlatformNames: string[],
+): Array<T & { pairGroupId: string | null }> {
+  const tgPlatform = allowedPlatformNames.find(isTelegramPlatformName);
+  const vkPlatform = allowedPlatformNames.find(isVkPlatformName);
+
+  if (!tgPlatform || !vkPlatform) {
+    return items.map((item) => ({ ...item, pairGroupId: null }));
+  }
+
+  const topicKey = (topic: string) => topic.trim().toLowerCase().replace(/\s+/g, " ");
+  const result: Array<T & { pairGroupId: string | null }> = [];
+  const used = new Set<number>();
+
+  items.forEach((item, index) => {
+    if (used.has(index)) return;
+
+    const itemIsTg = isTelegramPlatformName(item.platformName);
+    const itemIsVk = !itemIsTg && isVkPlatformName(item.platformName);
+
+    if (!itemIsTg && !itemIsVk) {
+      result.push({ ...item, pairGroupId: null });
+      return;
+    }
+
+    const counterpartIndex = items.findIndex(
+      (candidate, candidateIndex) =>
+        candidateIndex !== index &&
+        !used.has(candidateIndex) &&
+        topicKey(candidate.topic) === topicKey(item.topic) &&
+        (itemIsTg ? isVkPlatformName(candidate.platformName) : isTelegramPlatformName(candidate.platformName)),
+    );
+
+    const pairGroupId = crypto.randomUUID();
+    used.add(index);
+
+    if (counterpartIndex >= 0) {
+      used.add(counterpartIndex);
+      const counterpart = items[counterpartIndex];
+      result.push(
+        { ...item, pairGroupId },
+        { ...counterpart, plannedDate: item.plannedDate, pairGroupId },
+      );
+      return;
+    }
+
+    const cloneIsTg = itemIsVk;
+    result.push(
+      { ...item, pairGroupId },
+      {
+        ...item,
+        platformName: cloneIsTg ? tgPlatform : vkPlatform,
+        format: cloneIsTg
+          ? "пост Telegram (короткий, с разметкой)"
+          : "пост VK (расширенный текст, хэштеги)",
+        sequenceReason: "Парная публикация VK+Telegram: одна идея, две площадки.",
+        pairGroupId,
+      },
+    );
+  });
+
+  return result;
+}
+
+function resolveArticlesPerMonth(formData: FormData) {
+  const fromForm = formInt(formData, "articlesPerMonth");
+  if (fromForm !== null) return Math.min(10, fromForm);
+  const fromEnv = Number(process.env.ARTICLES_PER_MONTH ?? "");
+  if (Number.isFinite(fromEnv) && fromEnv >= 0) return Math.min(10, Math.round(fromEnv));
+  return 4;
+}
+
+function articleItemInputs(input: {
+  month: string;
+  count: number;
+  themes: string[];
+}): Array<{
+  moduleType: string;
+  platformName: string;
+  format: string;
+  topic: string;
+  goal: string;
+  plannedDate: string;
+  deliverableKind: string;
+  approvalRequired: boolean;
+  autopublishEligible: boolean;
+  status: string;
+}> {
+  if (input.count <= 0) return [];
+
+  const match = input.month.match(/^(\d{4})-(\d{2})$/);
+  const year = match ? Number(match[1]) : new Date().getFullYear();
+  const monthIndex = match ? Number(match[2]) - 1 : new Date().getMonth();
+  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+  const themes = input.themes.map((theme) => theme.trim()).filter(Boolean);
+
+  return Array.from({ length: input.count }, (_, index) => {
+    const day = Math.min(daysInMonth, Math.max(1, Math.round((daysInMonth * (index + 1)) / (input.count + 1))));
+    const theme = themes[index % Math.max(1, themes.length)];
+    return {
+      moduleType: "expert_articles",
+      platformName: ARTICLE_ITEM_PLATFORM_NAME,
+      format: "экспертная статья",
+      topic: theme ? `Экспертная статья: ${theme}` : `Экспертная статья месяца №${index + 1}`,
+      goal: "GEO: закрепить экспертность бренда в ответах нейросетей и поисковой выдаче",
+      plannedDate: `${input.month}-${String(day).padStart(2, "0")}`,
+      deliverableKind: "article",
+      approvalRequired: true,
+      autopublishEligible: false,
+      status: "planned",
+    };
+  });
+}
+
+async function ensureArticleItemsForPlan(monthlyPlanId: string, requestedCount: number) {
+  const plan = await prisma.monthlyOperatingPlan.findUnique({
+    where: { id: monthlyPlanId },
+    select: {
+      id: true,
+      month: true,
+      totalPlannedUnits: true,
+      rawPlanJson: true,
+      plannedContentItems: {
+        select: { deliverableKind: true, campaignTheme: true, contentPillar: true },
+      },
+    },
+  });
+
+  if (!plan) return 0;
+
+  const existingArticles = plan.plannedContentItems.filter((item) => item.deliverableKind === "article").length;
+  const missing = Math.max(0, requestedCount - existingArticles);
+  if (missing === 0) return 0;
+
+  const scope = productionScopeFromRawPlanJson(plan.rawPlanJson);
+  const themes = Array.from(
+    new Set([
+      ...(scope?.strategicThemes ?? []),
+      ...plan.plannedContentItems.map((item) => item.campaignTheme ?? ""),
+      ...plan.plannedContentItems.map((item) => item.contentPillar ?? ""),
+    ].map((theme) => theme.trim()).filter(Boolean)),
+  );
+
+  const inputs = articleItemInputs({ month: plan.month, count: missing, themes });
+
+  await prisma.plannedContentItem.createMany({
+    data: inputs.map((item) => ({ ...item, monthlyPlanId: plan.id })),
+  });
+  await prisma.monthlyOperatingPlan.update({
+    where: { id: plan.id },
+    data: { totalPlannedUnits: plan.totalPlannedUnits + missing },
+  });
+
+  return missing;
+}
+
 async function createMonthlyPlanForBlueprint(
   blueprintId: string,
   formData: FormData,
@@ -1499,6 +1689,8 @@ async function createMonthlyPlanForBlueprint(
     });
     const scopeGuardrails = enforceProductionScope(plan, productionScope);
     normalizeMonthlyPlanDates(plan.plannedContentItems, plan.month);
+    const pairedContentItems = pairVkTgPlanItems(plan.plannedContentItems, allowedPlatformNames);
+    const totalPlannedUnitsWithPairs = Math.max(plan.totalPlannedUnits, pairedContentItems.length);
 
     const created = await prisma.monthlyOperatingPlan.create({
       data: {
@@ -1508,7 +1700,7 @@ async function createMonthlyPlanForBlueprint(
         version: nextVersion,
         status: plan.status,
         summary: plan.summary,
-        totalPlannedUnits: plan.totalPlannedUnits,
+        totalPlannedUnits: totalPlannedUnitsWithPairs,
         approvalStrategy: plan.approvalStrategy,
         autopublishStrategy: plan.autopublishStrategy,
         riskSummary: plan.riskSummary,
@@ -1541,7 +1733,7 @@ async function createMonthlyPlanForBlueprint(
           })),
         },
         plannedContentItems: {
-          create: plan.plannedContentItems.map((item) => ({
+          create: pairedContentItems.map((item) => ({
             moduleType: item.moduleType,
             platformName: item.platformName,
             format: item.format,
@@ -1557,6 +1749,7 @@ async function createMonthlyPlanForBlueprint(
             autopublishEligible: item.autopublishEligible,
             requiredInputs: item.requiredInputs,
             status: item.status,
+            pairGroupId: item.pairGroupId,
           })),
         },
         managerTasks: {
@@ -1572,6 +1765,7 @@ async function createMonthlyPlanForBlueprint(
     });
 
     createdId = created.id;
+    await ensureArticleItemsForPlan(created.id, resolveArticlesPerMonth(formData));
     if (options.prepareTextsAfterCreate !== false) {
       const textPreparation = await prepareMissingTextsForMonthlyPlan(created.id);
       textPreparationNotice = textPreparation.notice;
@@ -2608,6 +2802,14 @@ async function generateContentTextForPlannedItem(
     monthlyPlanId: plan.id,
   };
 
+  if (item.deliverableKind === "article") {
+    return {
+      ...resultContext,
+      status: "skipped",
+      message: "Это статья: её готовит движок статей, отдельный текст поста не нужен.",
+    };
+  }
+
   if (item.contentDraft && !options.replaceExisting) {
     return {
       ...resultContext,
@@ -2857,9 +3059,10 @@ async function prepareMissingTextsForMonthlyPlan(monthlyPlanId: string) {
   await markGenerationJobRunning(generationJob.id, "AI готовит недостающие тексты публикаций.");
 
   try {
-    const missingTextItems = plan.plannedContentItems.filter((item) => !item.contentDraft);
+    const postItems = plan.plannedContentItems.filter((item) => item.deliverableKind !== "article");
+    const missingTextItems = postItems.filter((item) => !item.contentDraft);
     const textBatch = missingTextItems.slice(0, getAutopilotTextBatchLimit());
-    const existingTextsCount = plan.plannedContentItems.length - missingTextItems.length;
+    const existingTextsCount = postItems.length - missingTextItems.length;
     const results: ContentTextGenerationResult[] = [];
 
     for (const item of textBatch) {
@@ -2876,14 +3079,14 @@ async function prepareMissingTextsForMonthlyPlan(monthlyPlanId: string) {
     const skippedTextsCount = existingTextsCount + newlySkippedTextsCount;
     const failedTextsCount = results.filter((result) => result.status === "failed").length;
     const remainingMissingTextsCount = missingTextItems.length - createdTextsCount - newlySkippedTextsCount;
-    let notice = `Тексты подготовлены: ${createdTextsCount + skippedTextsCount} из ${plan.plannedContentItems.length}.`;
+    let notice = `Тексты подготовлены: ${createdTextsCount + skippedTextsCount} из ${postItems.length}.`;
 
     if (remainingMissingTextsCount > 0) {
-      notice = `Тексты подготовлены: ${createdTextsCount + skippedTextsCount} из ${plan.plannedContentItems.length}. Осталось ${remainingMissingTextsCount}; нажмите «Подготовить тексты» в Materials, чтобы продолжить.`;
+      notice = `Тексты подготовлены: ${createdTextsCount + skippedTextsCount} из ${postItems.length}. Осталось ${remainingMissingTextsCount}; нажмите «Подготовить тексты» в Materials, чтобы продолжить.`;
     }
 
     if (failedTextsCount > 0) {
-      notice = `Тексты подготовлены: ${createdTextsCount + skippedTextsCount} из ${plan.plannedContentItems.length}. Не удалось подготовить ${failedTextsCount} текстов. Повторите подготовку в Materials.`;
+      notice = `Тексты подготовлены: ${createdTextsCount + skippedTextsCount} из ${postItems.length}. Не удалось подготовить ${failedTextsCount} текстов. Повторите подготовку в Materials.`;
     }
 
     await markGenerationJobCompleted(
@@ -3416,7 +3619,7 @@ export async function prepareMonthVisuals(formData: FormData) {
   }));
 }
 
-const monthProductionStageOrder = ["planning", "dates", "texts", "briefs", "visuals", "quality_check", "done"];
+const monthProductionStageOrder = ["planning", "dates", "texts", "briefs", "visuals", "articles", "quality_check", "done"];
 const staleProductionTaskMs = 1000 * 60 * 15;
 
 function productionStageRank(stage: string) {
@@ -3581,8 +3784,32 @@ async function ensureMissingMonthProductionTasks(monthlyPlanId: string, producti
   const hasTask = (taskType: string, plannedContentItemId?: string | null, creativeAssetId?: string | null) =>
     existingTaskKeys.has(`${taskType}:${plannedContentItemId ?? "month"}:${creativeAssetId ?? "none"}`);
 
+  const planArticles = await prisma.article.findMany({
+    where: { monthlyPlanId, plannedContentItemId: { not: null } },
+    select: { plannedContentItemId: true, stage: true, status: true },
+  });
+  const articleByItemId = new Map(planArticles.map((article) => [article.plannedContentItemId, article]));
+
   const tasks: Prisma.MonthProductionTaskCreateManyInput[] = [];
   for (const item of plan.plannedContentItems) {
+    if (item.deliverableKind === "article") {
+      const article = articleByItemId.get(item.id);
+      const articleDone = article?.stage === "done" && article.status !== "failed";
+      if (!articleDone && !hasTask("generate_article", item.id)) {
+        tasks.push({
+          productionRunId,
+          clientId: plan.clientId,
+          blueprintId: plan.blueprintId,
+          monthlyPlanId: plan.id,
+          plannedContentItemId: item.id,
+          stage: "articles",
+          taskType: "generate_article",
+          title: `Статья: ${item.topic}`,
+        });
+      }
+      continue;
+    }
+
     if (!item.contentDraft && !hasTask("generate_text", item.id)) {
       tasks.push({
         productionRunId,
@@ -3946,6 +4173,17 @@ async function processMonthProductionTask(taskId: string) {
       return;
     }
 
+    if (task.taskType === "generate_article") {
+      if (!task.plannedContentItemId) throw new Error("Материал для статьи не найден.");
+      const result = await runArticleForPlannedItem(task.plannedContentItemId);
+      if (!result.ok) throw new Error(result.error);
+      await prisma.monthProductionTask.update({
+        where: { id: task.id },
+        data: { status: "completed", completedAt: new Date() },
+      });
+      return;
+    }
+
     if (task.taskType === "generate_visual") {
       if (!task.plannedContentItemId) throw new Error("Материал для визуала не найден.");
       const asset = await prisma.creativeAsset.findFirst({
@@ -4059,6 +4297,8 @@ export async function prepareOrContinueMonthProduction(formData: FormData) {
     blueprintId = plan.blueprintId;
   }
 
+  // Unified month: older plans created before the article track get their articles here too.
+  await ensureArticleItemsForPlan(monthlyPlanId, resolveArticlesPerMonth(formData));
   await normalizeDatesForMonthlyPlan(monthlyPlanId);
   const run = await createMonthProductionRun(monthlyPlanId);
 
@@ -4183,7 +4423,7 @@ export async function retryFailedProductionTasks(formData: FormData) {
 export async function retryMaterialProductionStep(formData: FormData) {
   const plannedContentItemId = formText(formData, "plannedContentItemId");
   const step = formText(formData, "step");
-  if (!plannedContentItemId || !["generate_text", "generate_brief", "generate_visual"].includes(step)) {
+  if (!plannedContentItemId || !["generate_text", "generate_brief", "generate_visual", "generate_article"].includes(step)) {
     errorRedirect("Не выбрана задача для повтора.", "drafts");
   }
 
@@ -4219,7 +4459,7 @@ export async function retryMaterialProductionStep(formData: FormData) {
       blueprintId: latestTask.blueprintId,
       monthlyPlanId: latestTask.monthlyPlanId,
       plannedContentItemId,
-      stage: step === "generate_text" ? "texts" : step === "generate_brief" ? "briefs" : "visuals",
+      stage: step === "generate_text" ? "texts" : step === "generate_brief" ? "briefs" : step === "generate_article" ? "articles" : "visuals",
       taskType: step,
       title: `Повтор: ${step}`,
     },

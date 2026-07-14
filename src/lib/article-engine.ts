@@ -259,6 +259,64 @@ function friendlyPipelineError(error: unknown) {
   return "Генерация статьи прервалась. Нажмите «Продолжить» — движок продолжит с последнего успешного прохода.";
 }
 
+/**
+ * Finds or creates the Article linked to a planned content item (idempotent),
+ * so the month production queue can drive the article engine per item.
+ */
+export async function ensureArticleForPlannedItem(plannedContentItemId: string) {
+  const existing = await prisma.article.findFirst({
+    where: { plannedContentItemId },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, stage: true, status: true },
+  });
+  if (existing) return existing;
+
+  const item = await prisma.plannedContentItem.findUnique({
+    where: { id: plannedContentItemId },
+    include: {
+      monthlyPlan: { select: { id: true, clientId: true, blueprintId: true } },
+    },
+  });
+
+  if (!item) {
+    return null;
+  }
+
+  return prisma.article.create({
+    data: {
+      clientId: item.monthlyPlan.clientId,
+      blueprintId: item.monthlyPlan.blueprintId,
+      monthlyPlanId: item.monthlyPlan.id,
+      plannedContentItemId: item.id,
+      title: item.topic,
+      angle: item.goal || null,
+      stage: "brief",
+      status: "generating",
+    },
+    select: { id: true, stage: true, status: true },
+  });
+}
+
+export async function runArticleForPlannedItem(plannedContentItemId: string) {
+  const article = await ensureArticleForPlannedItem(plannedContentItemId);
+  if (!article) {
+    return { ok: false as const, error: "Запланированный материал для статьи не найден." };
+  }
+  if (article.stage === "done" && article.status !== "failed") {
+    return { ok: true as const, articleId: article.id };
+  }
+  const outcome = await runArticlePipeline(article.id);
+  return outcome.ok
+    ? { ok: true as const, articleId: article.id }
+    : { ok: false as const, error: outcome.error, articleId: article.id };
+}
+
+export function articleHeroUrl(images: unknown): string | null {
+  if (!Array.isArray(images)) return null;
+  const list = images as ArticleImage[];
+  return list.find((image) => image.role === "hero" && image.url)?.url ?? list.find((image) => image.url)?.url ?? null;
+}
+
 export async function runArticlePipeline(articleId: string) {
   const article = await prisma.article.findUnique({
     where: { id: articleId },
