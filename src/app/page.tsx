@@ -5809,6 +5809,104 @@ async function safeLoadSelectedBrandClient(clientId: string) {
 
 type ArticleItemInfo = { articleId: string; heroUrl: string | null; done: boolean; failed: boolean };
 
+function MonthBriefPanel({
+  month,
+  items,
+  articleInfoByItemId,
+  channels,
+  brandProfileReady,
+  hasLogo,
+}: {
+  month?: string;
+  items: Array<{
+    id: string;
+    platformName: string;
+    plannedDate: string;
+    topic: string;
+    deliverableKind?: string;
+    pairGroupId?: string | null;
+  }>;
+  articleInfoByItemId: Record<string, ArticleItemInfo>;
+  channels: Array<{ platform: string }>;
+  brandProfileReady: boolean;
+  hasLogo: boolean;
+}) {
+  if (items.length === 0) return null;
+
+  const posts = items.filter((item) => item.deliverableKind !== "article");
+  const articles = items.filter((item) => item.deliverableKind === "article");
+  const platformCounts = new Map<string, number>();
+  for (const post of posts) {
+    const key = shortPlatformName(post.platformName);
+    platformCounts.set(key, (platformCounts.get(key) ?? 0) + 1);
+  }
+  const pairCount = new Set(posts.map((post) => post.pairGroupId).filter(Boolean)).size;
+  const readyArticles = articles.filter((item) => articleInfoByItemId[item.id]?.done).length;
+  const articleDates = articles
+    .map((item) => item.plannedDate)
+    .filter(Boolean)
+    .sort()
+    .map((date) => date.slice(8, 10))
+    .join(", ");
+  const usesTelegram = posts.some((post) => shortPlatformName(post.platformName) === "TG");
+  const usesVk = posts.some((post) => shortPlatformName(post.platformName) === "VK");
+  const hasTelegramChannel = channels.some((channel) => channel.platform === "telegram");
+  const hasVkChannel = channels.some((channel) => channel.platform === "vk");
+
+  const missing: string[] = [];
+  if (usesTelegram && !hasTelegramChannel) missing.push("Не подключён Telegram-канал клиента — публикация в один клик не сработает (Настройки → Каналы клиента).");
+  if (usesVk && !hasVkChannel) missing.push("Не подключена VK-группа клиента — кросс-постинг в VK не сработает (Настройки → Каналы клиента).");
+  if (!brandProfileReady) missing.push("Профиль бренда не заполнен — тексты и визуалы будут менее точными (Бренд → Профиль).");
+  if (!hasLogo) missing.push("В библиотеке бренда нет логотипа — визуалы выходят без фирменной обложки (Бренд → Материалы).");
+
+  return (
+    <section className={`${panelClass} mb-5 p-5`}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-violet-700">Бриф месяца</p>
+          <h3 className="mt-1 font-semibold text-stone-950">Что запланировано{month ? ` на ${month}` : ""}</h3>
+        </div>
+        <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-bold text-violet-700">{items.length} единиц контента</span>
+      </div>
+      <div className="mt-4 grid gap-4 lg:grid-cols-3">
+        <div className="rounded-lg bg-stone-50/80 p-4">
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-stone-400">Посты</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {[...platformCounts.entries()].map(([platform, count]) => (
+              <span key={platform} className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-stone-700 ring-1 ring-stone-200">{platform}: {count}</span>
+            ))}
+            {platformCounts.size === 0 ? <span className="text-xs text-stone-400">Постов нет</span> : null}
+          </div>
+          {pairCount > 0 ? (
+            <p className="mt-2 text-xs font-semibold text-violet-700">Парных публикаций VK+TG: {pairCount}</p>
+          ) : null}
+        </div>
+        <div className="rounded-lg bg-stone-50/80 p-4">
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-stone-400">Статьи</p>
+          <p className="mt-2 text-sm font-semibold text-stone-900">{articles.length} за месяц · готово {readyArticles}/{articles.length}</p>
+          {articleDates ? <p className="mt-1 text-xs text-stone-500">Числа месяца: {articleDates}</p> : null}
+          {articles.length === 0 ? <p className="mt-1 text-xs text-stone-400">Появятся после «Подготовить месяц».</p> : null}
+        </div>
+        <div className="rounded-lg bg-stone-50/80 p-4">
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-stone-400">Чего не хватает</p>
+          {missing.length > 0 ? (
+            <ul className="mt-2 grid gap-1.5">
+              {missing.map((entry) => (
+                <li key={entry} className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-900">{entry}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-xs font-semibold text-emerald-700">Всё на месте: каналы, бренд-профиль и логотип подключены.</p>
+          )}
+        </div>
+      </div>
+      <p className="mt-3 text-xs leading-5 text-stone-400">
+        Посмотрите план, поправьте темы и даты при необходимости — дальше «Подготовить месяц» доведёт всё до готовых материалов автоматически.
+      </p>
+    </section>
+  );
+}
+
 type ArticleRecord = {
   id: string;
   clientId: string;
@@ -6730,6 +6828,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
             ) : null}
 
             {activeView === "drafts" ? (
+              <>
+              <MonthBriefPanel
+                month={selectedMonthlyPlan?.month}
+                items={selectedMonthlyPlan?.plannedContentItems ?? []}
+                articleInfoByItemId={articleInfoByItemId}
+                channels={telegramChannels}
+                brandProfileReady={brandProfileReady}
+                hasLogo={Boolean(selectedBrandClient?.brandAssets.some((asset) => asset.assetType === "logo"))}
+              />
               <DraftsView
                 items={selectedMonthlyPlan?.plannedContentItems ?? []}
 	                publications={selectedMonthlyPlan?.scheduledPublications ?? []}
@@ -6752,6 +6859,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 brandProfileReady={brandProfileReady}
                 latestRevisionProposal={selectedMonthlyPlan?.revisionProposals[0]}
               />
+              </>
             ) : null}
 
             {activeView === "client_portal" ? (

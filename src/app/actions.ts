@@ -4297,6 +4297,8 @@ export async function prepareOrContinueMonthProduction(formData: FormData) {
     blueprintId = plan.blueprintId;
   }
 
+  // Unified month: older plans created before the article track get their articles here too.
+  await ensureArticleItemsForPlan(monthlyPlanId, resolveArticlesPerMonth(formData));
   await normalizeDatesForMonthlyPlan(monthlyPlanId);
   const run = await createMonthProductionRun(monthlyPlanId);
 
