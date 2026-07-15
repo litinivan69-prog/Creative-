@@ -79,7 +79,9 @@ import { ArticleReader } from "@/app/article-reader";
 import { ARTICLE_STAGES, ARTICLE_STAGE_LABELS, articleHeroUrl, type ArticleStage } from "@/lib/article-engine";
 import type { ArticleCallout, ArticleFaqItem, ArticleImage, ArticleSource } from "@/lib/article-schema";
 import { anthropicAvailable, openaiAvailable } from "@/lib/writer";
+import { AutoTextarea } from "@/app/auto-textarea";
 import { BrandAssetFileInput } from "@/app/brand-asset-file-input";
+import { LongTaskProgress } from "@/app/long-task-progress";
 import { ClientPortalView } from "@/app/client-portal-view";
 import {
   buildMonthlyReport,
@@ -1561,13 +1563,22 @@ function MonthProductionRunPanel({ run, plan }: { run?: MonthProductionRunPrevie
           <p className="mt-4 rounded-2xl bg-slate-50 p-3 text-sm text-slate-600">Материалов в плане: {plannedItemsCount}.</p>
         )}
         {hasPlan ? (
-          <form action={prepareOrContinueMonthProduction} className="mt-4">
+          <form action={prepareOrContinueMonthProduction} className="mt-4 grid gap-3">
             {plan?.id ? <input type="hidden" name="monthlyPlanId" value={plan.id} /> : null}
             {plan?.blueprintId ? <input type="hidden" name="blueprintId" value={plan.blueprintId} /> : null}
             {plan?.clientId ? <input type="hidden" name="clientId" value={plan.clientId} /> : null}
             <PendingSubmitButton pendingLabel="Запускаем..." className="rounded-full bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:bg-slate-300">
               {plan?.id ? "Начать подготовку" : "Подготовить месяц"}
             </PendingSubmitButton>
+            <LongTaskProgress
+              title={plan?.id ? "Запуск подготовки месяца" : "Создание плана месяца"}
+              estimatedSeconds={plan?.id ? 30 : 120}
+              stages={
+                plan?.id
+                  ? ["Проверяем план и даты", "Ставим задачи в очередь"]
+                  : ["Создаём план месяца", "Раскладываем даты, пары и статьи", "Ставим задачи в очередь"]
+              }
+            />
           </form>
         ) : null}
       </section>
@@ -1580,6 +1591,7 @@ function MonthProductionRunPanel({ run, plan }: { run?: MonthProductionRunPrevie
   const textTasks = run.tasks.filter((task) => task.taskType === "generate_text");
   const briefTasks = run.tasks.filter((task) => task.taskType === "generate_brief");
   const visualTasks = run.tasks.filter((task) => task.taskType === "generate_visual");
+  const articleTasks = run.tasks.filter((task) => task.taskType === "generate_article");
   const failedTasks = run.tasks.filter((task) => task.status === "failed");
   const hasQueuedTasks = run.tasks.some((task) => task.status === "queued");
   const autoRunning = ["queued", "running"].includes(run.status) && hasQueuedTasks && run.completedTasks + run.failedTasks < run.totalTasks;
@@ -1618,10 +1630,11 @@ function MonthProductionRunPanel({ run, plan }: { run?: MonthProductionRunPrevie
       <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
         <div className="h-full rounded-full bg-violet-600 transition-all" style={{ width: `${progress}%` }} />
       </div>
-      <div className="mt-4 grid gap-2 sm:grid-cols-4">
+      <div className="mt-4 grid gap-2 sm:grid-cols-3 xl:grid-cols-5">
         <MetricCard label="Тексты" value={stageCounts(textTasks)} detail="готово" />
         <MetricCard label="ТЗ" value={stageCounts(briefTasks)} detail="готово" />
         <MetricCard label="Визуалы" value={stageCounts(visualTasks)} detail="готово" />
+        <MetricCard label="Статьи" value={stageCounts(articleTasks)} detail="готово" />
         <MetricCard label="Ошибки" value={run.failedTasks} detail="повторяемо" tone={run.failedTasks > 0 ? "amber" : "teal"} />
       </div>
       {expectedUnits > plannedItemsCount ? (
@@ -2464,7 +2477,7 @@ function CreativeAssetLayer({
                     </label>
                     <label className="grid gap-1 text-xs font-bold text-stone-600 sm:col-span-2">
                       Описание ТЗ
-                      <textarea name="brief" required rows={4} className={inputClass} placeholder="Что нужно показать, настроение, ключевой акцент" />
+                      <AutoTextarea name="brief" required rows={4} className={inputClass} placeholder="Что нужно показать, настроение, ключевой акцент" />
                     </label>
                     <label className="grid gap-1 text-xs font-bold text-stone-600">
                       Требования к формату
@@ -2580,7 +2593,7 @@ function CreativeAssetLayer({
                   <form action={updateCreativeAssetBrief} className="grid gap-2 border-t border-stone-200 p-3">
                     <input type="hidden" name="creativeAssetId" value={asset.id} />
                     <input type="text" name="title" required defaultValue={asset.title} className={inputClass} />
-                    <textarea name="brief" required rows={4} defaultValue={asset.brief} className={inputClass} />
+                    <AutoTextarea name="brief" required rows={4} defaultValue={asset.brief} className={inputClass} />
                     <input type="text" name="formatRequirements" defaultValue={asset.formatRequirements ?? ""} className={inputClass} placeholder="Требования к формату" />
                     <input type="text" name="textOnAsset" defaultValue={asset.textOnAsset ?? ""} className={inputClass} placeholder="Текст на материале" />
                     <input type="text" name="references" defaultValue={asset.references ?? ""} className={inputClass} placeholder="Референсы" />
@@ -3193,7 +3206,7 @@ function BrandAssetsView({ client, requestedStep, workspaceContext }: { client: 
             {fields.map(([name, label]) => (
               <label key={name} className="grid gap-1 text-xs font-bold text-stone-600">
                 {label}
-                <textarea name={name} defaultValue={profile?.[name] ?? ""} rows={3} className={inputClass} />
+                <AutoTextarea name={name} defaultValue={profile?.[name] ?? ""} rows={3} className={inputClass} />
               </label>
             ))}
             <PendingSubmitButton pendingLabel="Сохраняем..." className={`${primaryButtonClass} md:col-span-2`}>Сохранить профиль бренда</PendingSubmitButton>
@@ -3220,7 +3233,7 @@ function BrandAssetsView({ client, requestedStep, workspaceContext }: { client: 
             </label>
             <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
               Описание
-              <textarea name="description" rows={2} className={inputClass} placeholder="Описание и заметки" />
+              <AutoTextarea name="description" rows={2} className={inputClass} placeholder="Описание и заметки" />
             </label>
             <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
               Ссылка на источник
@@ -3228,7 +3241,7 @@ function BrandAssetsView({ client, requestedStep, workspaceContext }: { client: 
             </label>
             <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
               Текст или выдержка
-              <textarea name="textContent" rows={4} className={inputClass} placeholder="Можно добавить вручную даже без файла" />
+              <AutoTextarea name="textContent" rows={4} className={inputClass} placeholder="Можно добавить вручную даже без файла" />
             </label>
             <BrandAssetFileInput className={inputClass} />
             <PendingSubmitButton pendingLabel="Добавляем..." className={primaryButtonClass}>Добавить материал</PendingSubmitButton>
@@ -3633,7 +3646,7 @@ function MonthlyPlanRevisionCopilot({
           </p>
           <form action={reviseMonthlyPlanWithCopilot} className="mt-4 grid gap-3">
             {monthlyPlanId ? <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} /> : null}
-            <textarea
+            <AutoTextarea
               name="instruction"
               required
               rows={5}
@@ -3649,7 +3662,7 @@ function MonthlyPlanRevisionCopilot({
             <summary className="cursor-pointer text-xs font-semibold text-stone-600">Только предложить без применения</summary>
             <form action={proposeMonthlyPlanRevision} className="mt-3 grid gap-3">
               {monthlyPlanId ? <input type="hidden" name="monthlyPlanId" value={monthlyPlanId} /> : null}
-              <textarea
+              <AutoTextarea
                 name="instruction"
                 required
                 rows={3}
@@ -3798,7 +3811,7 @@ function ManualPlanFields({ item }: { item?: MaterialPlannedItem }) {
       </label>
       <label className="grid gap-1 text-xs font-bold text-stone-600 sm:col-span-2">
         Цель
-        <textarea name="goal" required rows={3} defaultValue={item?.goal ?? ""} className={inputClass} />
+        <AutoTextarea name="goal" required rows={3} defaultValue={item?.goal ?? ""} className={inputClass} />
       </label>
       <label className="grid gap-1 text-xs font-bold text-stone-600">
         Неделя
@@ -3846,11 +3859,11 @@ function MonthScopeFields({
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <label className="grid gap-1.5 text-xs font-bold text-slate-600">
           Активные каналы
-          <textarea name="scopeAllowedPlatforms" rows={4} defaultValue={defaultPlatforms} className={textareaClass} />
+          <AutoTextarea name="scopeAllowedPlatforms" rows={4} defaultValue={defaultPlatforms} className={textareaClass} />
         </label>
         <label className="grid gap-1.5 text-xs font-bold text-slate-600">
           Что делаем в этом месяце
-          <textarea
+          <AutoTextarea
             name="scopeAllowedDeliverables"
             rows={4}
             defaultValue={"VK post\nTelegram post\nДзен article\nPost visual\nArticle visual\nYandex Maps review reply draft"}
@@ -3859,7 +3872,7 @@ function MonthScopeFields({
         </label>
         <label className="grid gap-1.5 text-xs font-bold text-slate-600">
           Что НЕ делаем
-          <textarea
+          <AutoTextarea
             name="scopeForbiddenDeliverables"
             rows={4}
             defaultValue={"рекламные макеты\nсайт бренда\nOzon Seller\nemail\nлендинг\nнаружная реклама"}
@@ -3868,15 +3881,15 @@ function MonthScopeFields({
         </label>
         <label className="grid gap-1.5 text-xs font-bold text-slate-600">
           Темы месяца
-          <textarea name="scopeStrategicThemes" rows={4} placeholder="Например: запуск нового продукта, сезонное предложение, экспертные советы, закулисье команды..." className={textareaClass} />
+          <AutoTextarea name="scopeStrategicThemes" rows={4} placeholder="Например: запуск нового продукта, сезонное предложение, экспертные советы, закулисье команды..." className={textareaClass} />
         </label>
         <label className="grid gap-1.5 text-xs font-bold text-slate-600">
           Частота
-          <textarea name="scopeCadenceRules" rows={3} placeholder="VK: 2 поста/неделю&#10;Telegram: 3 поста/неделю" className={textareaClass} />
+          <AutoTextarea name="scopeCadenceRules" rows={3} placeholder="VK: 2 поста/неделю&#10;Telegram: 3 поста/неделю" className={textareaClass} />
         </label>
         <label className="grid gap-1.5 text-xs font-bold text-slate-600">
           Репутационные задачи
-          <textarea name="scopeReputationTasks" rows={3} placeholder="Yandex Maps: ответы на новые отзывы при наличии текста отзыва" className={textareaClass} />
+          <AutoTextarea name="scopeReputationTasks" rows={3} placeholder="Yandex Maps: ответы на новые отзывы при наличии текста отзыва" className={textareaClass} />
         </label>
       </div>
     </section>
@@ -4340,7 +4353,7 @@ function DraftsView({
 	                          <form action={updatePublicationText} key={`${selectedItem.contentDraft.id}-${selectedItem.contentDraft.updatedAt.toISOString()}`} className="mt-4 grid gap-3">
 	                            <input type="hidden" name="contentDraftId" value={selectedItem.contentDraft.id} />
 	                            <input type="text" name="draftTitle" required defaultValue={selectedItem.contentDraft.draftTitle} className={inputClass} />
-	                            <textarea name="draftBody" required rows={14} defaultValue={selectedItem.contentDraft.draftBody} className={`${inputClass} min-h-[360px] w-full resize-y overflow-x-hidden whitespace-pre-wrap break-words leading-6`} />
+	                            <AutoTextarea name="draftBody" required rows={14} defaultValue={selectedItem.contentDraft.draftBody} className={`${inputClass} min-h-[360px] w-full resize-y overflow-x-hidden whitespace-pre-wrap break-words leading-6`} />
 	                            <input type="text" name="comment" className={inputClass} placeholder="Комментарий к правке" />
 	                            <div className="flex flex-wrap gap-2">
 	                              <PendingSubmitButton pendingLabel="Сохраняем..." className="rounded-full bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700">Сохранить текст</PendingSubmitButton>
@@ -4375,9 +4388,9 @@ function DraftsView({
                             <input type="hidden" name="creativeAssetId" value={selectedAsset.id} />
                             <input type="hidden" name="returnView" value="drafts" />
                             <input type="text" name="title" required defaultValue={selectedAsset.title} className={inputClass} />
-                            <textarea name="brief" required rows={8} defaultValue={selectedAsset.brief} className={`${inputClass} min-h-[220px] w-full resize-y overflow-x-hidden whitespace-pre-wrap break-words leading-6`} />
-                            <textarea name="formatRequirements" rows={4} defaultValue={selectedAsset.formatRequirements ?? ""} className={`${inputClass} w-full resize-y overflow-x-hidden whitespace-pre-wrap break-words leading-6`} placeholder="Требования к формату" />
-                            <textarea name="textOnAsset" rows={3} defaultValue={selectedAsset.textOnAsset ?? ""} className={`${inputClass} w-full resize-y overflow-x-hidden whitespace-pre-wrap break-words leading-6`} placeholder="Текст на визуале" />
+                            <AutoTextarea name="brief" required rows={8} defaultValue={selectedAsset.brief} className={`${inputClass} min-h-[220px] w-full resize-y overflow-x-hidden whitespace-pre-wrap break-words leading-6`} />
+                            <AutoTextarea name="formatRequirements" rows={4} defaultValue={selectedAsset.formatRequirements ?? ""} className={`${inputClass} w-full resize-y overflow-x-hidden whitespace-pre-wrap break-words leading-6`} placeholder="Требования к формату" />
+                            <AutoTextarea name="textOnAsset" rows={3} defaultValue={selectedAsset.textOnAsset ?? ""} className={`${inputClass} w-full resize-y overflow-x-hidden whitespace-pre-wrap break-words leading-6`} placeholder="Текст на визуале" />
                             <input type="text" name="references" defaultValue={selectedAsset.references ?? ""} className={inputClass} placeholder="Референсы" />
                             <input type="text" name="notes" defaultValue={selectedAsset.notes ?? ""} className={inputClass} placeholder="Заметки" />
                             <div className="flex flex-wrap gap-2">
@@ -5238,11 +5251,16 @@ function ContentCalendar({
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">Сгенерируйте месячный план, чтобы увидеть материалы по датам и неделям.</p>
           </div>
           {blueprintId ? (
-            <form action={generateMonthlyPlan} className="mt-4">
+            <form action={generateMonthlyPlan} className="mt-4 grid gap-3">
               <input type="hidden" name="blueprintId" value={blueprintId} />
               <PendingSubmitButton pendingLabel="Генерируем месячный план..." disabled={generationBlocked} className="rounded-full bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:bg-slate-300">
                 Сгенерировать месячный план
               </PendingSubmitButton>
+              <LongTaskProgress
+                title="Генерация месячного плана"
+                estimatedSeconds={120}
+                stages={["Анализ Blueprint и scope", "Темы и календарная сетка", "Пары VK+TG и статьи", "Сохраняем план и ставим очередь"]}
+              />
             </form>
           ) : (
             <a href={clientSetupHref} className="mt-4 inline-flex text-sm font-semibold text-violet-700 transition hover:text-violet-900">
@@ -5429,12 +5447,17 @@ function ClientSetupWizard({
 	                </form>
 	              </details>
 	            ) : blueprint ? (
-	              <form action={prepareOrContinueMonthProduction}>
+	              <form action={prepareOrContinueMonthProduction} className="grid gap-3">
 	                <input type="hidden" name="blueprintId" value={blueprint.id} />
 	                <input type="hidden" name="clientId" value={blueprint.clientId} />
 	                <PendingSubmitButton pendingLabel="Готовим месяц..." disabled={blueprint.nextRecommendedAction === "request_more_brief_data"} className="rounded-md bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:bg-slate-300">
 	                  Подготовить месяц
 	                </PendingSubmitButton>
+	                <LongTaskProgress
+	                  title="Создание плана месяца"
+	                  estimatedSeconds={120}
+	                  stages={["Создаём план месяца", "Раскладываем даты, пары и статьи", "Ставим задачи в очередь"]}
+	                />
 	              </form>
 	            ) : null}
 	          </div>
@@ -5519,7 +5542,7 @@ function ClientSetupWizard({
                     <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-stone-700">Редактировать бриф</summary>
                     <form action={updateClientBrief} className="grid gap-3 border-t border-stone-200 p-3">
                       <input type="hidden" name="briefId" value={selectedBrief.id} />
-                      <textarea name="rawBrief" required rows={7} defaultValue={selectedBrief.rawBrief} className={`${inputClass} resize-y`} />
+                      <AutoTextarea name="rawBrief" required rows={7} defaultValue={selectedBrief.rawBrief} className={`${inputClass} resize-y`} />
                       <p className="text-xs leading-5 text-stone-500">Если у брифа уже есть Blueprint, он будет удалён и его нужно будет сгенерировать заново.</p>
                       <PendingSubmitButton pendingLabel="Сохраняем..." className={secondaryButtonClass}>
                         Сохранить изменения
@@ -5536,7 +5559,7 @@ function ClientSetupWizard({
                 <input type="hidden" name="clientId" value={selectedClient.id} />
                 <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
                   Бриф клиента
-                  <textarea
+                  <AutoTextarea
                     name="rawBrief"
                     required
                     rows={9}
@@ -5591,11 +5614,16 @@ function ClientSetupWizard({
                   <p className="text-sm font-semibold text-stone-950">{selectedClient.name}</p>
                   <p className="mt-2 line-clamp-4 text-sm leading-6 text-stone-600">{selectedBrief.rawBrief}</p>
                 </article>
-                <form action={generateBlueprint}>
+                <form action={generateBlueprint} className="grid gap-3">
                   <input type="hidden" name="briefId" value={selectedBrief.id} />
                   <PendingSubmitButton pendingLabel="Генерируем Blueprint..." className={primaryButtonClass}>
                     Сгенерировать Blueprint
                   </PendingSubmitButton>
+                  <LongTaskProgress
+                    title="Генерация Blueprint"
+                    estimatedSeconds={90}
+                    stages={["Читаем бриф клиента", "Подбираем модули и площадки", "Собираем scope, риски и частоту", "Сохраняем Blueprint"]}
+                  />
                 </form>
                 <p className="text-xs leading-5 text-stone-500">Blueprint появится после генерации на основе брифа.</p>
               </div>
@@ -5653,6 +5681,11 @@ function ClientSetupWizard({
 	                  <PendingSubmitButton pendingLabel="Генерируем месячный план..." disabled={blueprint.nextRecommendedAction === "request_more_brief_data"} className={primaryButtonClass}>
 	                    Сгенерировать месячный план
 	                  </PendingSubmitButton>
+	                  <LongTaskProgress
+	                    title="Генерация месячного плана"
+	                    estimatedSeconds={120}
+	                    stages={["Анализ Blueprint и scope", "Темы и календарная сетка", "Пары VK+TG и статьи", "Сохраняем план и ставим очередь"]}
+	                  />
 	                </form>
                 {blueprint.nextRecommendedAction === "request_more_brief_data" ? (
                   <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-900">
