@@ -36,8 +36,10 @@ import { normalizeMonthlyPlanDates, parseExactPlanDate } from "@/lib/monthly-pla
 import { validateMonthlyPlanForBlueprint } from "@/lib/monthly-plan-schema";
 import { MonthlyPlanRevisionProposalSchema } from "@/lib/monthly-plan-revision-schema";
 import {
+  enforceCadenceOnPlannedItems,
   enforceProductionScope,
   normalizeScopeToken,
+  parseCadenceLimits,
   productionScopeFromFormData,
   type MonthlyProductionScope,
 } from "@/lib/production-scope";
@@ -1398,7 +1400,8 @@ function pairVkTgPlanItems<T extends PairablePlanItem>(
     const itemIsTg = isTelegramPlatformName(item.platformName);
     const itemIsVk = !itemIsTg && isVkPlatformName(item.platformName);
 
-    if (!itemIsTg && !itemIsVk) {
+    // Articles are a standalone deliverable — never duplicated across VK+TG.
+    if ((!itemIsTg && !itemIsVk) || isArticleLikePlanItem(item)) {
       result.push({ ...item, pairGroupId: null });
       return;
     }
@@ -1407,6 +1410,7 @@ function pairVkTgPlanItems<T extends PairablePlanItem>(
       (candidate, candidateIndex) =>
         candidateIndex !== index &&
         !used.has(candidateIndex) &&
+        !isArticleLikePlanItem(candidate) &&
         topicKey(candidate.topic) === topicKey(item.topic) &&
         (itemIsTg ? isVkPlatformName(candidate.platformName) : isTelegramPlatformName(candidate.platformName)),
     );
@@ -1440,6 +1444,17 @@ function pairVkTgPlanItems<T extends PairablePlanItem>(
   });
 
   return result;
+}
+
+/**
+ * Detects article deliverables the plan model produced on its own (Дзен/blog
+ * items with an article format). They must go through the full article engine,
+ * not the lightweight post-text generator.
+ */
+function isArticleLikePlanItem(item: { moduleType?: string | null; format: string; topic: string }) {
+  const formatText = `${item.moduleType ?? ""} ${item.format}`.toLowerCase();
+  if (/статья|статьи|статей|статью|article|лонгрид|long-?read/.test(formatText)) return true;
+  return /^экспертная статья/i.test(item.topic.trim());
 }
 
 function resolveArticlesPerMonth(formData: FormData) {
@@ -1501,18 +1516,43 @@ async function ensureArticleItemsForPlan(monthlyPlanId: string, requestedCount: 
       totalPlannedUnits: true,
       rawPlanJson: true,
       plannedContentItems: {
-        select: { deliverableKind: true, campaignTheme: true, contentPillar: true },
+        select: {
+          id: true,
+          deliverableKind: true,
+          moduleType: true,
+          format: true,
+          topic: true,
+          campaignTheme: true,
+          contentPillar: true,
+        },
       },
     },
   });
 
   if (!plan) return 0;
 
-  const existingArticles = plan.plannedContentItems.filter((item) => item.deliverableKind === "article").length;
-  const missing = Math.max(0, requestedCount - existingArticles);
-  if (missing === 0) return 0;
+  // Normalize article-like items the plan model produced itself: they must be
+  // driven by the article engine, not the post-text generator. Idempotent.
+  const itemsToNormalize = plan.plannedContentItems.filter(
+    (item) => item.deliverableKind !== "article" && isArticleLikePlanItem(item),
+  );
+  if (itemsToNormalize.length > 0) {
+    await prisma.plannedContentItem.updateMany({
+      where: { id: { in: itemsToNormalize.map((item) => item.id) } },
+      data: { deliverableKind: "article", pairGroupId: null },
+    });
+  }
 
   const scope = productionScopeFromRawPlanJson(plan.rawPlanJson);
+  // Cadence rule «статьи N в месяц» wins over the form/env default.
+  const cadenceArticles = scope ? parseCadenceLimits(scope.cadenceRules).articlesPerMonth : null;
+  const effectiveCount = cadenceArticles ?? requestedCount;
+
+  const existingArticles =
+    plan.plannedContentItems.filter((item) => item.deliverableKind === "article").length + itemsToNormalize.length;
+  const missing = Math.max(0, effectiveCount - existingArticles);
+  if (missing === 0) return 0;
+
   const themes = Array.from(
     new Set([
       ...(scope?.strategicThemes ?? []),
@@ -1685,7 +1725,13 @@ async function createMonthlyPlanForBlueprint(
     const scopeGuardrails = enforceProductionScope(plan, productionScope);
     normalizeMonthlyPlanDates(plan.plannedContentItems, plan.month);
     const pairedContentItems = pairVkTgPlanItems(plan.plannedContentItems, allowedPlatformNames);
-    const totalPlannedUnitsWithPairs = Math.max(plan.totalPlannedUnits, pairedContentItems.length);
+    const cadenceLimits = parseCadenceLimits(productionScope.cadenceRules);
+    const cadenceResult = enforceCadenceOnPlannedItems(pairedContentItems, cadenceLimits);
+    const finalContentItems = cadenceResult.kept;
+    if (finalContentItems.length === 0) {
+      throw new Error("Правила частоты из scope не оставили ни одного материала. Ослабьте «Частоту» и попробуйте снова.");
+    }
+    const totalPlannedUnitsWithPairs = finalContentItems.length;
 
     const created = await prisma.monthlyOperatingPlan.create({
       data: {
@@ -1704,6 +1750,7 @@ async function createMonthlyPlanForBlueprint(
           productionScope,
           scopeGuardrails: {
             removedReasons: scopeGuardrails.removedReasons,
+            cadenceTrimmedItems: cadenceResult.removedCount,
           },
         } as unknown as Prisma.InputJsonValue,
         modules: {
@@ -1728,7 +1775,7 @@ async function createMonthlyPlanForBlueprint(
           })),
         },
         plannedContentItems: {
-          create: pairedContentItems.map((item) => ({
+          create: finalContentItems.map((item) => ({
             moduleType: item.moduleType,
             platformName: item.platformName,
             format: item.format,
@@ -1745,6 +1792,8 @@ async function createMonthlyPlanForBlueprint(
             requiredInputs: item.requiredInputs,
             status: item.status,
             pairGroupId: item.pairGroupId,
+            // Model-planned articles go through the full article engine, not post texts.
+            deliverableKind: isArticleLikePlanItem(item) ? "article" : "post",
           })),
         },
         managerTasks: {
@@ -1804,7 +1853,20 @@ async function createMonthlyPlanForBlueprint(
 
 export async function generateMonthlyPlan(formData: FormData) {
   const blueprintId = formText(formData, "blueprintId");
-  const result = await createMonthlyPlanForBlueprint(blueprintId, formData);
+  // Heavy work is split: this request only creates the plan; texts, briefs,
+  // visuals and articles go to the production queue and run in background batches.
+  const result = await createMonthlyPlanForBlueprint(blueprintId, formData, {
+    prepareTextsAfterCreate: false,
+  });
+
+  if (result.created) {
+    try {
+      await createMonthProductionRun(result.monthlyPlanId);
+    } catch (error) {
+      // The plan is saved; the queue can always be (re)created from Materials.
+      console.error("Failed to enqueue month production after plan creation", error);
+    }
+  }
 
   revalidatePath("/");
   redirect(workspaceLocation("client_setup", {
@@ -1812,7 +1874,7 @@ export async function generateMonthlyPlan(formData: FormData) {
     planId: result.monthlyPlanId,
     clientId: result.clientId,
     setupStep: "brand",
-    notice: `${result.notice} Теперь заполните библиотеку бренда.`,
+    notice: `${result.notice} Материалы месяца готовятся в фоне — прогресс виден на экране «Материалы». Теперь заполните библиотеку бренда.`,
   }));
 }
 
@@ -3786,9 +3848,23 @@ async function ensureMissingMonthProductionTasks(monthlyPlanId: string, producti
   });
   const articleByItemId = new Map(planArticles.map((article) => [article.plannedContentItemId, article]));
 
+  // Older plans may still carry model-planned articles marked as posts —
+  // normalize them here so the queue never sends an article through the
+  // lightweight post-text path. Idempotent, usually a no-op.
+  const itemsToNormalize = plan.plannedContentItems.filter(
+    (item) => item.deliverableKind !== "article" && isArticleLikePlanItem(item),
+  );
+  if (itemsToNormalize.length > 0) {
+    await prisma.plannedContentItem.updateMany({
+      where: { id: { in: itemsToNormalize.map((item) => item.id) } },
+      data: { deliverableKind: "article", pairGroupId: null },
+    });
+  }
+  const normalizedItemIds = new Set(itemsToNormalize.map((item) => item.id));
+
   const tasks: Prisma.MonthProductionTaskCreateManyInput[] = [];
   for (const item of plan.plannedContentItems) {
-    if (item.deliverableKind === "article") {
+    if (item.deliverableKind === "article" || normalizedItemIds.has(item.id)) {
       const article = articleByItemId.get(item.id);
       const articleDone = article?.stage === "done" && article.status !== "failed";
       if (!articleDone && !hasTask("generate_article", item.id)) {
