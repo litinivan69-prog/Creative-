@@ -8,6 +8,7 @@ import {
   requestDraftChangesFromPortal,
 } from "@/app/actions";
 import { ArticleReader } from "@/app/article-reader";
+import { AutoTextarea } from "@/app/auto-textarea";
 import { PendingSubmitButton } from "@/app/pending-submit-button";
 import { getGeneratedVariantImageSrc } from "@/lib/generated-visuals";
 import type { ArticleCallout, ArticleFaqItem, ArticleImage, ArticleSource } from "@/lib/article-schema";
@@ -1157,12 +1158,12 @@ export function ClientPortalView({
                   <div className="mt-4 grid gap-3">
                     <form action={portalToken ? requestDraftChangesFromPortal : requestDraftChanges} className="grid gap-3">
                       <PortalActionFields contentDraftId={selectedDraft.id} portalToken={portalToken} />
-                      <textarea name="comment" rows={5} className={inputClass} placeholder="Напишите комментарий или предложите правку..." />
+                      <AutoTextarea name="comment" rows={5} className={inputClass} placeholder="Напишите комментарий или предложите правку..." />
                       <PendingSubmitButton pendingLabel="Отправляем правку..." className={primaryButtonClass}>Оставить правку</PendingSubmitButton>
                     </form>
                     <form action={portalToken ? approveDraftFromPortal : approveDraft}>
                       <PortalActionFields contentDraftId={selectedDraft.id} portalToken={portalToken} />
-                      <textarea name="comment" rows={2} className={`${inputClass} mb-3`} placeholder="Комментарий к подтверждению, необязательно" />
+                      <AutoTextarea name="comment" rows={2} className={`${inputClass} mb-3`} placeholder="Комментарий к подтверждению, необязательно" />
                       <PendingSubmitButton pendingLabel="Подтверждаем..." className={`${secondaryButtonClass} w-full`}>Подтвердить материал</PendingSubmitButton>
                     </form>
                   </div>
