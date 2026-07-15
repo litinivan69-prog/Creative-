@@ -259,9 +259,18 @@ function friendlyPipelineError(error: unknown) {
   return "Генерация статьи прервалась. Нажмите «Продолжить» — движок продолжит с последнего успешного прохода.";
 }
 
+function articlePlatformTargetFromName(platformName: string): string | null {
+  const text = platformName.toLowerCase();
+  if (/дзен|zen/.test(text)) return "zen";
+  if (/vc\.?ru/.test(text)) return "vcru";
+  if (/vk|вконтакт/.test(text)) return "vk";
+  return null;
+}
+
 /**
  * Finds or creates the Article linked to a planned content item (idempotent),
  * so the month production queue can drive the article engine per item.
+ * Uses the exact same 4-pass pipeline as the «Статьи» tab — one generation path.
  */
 export async function ensureArticleForPlannedItem(plannedContentItemId: string) {
   const existing = await prisma.article.findFirst({
@@ -290,6 +299,7 @@ export async function ensureArticleForPlannedItem(plannedContentItemId: string) 
       plannedContentItemId: item.id,
       title: item.topic,
       angle: item.goal || null,
+      platformTarget: articlePlatformTargetFromName(item.platformName),
       stage: "brief",
       status: "generating",
     },
