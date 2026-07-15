@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { stripCarouselSlideLabel } from "@/lib/creative-asset-schema";
 
 const nonEmptyText = z.string().trim().min(1);
 
@@ -86,7 +87,10 @@ export function validateContentDraftForPersistence(
 
   return {
     ...draft,
-    telegramBody: clampTelegramBody(draft.telegramBody),
+    // Slide index («карточка 1/4») is service metadata — keep it out of visible post text.
+    draftTitle: stripCarouselSlideLabel(draft.draftTitle) || draft.draftTitle,
+    draftBody: stripCarouselSlideLabel(draft.draftBody) || draft.draftBody,
+    telegramBody: clampTelegramBody(draft.telegramBody ? stripCarouselSlideLabel(draft.telegramBody) : draft.telegramBody),
     status: needsReview ? "needs_review" : "draft",
     approvalRequired: needsReview,
     autopublishEligible:

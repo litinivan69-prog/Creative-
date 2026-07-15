@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { stripCarouselSlideLabel } from "@/lib/creative-asset-schema";
 import { prisma } from "@/lib/prisma";
 import { getIntegrationSetting, getTelegramBotToken, sendTelegramPost } from "@/lib/telegram";
 import { VK_ACCESS_TOKEN_KEY, sendVkPost } from "@/lib/vk";
@@ -159,9 +160,12 @@ export async function publishScheduledPublication(
         results.push({ platform: "vk", ok: false, error: "VK не подключён в настройках." });
         continue;
       }
-      const message = [publication.contentDraft?.draftTitle || publication.topic, publication.contentDraft?.draftBody ?? ""]
-        .filter(Boolean)
-        .join("\n\n");
+      // Legacy drafts may still carry the service slide label — never publish it.
+      const message = stripCarouselSlideLabel(
+        [publication.contentDraft?.draftTitle || publication.topic, publication.contentDraft?.draftBody ?? ""]
+          .filter(Boolean)
+          .join("\n\n"),
+      );
       const vk = await sendVkPost({ token: vkToken, groupId: Number(channel.channelId), message, imageUrls });
       if (vk.ok) {
         results.push({ platform: "vk", ok: true, url: vk.url, externalId: String(vk.postId), imagesSent: vk.imagesSent });
@@ -187,8 +191,10 @@ export async function publishScheduledPublication(
       const tg = await sendTelegramPost({
         token,
         channelId: channel.channelId,
-        title: telegramBody ? null : publication.contentDraft?.draftTitle || publication.topic,
-        body: telegramBody || publication.contentDraft?.draftBody || "",
+        title: telegramBody
+          ? null
+          : stripCarouselSlideLabel(publication.contentDraft?.draftTitle || publication.topic),
+        body: stripCarouselSlideLabel(telegramBody || publication.contentDraft?.draftBody || ""),
         imageUrls,
       });
       if (tg.ok) {

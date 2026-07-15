@@ -31,7 +31,7 @@ import {
   isSensitiveContent,
   validateContentDraftForPersistence,
 } from "@/lib/content-draft-schema";
-import { CreativeAssetBriefSchema } from "@/lib/creative-asset-schema";
+import { CreativeAssetBriefSchema, stripCarouselSlideLabel } from "@/lib/creative-asset-schema";
 import { normalizeMonthlyPlanDates, parseExactPlanDate } from "@/lib/monthly-plan-dates";
 import { validateMonthlyPlanForBlueprint } from "@/lib/monthly-plan-schema";
 import { MonthlyPlanRevisionProposalSchema } from "@/lib/monthly-plan-revision-schema";
@@ -367,12 +367,6 @@ function isCarouselCreativeBrief(
   ) > 1;
 }
 
-function carouselSlideText(baseText: string, slideNumber: number, slideCount: number) {
-  if (!baseText.trim()) return "";
-
-  return `${baseText.trim()} · карточка ${slideNumber}/${slideCount}`;
-}
-
 function creativeAssetCreateInputsFromBrief(
   publication: {
     clientId: string;
@@ -446,8 +440,9 @@ function creativeAssetCreateInputsFromBrief(
         "Сгенерируй только эту карточку, не весь набор и не коллаж.",
         brief.brief,
       ].join("\n"),
-      formatRequirements: `${brief.formatRequirements}\nКарусель: отдельная карточка ${slideNumber}/${slideCount}. Не объединять карточки в один визуал.`,
-      textOnAsset: carouselSlideText(brief.textOnAsset, slideNumber, slideCount) || null,
+      formatRequirements: `${brief.formatRequirements}\nКарусель: отдельная карточка ${slideNumber}/${slideCount}. Не объединять карточки в один визуал. Номер карточки — служебная метадата: не наносить его на визуал и не добавлять в текст.`,
+      // Slide index is service metadata — the visible text carries only real content.
+      textOnAsset: stripCarouselSlideLabel(brief.textOnAsset) || null,
       references: brief.references,
       notes: `${brief.notes}\nslideNumber=${slideNumber}; slideCount=${slideCount}`,
     };
@@ -3511,10 +3506,11 @@ async function generateVisualForCreativeAssetId(creativeAssetId: string) {
       brandContext: await getClientBrandContext(asset.clientId),
       creativeAsset: {
         assetType: asset.assetType,
-        title: asset.title,
+        // Slide index («Карточка 1 / 4») is a UI badge only — never send it to the visual engine.
+        title: stripCarouselSlideLabel(asset.title),
         brief: asset.brief,
         formatRequirements: asset.formatRequirements,
-        textOnAsset: asset.textOnAsset,
+        textOnAsset: asset.textOnAsset ? stripCarouselSlideLabel(asset.textOnAsset) || null : asset.textOnAsset,
         references: asset.references,
         notes: asset.notes,
       },
@@ -4553,8 +4549,9 @@ export async function retryMaterialProductionStep(formData: FormData) {
 
 export async function updatePublicationText(formData: FormData) {
   const contentDraftId = formText(formData, "contentDraftId");
-  const draftTitle = formText(formData, "draftTitle");
-  const draftBody = formText(formData, "draftBody");
+  // Slide index («карточка 1/4») is service metadata — strip it even from manual edits.
+  const draftTitle = stripCarouselSlideLabel(formText(formData, "draftTitle"));
+  const draftBody = stripCarouselSlideLabel(formText(formData, "draftBody"));
   const comment = formText(formData, "comment");
 
   if (!contentDraftId) {
@@ -5872,10 +5869,11 @@ export async function generateCreativeVisualVariantForAsset(formData: FormData) 
       brandContext: await getClientBrandContext(asset.clientId),
       creativeAsset: {
         assetType: asset.assetType,
-        title: asset.title,
+        // Slide index («Карточка 1 / 4») is a UI badge only — never send it to the visual engine.
+        title: stripCarouselSlideLabel(asset.title),
         brief: asset.brief,
         formatRequirements: asset.formatRequirements,
-        textOnAsset: asset.textOnAsset,
+        textOnAsset: asset.textOnAsset ? stripCarouselSlideLabel(asset.textOnAsset) || null : asset.textOnAsset,
         references: asset.references,
         notes: asset.notes,
       },
