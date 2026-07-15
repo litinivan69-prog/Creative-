@@ -3639,7 +3639,7 @@ function MonthlyPlanRevisionCopilot({
               rows={5}
               disabled={!monthlyPlanId}
               className={`${inputClass} resize-y`}
-              placeholder="Например: убери Ozon Seller и сайт, карточки товаров уже готовы. Замени их на VK, Telegram и статьи про SPF, Cleanical и снежный лотос. Согласованные материалы не трогай."
+              placeholder="Например: убери Ozon Seller и сайт, карточки товаров уже готовы. Добавь больше постов в VK и Telegram и пару экспертных статей. Согласованные материалы не трогай."
             />
             <PendingSubmitButton pendingLabel="Исправляем план..." disabled={!monthlyPlanId} className={primaryButtonClass}>
               Исправить план
@@ -3868,7 +3868,7 @@ function MonthScopeFields({
         </label>
         <label className="grid gap-1.5 text-xs font-bold text-slate-600">
           Темы месяца
-          <textarea name="scopeStrategicThemes" rows={4} placeholder="Yuhan, Cleanical, SPF, чувствительная кожа..." className={textareaClass} />
+          <textarea name="scopeStrategicThemes" rows={4} placeholder="Например: запуск нового продукта, сезонное предложение, экспертные советы, закулисье команды..." className={textareaClass} />
         </label>
         <label className="grid gap-1.5 text-xs font-bold text-slate-600">
           Частота
