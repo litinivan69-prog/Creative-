@@ -71,11 +71,14 @@ import {
   updatePublicationText,
   updateScheduledPublication,
   createArticleAction,
+  saveOnboardingChannels,
   continueArticleAction,
   regenerateArticleAction,
   archiveArticleAction,
 } from "@/app/actions";
 import { ArticleReader } from "@/app/article-reader";
+import { ChannelQuestionnaire, type ChannelPrefill } from "@/app/channel-questionnaire";
+import { MonthScopeQuestionnaire } from "@/app/month-scope-questionnaire";
 import { ARTICLE_STAGES, ARTICLE_STAGE_LABELS, articleHeroUrl, type ArticleStage } from "@/lib/article-engine";
 import type { ArticleCallout, ArticleFaqItem, ArticleImage, ArticleSource } from "@/lib/article-schema";
 import { anthropicAvailable, openaiAvailable } from "@/lib/writer";
@@ -151,13 +154,14 @@ type WorkspaceContext = {
   client?: string;
 };
 
-const setupSteps = ["create_client", "brief", "blueprint", "monthly_plan", "brand"] as const;
+const setupSteps = ["create_client", "brief", "blueprint", "channels", "monthly_plan", "brand"] as const;
 type SetupStep = (typeof setupSteps)[number];
 
 const setupStepLabels: Record<SetupStep, string> = {
   create_client: "Клиент",
   brief: "Бриф",
   blueprint: "Blueprint",
+  channels: "Каналы",
   monthly_plan: "Месячный план",
   brand: "Бренд",
 };
@@ -5320,6 +5324,7 @@ function inferClientSetupStep({
   selectedBrief,
   blueprint,
   monthlyPlan,
+  hasChannelAnswers,
 }: {
   requestedStep?: string;
   clients: ClientSetupClient[];
@@ -5327,12 +5332,14 @@ function inferClientSetupStep({
   selectedBrief: ClientSetupClient["briefs"][number] | null;
   blueprint: ClientSetupBlueprint | null;
   monthlyPlan: ClientSetupBlueprint["monthlyPlans"][number] | null;
+  hasChannelAnswers: boolean;
 }): SetupStep {
   if (setupSteps.includes(requestedStep as SetupStep)) return requestedStep as SetupStep;
   if (clients.length === 0) return "create_client";
   if (!selectedClient) return "create_client";
   if (!selectedBrief) return "brief";
   if (!blueprint) return "blueprint";
+  if (!hasChannelAnswers && !monthlyPlan) return "channels";
   if (!monthlyPlan) return "monthly_plan";
   return "brand";
 }
@@ -5403,6 +5410,7 @@ function ClientSetupWizard({
   monthlyPlan,
   requestedStep,
   workspaceContext,
+  clientChannels = [],
 }: {
   clients: ClientSetupClient[];
   selectedClient: ClientSetupClient | null;
@@ -5411,6 +5419,7 @@ function ClientSetupWizard({
   monthlyPlan: ClientSetupBlueprint["monthlyPlans"][number] | null;
   requestedStep?: string;
   workspaceContext: WorkspaceContext;
+  clientChannels?: Array<{ platform: string; channelId: string; status: string }>;
 }) {
   const activeStep = inferClientSetupStep({
     requestedStep,
@@ -5419,6 +5428,7 @@ function ClientSetupWizard({
     selectedBrief,
     blueprint,
     monthlyPlan,
+    hasChannelAnswers: clientChannels.length > 0,
   });
   const context = {
     ...workspaceContext,
@@ -5432,9 +5442,21 @@ function ClientSetupWizard({
     create_client: Boolean(selectedClient),
     brief: Boolean(selectedBrief),
     blueprint: Boolean(blueprint),
+    channels: clientChannels.length > 0,
     monthly_plan: Boolean(monthlyPlan),
     brand: false,
   };
+  const channelPrefill: ChannelPrefill[] = (["vk", "telegram", "zen"] as const).map((platform) => {
+    const rows = clientChannels.filter((channel) => channel.platform === platform);
+    const connected = rows.find((channel) => channel.status === "active" || channel.status === "pending_connect");
+    if (connected) {
+      return { platform, mode: "have" as const, link: connected.channelId === "new" ? "" : connected.channelId };
+    }
+    if (rows.some((channel) => channel.status === "to_create")) {
+      return { platform, mode: "create" as const, link: "" };
+    }
+    return { platform, mode: "skip" as const, link: "" };
+  });
 
   return (
     <section id="client-setup" className="mx-auto max-w-3xl scroll-mt-24">
@@ -5539,8 +5561,8 @@ function ClientSetupWizard({
                   <MetricCard label="Площадок" value={blueprint.platformRecommendations.filter((platform) => platform.recommendation === "recommended").length} />
                 </div>
               </article>
-              <a href={clientSetupHref("monthly_plan", { client: selectedClient.id, blueprint: blueprint.id, plan: monthlyPlan?.id })} className={`${wizardPrimaryButtonClass} text-center`}>
-                Дальше →
+              <a href={clientSetupHref("channels", { client: selectedClient.id, blueprint: blueprint.id, plan: monthlyPlan?.id })} className={`${wizardPrimaryButtonClass} text-center`}>
+                Дальше: каналы →
               </a>
             </div>
           ) : (
@@ -5554,6 +5576,33 @@ function ClientSetupWizard({
                 estimatedSeconds={90}
                 stages={["Читаем бриф клиента", "Подбираем модули и площадки", "Собираем scope, риски и частоту", "Сохраняем Blueprint"]}
               />
+            </form>
+          )}
+        </WizardStepShell>
+      ) : null}
+
+      {activeStep === "channels" ? (
+        <WizardStepShell
+          stepIndex={stepIndex}
+          totalSteps={totalSteps}
+          eyebrow={selectedClient?.name ?? "Онбординг клиента"}
+          title="Какие каналы у клиента?"
+          description="Пройдёмся по площадкам: где канал уже есть — сохраним ссылку для подключения к публикации, где нет — добавим задачу завести его с обложкой и аватаром."
+        >
+          {!selectedClient ? (
+            <EmptyState>Сначала создайте клиента.</EmptyState>
+          ) : (
+            <form action={saveOnboardingChannels} className="grid gap-6">
+              <input type="hidden" name="clientId" value={selectedClient.id} />
+              {blueprint ? <input type="hidden" name="blueprintId" value={blueprint.id} /> : null}
+              {monthlyPlan ? <input type="hidden" name="planId" value={monthlyPlan.id} /> : null}
+              <ChannelQuestionnaire prefill={channelPrefill} />
+              <PendingSubmitButton pendingLabel="Сохраняем..." className={wizardPrimaryButtonClass}>
+                Сохранить и дальше →
+              </PendingSubmitButton>
+              <a href={clientSetupHref("monthly_plan", context)} className="text-center text-sm font-semibold text-stone-400 transition hover:text-violet-700">
+                Пропустить пока
+              </a>
             </form>
           )}
         </WizardStepShell>
@@ -5600,10 +5649,14 @@ function ClientSetupWizard({
             <form action={generateMonthlyPlan} className="grid gap-5">
               <input type="hidden" name="blueprintId" value={blueprint.id} />
               <input type="hidden" name="month" value={currentMonth()} />
-              <MonthScopeFields defaultPlatforms={blueprint.platformRecommendations
-                .filter((platform) => platform.recommendation === "recommended")
-                .map((platform) => platform.platformName)
-                .join("\n") || undefined} />
+              <MonthScopeQuestionnaire
+                platformOptions={blueprint.platformRecommendations
+                  .filter((platform) => platform.recommendation === "recommended")
+                  .map((platform) => platform.platformName)}
+                defaultSelected={blueprint.platformRecommendations
+                  .filter((platform) => platform.recommendation === "recommended")
+                  .map((platform) => platform.platformName)}
+              />
               <PendingSubmitButton pendingLabel="Генерируем месячный план..." disabled={blueprint.nextRecommendedAction === "request_more_brief_data"} className={wizardPrimaryButtonClass}>
                 Сгенерировать месячный план
               </PendingSubmitButton>
@@ -5812,7 +5865,7 @@ function MonthBriefPanel({
     pairGroupId?: string | null;
   }>;
   articleInfoByItemId: Record<string, ArticleItemInfo>;
-  channels: Array<{ platform: string }>;
+  channels: Array<{ platform: string; status?: string }>;
   brandProfileReady: boolean;
   hasLogo: boolean;
 }) {
@@ -5835,12 +5888,26 @@ function MonthBriefPanel({
     .join(", ");
   const usesTelegram = posts.some((post) => shortPlatformName(post.platformName) === "TG");
   const usesVk = posts.some((post) => shortPlatformName(post.platformName) === "VK");
-  const hasTelegramChannel = channels.some((channel) => channel.platform === "telegram");
-  const hasVkChannel = channels.some((channel) => channel.platform === "vk");
+  const channelState = (platform: string) => {
+    const rows = channels.filter((channel) => channel.platform === platform);
+    if (rows.some((channel) => (channel.status ?? "active") === "active")) return "active";
+    if (rows.some((channel) => channel.status === "pending_connect")) return "pending";
+    if (rows.some((channel) => channel.status === "to_create")) return "to_create";
+    return "none";
+  };
+  const tgState = channelState("telegram");
+  const vkState = channelState("vk");
+  const zenState = channelState("zen");
 
   const missing: string[] = [];
-  if (usesTelegram && !hasTelegramChannel) missing.push("Не подключён Telegram-канал клиента — публикация в один клик не сработает (Настройки → Каналы клиента).");
-  if (usesVk && !hasVkChannel) missing.push("Не подключена VK-группа клиента — кросс-постинг в VK не сработает (Настройки → Каналы клиента).");
+  const channelGap = (label: string, state: string, used: boolean) => {
+    if (state === "pending") missing.push(`${label}: ссылка сохранена при онбординге — осталось подключить к публикации (Настройки → Каналы клиента).`);
+    else if (state === "to_create") missing.push(`${label}: решили завести с нуля — Launch Kit в задачах (обложка и аватар), затем подключение.`);
+    else if (state === "none" && used) missing.push(`Не подключён канал ${label} — публикация в один клик не сработает (Настройки → Каналы клиента).`);
+  };
+  channelGap("Telegram", tgState, usesTelegram);
+  channelGap("VK", vkState, usesVk);
+  channelGap("Дзен", zenState, false);
   if (!brandProfileReady) missing.push("Профиль бренда не заполнен — тексты и визуалы будут менее точными (Бренд → Профиль).");
   if (!hasLogo) missing.push("В библиотеке бренда нет логотипа — визуалы выходят без фирменной обложки (Бренд → Материалы).");
 
@@ -6628,11 +6695,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
   const telegramChannels = telegramClientId
     ? await prisma.clientChannel
         .findMany({
-          where: { clientId: telegramClientId, status: "active" },
+          where: { clientId: telegramClientId, status: { in: ["active", "pending_connect", "to_create"] } },
           orderBy: { createdAt: "asc" },
-          select: { id: true, channelId: true, title: true, platform: true },
+          select: { id: true, channelId: true, title: true, platform: true, status: true },
         })
-        .catch(() => [] as Array<{ id: string; channelId: string; title: string | null; platform: string }>)
+        .catch(() => [] as Array<{ id: string; channelId: string; title: string | null; platform: string; status: string }>)
     : [];
 
   return (
@@ -6905,6 +6972,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 monthlyPlan={selectedMonthlyPlan}
                 requestedStep={params.setupStep}
                 workspaceContext={workspaceContext}
+                clientChannels={telegramChannels}
               />
             ) : null}
 
@@ -7116,8 +7184,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                           <div key={channel.id} className="flex items-center justify-between gap-2 rounded-md border border-stone-100 bg-stone-50/70 px-3 py-2">
                             <div className="min-w-0">
                               <p className="truncate text-sm font-semibold text-stone-800">
-                                <span className="mr-1.5 rounded bg-violet-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-violet-700">{channel.platform === "vk" ? "VK" : "TG"}</span>
+                                <span className="mr-1.5 rounded bg-violet-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-violet-700">{channel.platform === "vk" ? "VK" : channel.platform === "zen" ? "Дзен" : "TG"}</span>
                                 {channel.title || channel.channelId}
+                                {channel.status === "pending_connect" ? <span className="ml-1.5 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">ждёт подключения</span> : null}
+                                {channel.status === "to_create" ? <span className="ml-1.5 rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-700">завести (Launch Kit)</span> : null}
                               </p>
                               <p className="truncate text-xs text-stone-400">{channel.channelId}</p>
                             </div>
