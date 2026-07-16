@@ -6489,6 +6489,28 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
     currentMonthlyPlan ??
     latestBlueprint?.monthlyPlans[0] ??
     null;
+  // Declared BEFORE overviewCalendarItems below reads it in the map callback —
+  // a later declaration crashes the whole console at runtime (TDZ ReferenceError)
+  // as soon as the plan has items, while an empty DB renders fine.
+  const planArticleRows = selectedMonthlyPlan && !isProductionBuild
+    ? await prisma.article
+        .findMany({
+          where: { monthlyPlanId: selectedMonthlyPlan.id },
+          select: { id: true, plannedContentItemId: true, images: true, stage: true, status: true },
+        })
+        .catch(() => [] as Array<{ id: string; plannedContentItemId: string | null; images: unknown; stage: string; status: string }>)
+    : [];
+  const articleInfoByItemId: Record<string, ArticleItemInfo> = {};
+  for (const row of planArticleRows) {
+    if (row.plannedContentItemId) {
+      articleInfoByItemId[row.plannedContentItemId] = {
+        articleId: row.id,
+        heroUrl: articleHeroUrl(row.images),
+        done: row.stage === "done" && row.status !== "failed",
+        failed: row.status === "failed",
+      };
+    }
+  }
   const draftCount =
     selectedMonthlyPlan?.plannedContentItems.filter((item) => item.contentDraft).length ?? 0;
   const calendarGroups = groupCalendarItems(selectedMonthlyPlan?.plannedContentItems ?? []);
@@ -6619,25 +6641,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
   const telegramClientId = workspaceContext.client ?? null;
   const telegramClientName = clients.find((client) => client.id === telegramClientId)?.name ?? null;
   const articlesClientId = workspaceContext.client ?? null;
-  const planArticleRows = selectedMonthlyPlan && !isProductionBuild
-    ? await prisma.article
-        .findMany({
-          where: { monthlyPlanId: selectedMonthlyPlan.id },
-          select: { id: true, plannedContentItemId: true, images: true, stage: true, status: true },
-        })
-        .catch(() => [] as Array<{ id: string; plannedContentItemId: string | null; images: unknown; stage: string; status: string }>)
-    : [];
-  const articleInfoByItemId: Record<string, ArticleItemInfo> = {};
-  for (const row of planArticleRows) {
-    if (row.plannedContentItemId) {
-      articleInfoByItemId[row.plannedContentItemId] = {
-        articleId: row.id,
-        heroUrl: articleHeroUrl(row.images),
-        done: row.stage === "done" && row.status !== "failed",
-        failed: row.status === "failed",
-      };
-    }
-  }
   const articles: ArticleRecord[] =
     activeView === "articles" && articlesClientId
       ? await prisma.article
