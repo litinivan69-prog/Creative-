@@ -5355,6 +5355,46 @@ function setupStepTone(step: SetupStep, activeStep: SetupStep): "neutral" | "tea
   return "neutral";
 }
 
+function WizardStepShell({
+  stepIndex,
+  totalSteps,
+  eyebrow,
+  title,
+  description,
+  children,
+}: {
+  stepIndex: number;
+  totalSteps: number;
+  eyebrow: string;
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  const percent = Math.round(((stepIndex + 1) / totalSteps) * 100);
+
+  return (
+    <section className={`${panelClass} p-6 sm:p-10`}>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-bold uppercase tracking-[0.14em] text-violet-700">{eyebrow}</p>
+        <p className="text-xs font-bold tabular-nums text-stone-400">Шаг {stepIndex + 1} из {totalSteps}</p>
+      </div>
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-violet-50">
+        <div className="h-full rounded-full bg-violet-600 transition-all" style={{ width: `${percent}%` }} />
+      </div>
+      <h2 className="mt-7 font-heading text-3xl font-bold tracking-tight text-stone-950 sm:text-4xl">{title}</h2>
+      <p className="mt-3 max-w-2xl text-base leading-7 text-stone-500">{description}</p>
+      <div className="mt-8">{children}</div>
+    </section>
+  );
+}
+
+const wizardInputClass =
+  "rounded-xl border border-stone-300 bg-white px-4 py-3.5 text-base text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100";
+const wizardPrimaryButtonClass =
+  "rounded-xl bg-violet-600 px-6 py-3.5 text-base font-semibold text-white transition hover:bg-violet-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-stone-300 disabled:text-stone-600";
+const wizardSecondaryButtonClass =
+  "rounded-xl border border-stone-300 bg-white px-6 py-3.5 text-base font-semibold text-stone-800 transition hover:border-violet-300 hover:text-violet-700 active:scale-[0.99]";
+
 function ClientSetupWizard({
   clients,
   selectedClient,
@@ -5386,347 +5426,259 @@ function ClientSetupWizard({
     blueprint: blueprint?.id ?? workspaceContext.blueprint,
     plan: monthlyPlan?.id ?? workspaceContext.plan,
   };
-  const recommendedPlatformsCount =
-    blueprint?.platformRecommendations.filter((platform) => platform.recommendation === "recommended").length ?? 0;
+  const stepIndex = setupSteps.indexOf(activeStep);
+  const totalSteps = setupSteps.length;
+  const stepDone: Record<SetupStep, boolean> = {
+    create_client: Boolean(selectedClient),
+    brief: Boolean(selectedBrief),
+    blueprint: Boolean(blueprint),
+    monthly_plan: Boolean(monthlyPlan),
+    brand: false,
+  };
 
   return (
-    <section id="client-setup" className="mx-auto max-w-6xl scroll-mt-24">
-      <WorkspaceViewHeader
-        eyebrow="Настройка клиента"
-        title="Пошаговая конфигурация"
-        description="Создайте клиента, сохраните бриф, соберите Blueprint, месячный план и подключите брендовый контекст без длинной простыни настроек."
-      />
+    <section id="client-setup" className="mx-auto max-w-3xl scroll-mt-24">
+      {activeStep === "create_client" ? (
+        <WizardStepShell
+          stepIndex={stepIndex}
+          totalSteps={totalSteps}
+          eyebrow="Онбординг клиента"
+          title="Как называется клиент?"
+          description="Начнём с базовых данных. Дальше платформа сама поведёт по шагам: бриф, Blueprint, план месяца и бренд."
+        >
+          <form action={createClient} className="grid gap-5">
+            <label className="grid gap-2 text-sm font-semibold text-stone-700">
+              Название
+              <input name="name" required className={wizardInputClass} placeholder="Клиника Север" autoFocus />
+            </label>
+            <label className="grid gap-2 text-sm font-semibold text-stone-700">
+              Сайт <span className="font-normal text-stone-400">(если есть)</span>
+              <input name="website" className={wizardInputClass} placeholder="https://example.com" />
+            </label>
+            <label className="grid gap-2 text-sm font-semibold text-stone-700">
+              Сфера бизнеса
+              <input name="industry" className={wizardInputClass} placeholder="Медицина" />
+            </label>
+            <PendingSubmitButton pendingLabel="Создаём..." className={wizardPrimaryButtonClass}>
+              Создать клиента и продолжить →
+            </PendingSubmitButton>
+          </form>
+        </WizardStepShell>
+      ) : null}
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      {activeStep === "brief" ? (
+        <WizardStepShell
+          stepIndex={stepIndex}
+          totalSteps={totalSteps}
+          eyebrow={selectedClient?.name ?? "Онбординг клиента"}
+          title="Расскажите о клиенте"
+          description="Бриф — исходные данные для AI: цели, аудитория, текущие площадки, ограничения и риски бренда. Чем подробнее, тем точнее Blueprint."
+        >
+          {!selectedClient ? (
+            <EmptyState>Сначала создайте клиента.</EmptyState>
+          ) : selectedBrief ? (
+            <div className="grid gap-5">
+              <article className="rounded-2xl bg-stone-50/80 p-5">
+                <StatusBadge tone="green">Бриф сохранён</StatusBadge>
+                <p className="mt-3 text-base leading-7 text-stone-700">{selectedBrief.rawBrief}</p>
+              </article>
+              <details className="rounded-2xl border border-stone-200 bg-white">
+                <summary className="cursor-pointer px-5 py-3.5 text-sm font-bold text-stone-700">Редактировать бриф</summary>
+                <form action={updateClientBrief} className="grid gap-4 border-t border-stone-200 p-5">
+                  <input type="hidden" name="briefId" value={selectedBrief.id} />
+                  <AutoTextarea name="rawBrief" required rows={7} defaultValue={selectedBrief.rawBrief} className={wizardInputClass} />
+                  <p className="text-xs leading-5 text-stone-500">Если у брифа уже есть Blueprint, он будет удалён и его нужно будет сгенерировать заново.</p>
+                  <PendingSubmitButton pendingLabel="Сохраняем..." className={wizardSecondaryButtonClass}>
+                    Сохранить изменения
+                  </PendingSubmitButton>
+                </form>
+              </details>
+              <a href={clientSetupHref("blueprint", { client: selectedClient.id, blueprint: blueprint?.id ?? selectedBrief.blueprint?.id })} className={`${wizardPrimaryButtonClass} text-center`}>
+                Дальше: Blueprint →
+              </a>
+            </div>
+          ) : (
+            <form action={addClientBrief} className="grid gap-5">
+              <input type="hidden" name="clientId" value={selectedClient.id} />
+              <AutoTextarea
+                name="rawBrief"
+                required
+                rows={10}
+                className={wizardInputClass}
+                placeholder="Цели, аудитория, текущие площадки, ограничения, риски бренда, ресурсы команды..."
+              />
+              <PendingSubmitButton pendingLabel="Сохраняем..." className={wizardPrimaryButtonClass}>
+                Сохранить бриф и продолжить →
+              </PendingSubmitButton>
+            </form>
+          )}
+        </WizardStepShell>
+      ) : null}
+
+      {activeStep === "blueprint" ? (
+        <WizardStepShell
+          stepIndex={stepIndex}
+          totalSteps={totalSteps}
+          eyebrow={selectedClient?.name ?? "Онбординг клиента"}
+          title="Соберём Blueprint"
+          description="AI превратит бриф в исполнимую конфигурацию: модули, площадки, объёмы и правила проверки."
+        >
+          {!selectedClient ? (
+            <EmptyState>Сначала создайте клиента.</EmptyState>
+          ) : !selectedBrief ? (
+            <EmptyState>Добавьте бриф, чтобы AI смог собрать Blueprint.</EmptyState>
+          ) : blueprint ? (
+            <div className="grid gap-5">
+              <article className="rounded-2xl border border-violet-200 bg-violet-50/70 p-5">
+                <StatusBadge tone="green">Blueprint готов</StatusBadge>
+                <h3 className="mt-3 text-xl font-semibold leading-8 text-stone-950">{blueprint.clientSummary}</h3>
+                <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <MetricCard label="Уверенность" value={`${blueprint.confidenceScore}%`} />
+                  <MetricCard label="Материалов/мес" value={`${blueprint.totalContentUnitsMin}-${blueprint.totalContentUnitsMax}`} />
+                  <MetricCard label="Модулей" value={blueprint.selectedModules.length} />
+                  <MetricCard label="Площадок" value={blueprint.platformRecommendations.filter((platform) => platform.recommendation === "recommended").length} />
+                </div>
+              </article>
+              <a href={clientSetupHref("monthly_plan", { client: selectedClient.id, blueprint: blueprint.id, plan: monthlyPlan?.id })} className={`${wizardPrimaryButtonClass} text-center`}>
+                Дальше →
+              </a>
+            </div>
+          ) : (
+            <form action={generateBlueprint} className="grid gap-5">
+              <input type="hidden" name="briefId" value={selectedBrief.id} />
+              <PendingSubmitButton pendingLabel="Генерируем Blueprint..." className={wizardPrimaryButtonClass}>
+                Сгенерировать Blueprint
+              </PendingSubmitButton>
+              <LongTaskProgress
+                title="Генерация Blueprint"
+                estimatedSeconds={90}
+                stages={["Читаем бриф клиента", "Подбираем модули и площадки", "Собираем scope, риски и частоту", "Сохраняем Blueprint"]}
+              />
+            </form>
+          )}
+        </WizardStepShell>
+      ) : null}
+
+      {activeStep === "monthly_plan" ? (
+        <WizardStepShell
+          stepIndex={stepIndex}
+          totalSteps={totalSteps}
+          eyebrow={selectedClient?.name ?? blueprint?.client.name ?? "Онбординг клиента"}
+          title="Соберём месяц"
+          description="План месяца превращает Blueprint в календарь материалов: посты VK+TG парами, статьи, даты и очередь производства."
+        >
+          {!blueprint ? (
+            <EmptyState>Blueprint появится после генерации на основе брифа.</EmptyState>
+          ) : monthlyPlan ? (
+            <div className="grid gap-5">
+              <article className="rounded-2xl border border-violet-200 bg-violet-50/70 p-5">
+                <StatusBadge tone="green">{formatStatus(monthlyPlan.status)}</StatusBadge>
+                <h3 className="mt-3 text-xl font-semibold text-stone-950">{monthlyPlan.month}</h3>
+                <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <MetricCard label="Материалов" value={monthlyPlan.plannedContentItems.length} />
+                  <MetricCard label="Площадок" value={monthlyPlan.platforms.length} />
+                  <MetricCard label="Задач" value={monthlyPlan.managerTasks.length} />
+                  <MetricCard label="План всего" value={monthlyPlan.totalPlannedUnits} />
+                </div>
+              </article>
+              <a href={clientSetupHref("brand", { client: blueprint.clientId, blueprint: blueprint.id, plan: monthlyPlan.id })} className={`${wizardPrimaryButtonClass} text-center`}>
+                Дальше →
+              </a>
+              <details className="rounded-2xl border border-stone-200 bg-white px-5 py-3.5 text-sm font-semibold text-stone-700">
+                <summary className="cursor-pointer">Переделать месяц</summary>
+                <form action={rebuildMonthProduction} className="mt-4 grid gap-3 border-t border-stone-200 pt-4">
+                  <input type="hidden" name="monthlyPlanId" value={monthlyPlan.id} />
+                  <p className="font-semibold text-stone-950">Переделать месяц?</p>
+                  <p className="font-normal text-stone-500">Текущий план сохранится как предыдущая версия. Новый месяц будет собран заново по текущему scope.</p>
+                  <PendingSubmitButton pendingLabel="Пересобираем..." className={wizardSecondaryButtonClass}>
+                    Переделать месяц
+                  </PendingSubmitButton>
+                </form>
+              </details>
+            </div>
+          ) : (
+            <form action={generateMonthlyPlan} className="grid gap-5">
+              <input type="hidden" name="blueprintId" value={blueprint.id} />
+              <input type="hidden" name="month" value={currentMonth()} />
+              <MonthScopeFields defaultPlatforms={blueprint.platformRecommendations
+                .filter((platform) => platform.recommendation === "recommended")
+                .map((platform) => platform.platformName)
+                .join("\n") || undefined} />
+              <PendingSubmitButton pendingLabel="Генерируем месячный план..." disabled={blueprint.nextRecommendedAction === "request_more_brief_data"} className={wizardPrimaryButtonClass}>
+                Сгенерировать месячный план
+              </PendingSubmitButton>
+              <LongTaskProgress
+                title="Генерация месячного плана"
+                estimatedSeconds={120}
+                stages={["Анализ Blueprint и scope", "Темы и календарная сетка", "Пары VK+TG и статьи", "Сохраняем план и ставим очередь"]}
+              />
+              {blueprint.nextRecommendedAction === "request_more_brief_data" ? (
+                <p className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-900">
+                  Месячный план нельзя сгенерировать, пока не заполнены недостающие данные брифа.
+                </p>
+              ) : null}
+            </form>
+          )}
+        </WizardStepShell>
+      ) : null}
+
+      {activeStep === "brand" ? (
+        <WizardStepShell
+          stepIndex={stepIndex}
+          totalSteps={totalSteps}
+          eyebrow={selectedClient?.name ?? "Онбординг клиента"}
+          title="Бренд клиента"
+          description="Профиль бренда, логотип и материалы делают тексты и визуалы фирменными. Заполнить можно в любой момент — но лучше до подготовки месяца."
+        >
+          {!selectedClient ? (
+            <EmptyState>Сначала создайте клиента.</EmptyState>
+          ) : (
+            <div className="grid gap-4">
+              <a
+                href={workspaceHref("brand_assets", { client: selectedClient.id, blueprint: blueprint?.id, plan: monthlyPlan?.id })}
+                className={`${wizardPrimaryButtonClass} text-center`}
+              >
+                Открыть библиотеку бренда
+              </a>
+              <a href={workspaceHref("drafts", context)} className={`${wizardSecondaryButtonClass} text-center`}>
+                К материалам месяца
+              </a>
+            </div>
+          )}
+        </WizardStepShell>
+      ) : null}
+
+      <nav aria-label="Шаги онбординга" className="mt-6 flex flex-wrap items-center justify-center gap-1.5">
         {setupSteps.map((step, index) => (
           <a
             key={step}
             href={clientSetupHref(step, context)}
-            className={`rounded-lg border p-3 transition hover:border-violet-300 hover:bg-violet-50/50 ${
-              step === activeStep ? "border-violet-300 bg-violet-50/70" : "border-stone-200 bg-white"
+            className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+              step === activeStep
+                ? "bg-violet-600 text-white"
+                : stepDone[step]
+                  ? "bg-violet-50 text-violet-700 hover:bg-violet-100"
+                  : "bg-white text-stone-400 ring-1 ring-stone-200 hover:text-stone-600"
             }`}
           >
-            <p className="text-xs font-bold text-stone-400">{index + 1}</p>
-            <p className="mt-1 text-sm font-semibold text-stone-950">{setupStepLabels[step]}</p>
-            <div className="mt-2">
-              <StatusBadge tone={setupStepTone(step, activeStep)}>{setupStepState(step, activeStep)}</StatusBadge>
-            </div>
+            {index + 1}. {setupStepLabels[step]}
           </a>
         ))}
-      </div>
+      </nav>
 
-      <section className={`${panelClass} mt-5 p-4 sm:p-5`}>
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-stone-400">Клиент в работе</p>
-            <h3 className="mt-1 font-semibold text-stone-950">{selectedClient?.name ?? "Клиент не выбран"}</h3>
-            <p className="mt-1 text-sm leading-6 text-stone-500">
-              {selectedClient ? selectedClient.industry || "Сфера бизнеса не указана" : "Сначала создайте клиента или выберите существующего."}
-            </p>
-          </div>
-	          <div className="flex flex-wrap gap-2">
-	            <a href={clientSetupHref("create_client", context)} className={secondaryButtonClass}>Создать нового клиента</a>
-	            {selectedClient ? (
-	              <form action={duplicateClientForTesting}>
-	                <input type="hidden" name="clientId" value={selectedClient.id} />
-	                <PendingSubmitButton pendingLabel="Копируем..." className={secondaryButtonClass}>
-	                  Дублировать для теста
-	                </PendingSubmitButton>
-	              </form>
-	            ) : null}
-	            {monthlyPlan ? (
-	              <details className="rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-800">
-	                <summary className="cursor-pointer">Переделать месяц</summary>
-	                <form action={rebuildMonthProduction} className="absolute z-10 mt-3 grid w-[min(92vw,440px)] gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left text-sm shadow-[0_18px_50px_rgba(88,75,135,0.16)]">
-	                  <input type="hidden" name="monthlyPlanId" value={monthlyPlan.id} />
-	                  <p className="font-semibold text-slate-950">Переделать месяц?</p>
-	                  <p className="text-slate-500">Текущий план сохранится как предыдущая версия. Новый месяц будет собран заново по текущему scope.</p>
-	                  <PendingSubmitButton pendingLabel="Пересобираем..." className="rounded-md bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:bg-slate-300">
-	                    Переделать месяц
-	                  </PendingSubmitButton>
-	                </form>
-	              </details>
-	            ) : blueprint ? (
-	              <form action={prepareOrContinueMonthProduction} className="grid gap-3">
-	                <input type="hidden" name="blueprintId" value={blueprint.id} />
-	                <input type="hidden" name="clientId" value={blueprint.clientId} />
-	                <PendingSubmitButton pendingLabel="Готовим месяц..." disabled={blueprint.nextRecommendedAction === "request_more_brief_data"} className="rounded-md bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:bg-slate-300">
-	                  Подготовить месяц
-	                </PendingSubmitButton>
-	                <LongTaskProgress
-	                  title="Создание плана месяца"
-	                  estimatedSeconds={120}
-	                  stages={["Создаём план месяца", "Раскладываем даты, пары и статьи", "Ставим задачи в очередь"]}
-	                />
-	              </form>
-	            ) : null}
-	          </div>
-	        </div>
-        {clients.length > 0 ? (
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-            {clients.slice(0, 6).map((client) => {
-              const clientBrief = client.briefs[0] ?? null;
-              const clientBlueprint = client.blueprints[0] ?? clientBrief?.blueprint ?? null;
-
-              return (
-                <a
-                  key={client.id}
-                  href={clientSetupHref("brief", { client: client.id, blueprint: clientBlueprint?.id })}
-                  className={`rounded-lg border p-3 transition hover:border-violet-300 hover:bg-violet-50/60 ${
-                    selectedClient?.id === client.id ? "border-violet-300 bg-violet-50/60" : "border-stone-200 bg-stone-50/60"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="min-w-0 truncate text-sm font-semibold text-stone-950">{client.name}</p>
-                    <StatusBadge tone={clientBlueprint ? "green" : clientBrief ? "amber" : "neutral"}>
-                      {clientBlueprint ? "Blueprint" : clientBrief ? "Бриф" : "Новый"}
-                    </StatusBadge>
-                  </div>
-                  <p className="mt-1 line-clamp-1 text-xs text-stone-500">{client.website || client.industry || "Нет дополнительных данных"}</p>
-                </a>
-              );
-            })}
-          </div>
-        ) : null}
-      </section>
-
-      <div className="mt-5">
-        {activeStep === "create_client" ? (
-          <section className={`${panelClass} p-5 sm:p-6`}>
-            <SectionTitle
-              eyebrow="Шаг 1"
-              title="Создать клиента"
-              description="Добавьте базовые данные клиента. После создания вы перейдёте к брифу."
-            />
-            <form action={createClient} className="mt-5 grid max-w-2xl gap-3">
-              <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
-                Название
-                <input name="name" required className={inputClass} placeholder="Клиника Север" />
-              </label>
-              <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
-                Сайт
-                <input name="website" className={inputClass} placeholder="https://example.com" />
-              </label>
-              <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
-                Сфера бизнеса
-                <input name="industry" className={inputClass} placeholder="Медицина" />
-              </label>
-              <PendingSubmitButton pendingLabel="Создаём..." className={primaryButtonClass}>
-                Создать клиента
+      {selectedClient ? (
+        <details className="mx-auto mt-4 max-w-md rounded-2xl border border-stone-200 bg-white px-4 py-3 text-center text-xs font-semibold text-stone-500">
+          <summary className="cursor-pointer">Служебные действия</summary>
+          <div className="mt-3 grid gap-2">
+            <form action={duplicateClientForTesting}>
+              <input type="hidden" name="clientId" value={selectedClient.id} />
+              <PendingSubmitButton pendingLabel="Копируем..." className={`${wizardSecondaryButtonClass} w-full px-4 py-2.5 text-sm`}>
+                Дублировать клиента для теста
               </PendingSubmitButton>
             </form>
-            <p className="mt-4 text-xs leading-5 text-stone-500">После создания клиента вы перейдёте к брифу.</p>
-          </section>
-        ) : null}
-
-        {activeStep === "brief" ? (
-          <section className={`${panelClass} p-5 sm:p-6`}>
-            <SectionTitle
-              eyebrow="Шаг 2"
-              title="Добавить бриф"
-              description="Бриф даёт AI исходные данные для сборки Blueprint — стратегической конфигурации клиента."
-            />
-            {!selectedClient ? (
-              <div className="mt-5"><EmptyState>Сначала создайте клиента.</EmptyState></div>
-            ) : selectedBrief ? (
-              <div className="mt-5 grid gap-4">
-                <article className="rounded-lg border border-stone-200 bg-stone-50/70 p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <p className="text-xs font-bold text-violet-700">{selectedClient.name}</p>
-                      <p className="mt-2 line-clamp-4 text-sm leading-6 text-stone-600">{selectedBrief.rawBrief}</p>
-                    </div>
-                    <StatusBadge tone="green">Бриф сохранён</StatusBadge>
-                  </div>
-                  <details className="mt-4 rounded-md border border-stone-200 bg-white">
-                    <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-stone-700">Редактировать бриф</summary>
-                    <form action={updateClientBrief} className="grid gap-3 border-t border-stone-200 p-3">
-                      <input type="hidden" name="briefId" value={selectedBrief.id} />
-                      <AutoTextarea name="rawBrief" required rows={7} defaultValue={selectedBrief.rawBrief} className={`${inputClass} resize-y`} />
-                      <p className="text-xs leading-5 text-stone-500">Если у брифа уже есть Blueprint, он будет удалён и его нужно будет сгенерировать заново.</p>
-                      <PendingSubmitButton pendingLabel="Сохраняем..." className={secondaryButtonClass}>
-                        Сохранить изменения
-                      </PendingSubmitButton>
-                    </form>
-                  </details>
-                </article>
-                <a href={clientSetupHref("blueprint", { client: selectedClient.id, blueprint: blueprint?.id ?? selectedBrief.blueprint?.id })} className={primaryButtonClass}>
-                  Перейти к Blueprint
-                </a>
-              </div>
-            ) : (
-              <form action={addClientBrief} className="mt-5 grid gap-3">
-                <input type="hidden" name="clientId" value={selectedClient.id} />
-                <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
-                  Бриф клиента
-                  <AutoTextarea
-                    name="rawBrief"
-                    required
-                    rows={9}
-                    className={`${inputClass} resize-y`}
-                    placeholder="Цели, аудитория, текущие площадки, ограничения, риски бренда, ресурсы команды..."
-                  />
-                </label>
-                <PendingSubmitButton pendingLabel="Сохраняем..." className={primaryButtonClass}>
-                  Сохранить бриф
-                </PendingSubmitButton>
-                <p className="text-xs leading-5 text-stone-500">Добавьте бриф, чтобы AI смог собрать Blueprint.</p>
-              </form>
-            )}
-          </section>
-        ) : null}
-
-        {activeStep === "blueprint" ? (
-          <section className={`${panelClass} p-5 sm:p-6`}>
-            <SectionTitle
-              eyebrow="Шаг 3"
-              title="Сгенерировать Blueprint"
-              description="Blueprint появится после генерации на основе брифа и станет исполнимой конфигурацией клиента."
-            />
-            {!selectedClient ? (
-              <div className="mt-5"><EmptyState>Сначала создайте клиента.</EmptyState></div>
-            ) : !selectedBrief ? (
-              <div className="mt-5"><EmptyState>Добавьте бриф, чтобы AI смог собрать Blueprint.</EmptyState></div>
-            ) : blueprint ? (
-              <div className="mt-5 grid gap-4">
-                <article className="rounded-lg border border-violet-200 bg-violet-50/70 p-4">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div>
-                      <StatusBadge tone="green">Blueprint готов</StatusBadge>
-                      <h3 className="mt-3 text-xl font-semibold leading-8 text-stone-950">{blueprint.clientSummary}</h3>
-                      <p className="mt-2 text-sm leading-6 text-stone-600">{blueprint.client.industry || selectedClient.industry || "Сфера бизнеса не указана"}</p>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 sm:min-w-80">
-                      <MetricCard label="Уверенность" value={`${blueprint.confidenceScore}%`} tone="teal" />
-                      <MetricCard label="Материалов/мес" value={`${blueprint.totalContentUnitsMin}-${blueprint.totalContentUnitsMax}`} />
-                      <MetricCard label="Модулей" value={blueprint.selectedModules.length} />
-                      <MetricCard label="Площадок" value={recommendedPlatformsCount} tone="amber" />
-                    </div>
-                  </div>
-                </article>
-                <a href={clientSetupHref("monthly_plan", { client: selectedClient.id, blueprint: blueprint.id, plan: monthlyPlan?.id })} className={primaryButtonClass}>
-                  Перейти к месячному плану
-                </a>
-              </div>
-            ) : (
-              <div className="mt-5 grid gap-4">
-                <article className="rounded-lg border border-stone-200 bg-stone-50/70 p-4">
-                  <p className="text-sm font-semibold text-stone-950">{selectedClient.name}</p>
-                  <p className="mt-2 line-clamp-4 text-sm leading-6 text-stone-600">{selectedBrief.rawBrief}</p>
-                </article>
-                <form action={generateBlueprint} className="grid gap-3">
-                  <input type="hidden" name="briefId" value={selectedBrief.id} />
-                  <PendingSubmitButton pendingLabel="Генерируем Blueprint..." className={primaryButtonClass}>
-                    Сгенерировать Blueprint
-                  </PendingSubmitButton>
-                  <LongTaskProgress
-                    title="Генерация Blueprint"
-                    estimatedSeconds={90}
-                    stages={["Читаем бриф клиента", "Подбираем модули и площадки", "Собираем scope, риски и частоту", "Сохраняем Blueprint"]}
-                  />
-                </form>
-                <p className="text-xs leading-5 text-stone-500">Blueprint появится после генерации на основе брифа.</p>
-              </div>
-            )}
-          </section>
-        ) : null}
-
-        {activeStep === "monthly_plan" ? (
-          <section className={`${panelClass} p-5 sm:p-6`}>
-            <SectionTitle
-              eyebrow="Шаг 4"
-              title="Сгенерировать месячный план"
-              description="Месячный план превращает Blueprint в календарь материалов, площадок, задач и правил подготовки пакета."
-            />
-            {!blueprint ? (
-              <div className="mt-5"><EmptyState>Blueprint появится после генерации на основе брифа.</EmptyState></div>
-            ) : monthlyPlan ? (
-              <div className="mt-5 grid gap-4">
-                <article className="rounded-lg border border-violet-200 bg-violet-50/70 p-4">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div>
-                      <StatusBadge tone="green">{formatStatus(monthlyPlan.status)}</StatusBadge>
-                      <h3 className="mt-3 text-xl font-semibold text-stone-950">{monthlyPlan.month}</h3>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 sm:min-w-80">
-                      <MetricCard label="Материалов" value={monthlyPlan.plannedContentItems.length} tone="teal" />
-                      <MetricCard label="Площадок" value={monthlyPlan.platforms.length} />
-                      <MetricCard label="Задач" value={monthlyPlan.managerTasks.length} tone="amber" />
-                      <MetricCard label="План всего" value={monthlyPlan.totalPlannedUnits} />
-                    </div>
-                  </div>
-                </article>
-                <a href={clientSetupHref("brand", { client: blueprint.clientId, blueprint: blueprint.id, plan: monthlyPlan.id })} className={primaryButtonClass}>
-                  Перейти к бренду
-                </a>
-              </div>
-            ) : (
-              <div className="mt-5 grid gap-4">
-                <article className="rounded-lg border border-stone-200 bg-stone-50/70 p-4">
-                  <p className="text-sm font-semibold text-stone-950">{blueprint.client.name}</p>
-                  <p className="mt-2 line-clamp-3 text-sm leading-6 text-stone-600">{blueprint.clientSummary}</p>
-                </article>
-	                <form action={generateMonthlyPlan} className="grid gap-4">
-	                  <input type="hidden" name="blueprintId" value={blueprint.id} />
-	                  <div className="grid max-w-sm gap-3">
-	                    <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
-	                      Месяц
-	                      <input name="month" readOnly value={currentMonth()} className={inputClass} />
-	                    </label>
-	                  </div>
-	                  <MonthScopeFields defaultPlatforms={blueprint.platformRecommendations
-	                    .filter((platform) => platform.recommendation === "recommended")
-	                    .map((platform) => platform.platformName)
-	                    .join("\n") || undefined} />
-	                  <PendingSubmitButton pendingLabel="Генерируем месячный план..." disabled={blueprint.nextRecommendedAction === "request_more_brief_data"} className={primaryButtonClass}>
-	                    Сгенерировать месячный план
-	                  </PendingSubmitButton>
-	                  <LongTaskProgress
-	                    title="Генерация месячного плана"
-	                    estimatedSeconds={120}
-	                    stages={["Анализ Blueprint и scope", "Темы и календарная сетка", "Пары VK+TG и статьи", "Сохраняем план и ставим очередь"]}
-	                  />
-	                </form>
-                {blueprint.nextRecommendedAction === "request_more_brief_data" ? (
-                  <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-900">
-                    Месячный план нельзя сгенерировать, пока не заполнены недостающие данные брифа.
-                  </p>
-                ) : (
-                  <p className="text-xs leading-5 text-stone-500">Месячный план появится после генерации Blueprint.</p>
-                )}
-              </div>
-            )}
-          </section>
-        ) : null}
-
-        {activeStep === "brand" ? (
-          <section className={`${panelClass} p-5 sm:p-6`}>
-            <SectionTitle
-              eyebrow="Шаг 5"
-              title="Библиотека бренда"
-              description="Заполните профиль бренда и загрузите материалы, чтобы AI точнее готовил тексты, ТЗ и визуалы."
-            />
-            {!selectedClient ? (
-              <div className="mt-5"><EmptyState>Сначала создайте клиента.</EmptyState></div>
-            ) : (
-              <div className="mt-5 grid gap-4">
-                <article className="rounded-lg border border-stone-200 bg-stone-50/70 p-4">
-                  <p className="font-semibold text-stone-950">{selectedClient.name}</p>
-                  <p className="mt-2 text-sm leading-6 text-stone-500">
-                    Библиотека бренда хранит тональность, ограничения, брендбук, старые посты, фото, презентации и другие материалы для AI-контекста.
-                  </p>
-                </article>
-                <a
-                  href={workspaceHref("brand_assets", { client: selectedClient.id, blueprint: blueprint?.id, plan: monthlyPlan?.id })}
-                  className={primaryButtonClass}
-                >
-                  Открыть библиотеку бренда
-                </a>
-              </div>
-            )}
-          </section>
-        ) : null}
-      </div>
+          </div>
+        </details>
+      ) : null}
     </section>
   );
 }
@@ -6791,7 +6743,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
               </div>
             ) : null}
 
-            {activeView !== "clients" ? <WorkspaceSwitcher activeView={activeView} links={workspaceLinks} revisionCount={openClientRevisionCount} /> : null}
+            {activeView !== "clients" && activeView !== "client_setup" ? <WorkspaceSwitcher activeView={activeView} links={workspaceLinks} revisionCount={openClientRevisionCount} /> : null}
 
             {activeView === "overview" ? (
               <OverviewDashboard
