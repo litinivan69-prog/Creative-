@@ -72,6 +72,7 @@ import {
   updateScheduledPublication,
   createArticleAction,
   saveOnboardingChannels,
+  saveBrandWizardField,
   continueArticleAction,
   regenerateArticleAction,
   archiveArticleAction,
@@ -129,6 +130,7 @@ type SearchParams = Promise<{
   materialId?: string;
   filter?: string;
   article?: string;
+  brandField?: string;
 }>;
 
 const workspaceViews = [
@@ -154,8 +156,9 @@ type WorkspaceContext = {
   client?: string;
 };
 
-// Brand comes BEFORE the month: visuals are brand-driven, so the wizard collects it first.
-const setupSteps = ["create_client", "brief", "blueprint", "brand", "channels", "monthly_plan"] as const;
+// Brand is part of the unified client brief: it comes BEFORE the Blueprint so the
+// strategy is generated with the real brand context (and visuals stay brand-driven).
+const setupSteps = ["create_client", "brief", "brand", "blueprint", "channels", "monthly_plan"] as const;
 type SetupStep = (typeof setupSteps)[number];
 
 const setupStepLabels: Record<SetupStep, string> = {
@@ -5258,9 +5261,14 @@ function ContentCalendar({
           {blueprintId ? (
             <form action={generateMonthlyPlan} className="mt-4 grid gap-3">
               <input type="hidden" name="blueprintId" value={blueprintId} />
-              <PendingSubmitButton pendingLabel="Генерируем месячный план..." disabled={generationBlocked} className="rounded-full bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:bg-slate-300">
-                Сгенерировать месячный план
+              <PendingSubmitButton pendingLabel="Генерируем месячный план..." className="rounded-full bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:bg-slate-300">
+                {generationBlocked ? "Сгенерировать всё равно" : "Сгенерировать месячный план"}
               </PendingSubmitButton>
+              {generationBlocked ? (
+                <p className="mt-2 max-w-md rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-900">
+                  Стратегия рекомендует дополнить бриф — это совет по содержанию брифа, не блокировка. План можно собрать и сейчас.
+                </p>
+              ) : null}
               <LongTaskProgress
                 title="Генерация месячного плана"
                 estimatedSeconds={120}
@@ -5300,6 +5308,7 @@ type ClientSetupBlueprint = {
   totalContentUnitsMin: number;
   totalContentUnitsMax: number;
   nextRecommendedAction: string;
+  missingBriefFields?: unknown;
   client: {
     id: string;
     name: string;
@@ -5341,8 +5350,8 @@ function inferClientSetupStep({
   if (clients.length === 0) return "create_client";
   if (!selectedClient) return "create_client";
   if (!selectedBrief) return "brief";
+  if (!brandReady && !blueprint) return "brand";
   if (!blueprint) return "blueprint";
-  if (!brandReady && !monthlyPlan) return "brand";
   if (!hasChannelAnswers && !monthlyPlan) return "channels";
   return "monthly_plan";
 }
@@ -5364,6 +5373,32 @@ function setupStepTone(step: SetupStep, activeStep: SetupStep): "neutral" | "tea
   if (stepIndex === activeIndex) return "teal";
   return "neutral";
 }
+
+type BrandProfileValues = {
+  toneOfVoice: string | null;
+  targetAudienceNotes: string | null;
+  keyMessages: string | null;
+  brandColors: string | null;
+  fonts: string | null;
+  visualStyle: string | null;
+  productServiceNotes: string | null;
+  forbiddenTopics: string | null;
+  requiredDisclaimers: string | null;
+  legalNotes: string | null;
+} | null;
+
+const brandWizardBlocks = [
+  { field: "toneOfVoice", title: "Какая тональность у бренда?", hint: "Как бренд разговаривает: дружелюбно, экспертно, строго, с юмором…", placeholder: "Например: тепло и по-человечески, без канцелярита, на «вы», лёгкий юмор допустим" },
+  { field: "targetAudienceNotes", title: "Кто аудитория?", hint: "Для кого пишем и рисуем: возраст, интересы, боли, что для них важно.", placeholder: "Например: женщины 30–50, следят за здоровьем, ценят заботу и понятные объяснения" },
+  { field: "keyMessages", title: "Ключевые сообщения", hint: "Главные мысли, которые бренд повторяет из материала в материал.", placeholder: "Например: профилактика дешевле лечения; врачи с именем; всё за один визит" },
+  { field: "brandColors", title: "Фирменные цвета", hint: "Основные и акцентные цвета — словами или HEX-кодами.", placeholder: "Например: глубокий синий #1B2A4A, тёплый белый, акцент — коралловый" },
+  { field: "fonts", title: "Шрифты", hint: "Какими шрифтами пользуется бренд (если есть брендбук).", placeholder: "Например: заголовки — Montserrat, текст — PT Sans" },
+  { field: "visualStyle", title: "Визуальный стиль", hint: "Как выглядят фото и графика: настроение, свет, композиция.", placeholder: "Например: светлые живые фото, минимум декора, без стоковых улыбок" },
+  { field: "productServiceNotes", title: "Услуги и продукты", hint: "Что продаём и о чём есть смысл рассказывать.", placeholder: "Например: чек-апы, УЗИ, приёмы узких специалистов; флагман — годовая программа" },
+  { field: "forbiddenTopics", title: "Запретные темы", hint: "О чём бренду писать нельзя.", placeholder: "Например: не сравнивать с конкурентами, без обещаний излечения, без политики" },
+  { field: "requiredDisclaimers", title: "Обязательные дисклеймеры", hint: "Формулировки, которые обязаны быть в материалах.", placeholder: "Например: «Имеются противопоказания, необходима консультация специалиста»" },
+  { field: "legalNotes", title: "Юридические ограничения", hint: "Лицензии, регуляторика, что требует юрист.", placeholder: "Например: медлицензия №…, реклама мед.услуг по 38-ФЗ" },
+] as const;
 
 function WizardStepShell({
   stepIndex,
@@ -5409,25 +5444,44 @@ function MonthPlanGenerateForm({ blueprint }: { blueprint: ClientSetupBlueprint 
   const recommended = blueprint.platformRecommendations
     .filter((platform) => platform.recommendation === "recommended")
     .map((platform) => platform.platformName);
+  // Advisory flag from the Blueprint itself (can be stale after a hung
+  // generation) — never a hard gate, scope fields don't affect it.
+  const briefAdviceActive = blueprint.nextRecommendedAction === "request_more_brief_data";
+  const missingBriefFields = Array.isArray(blueprint.missingBriefFields)
+    ? blueprint.missingBriefFields.filter((field): field is string => typeof field === "string" && field.trim().length > 0)
+    : [];
 
   return (
     <form action={generateMonthlyPlan} className="grid gap-5">
       <input type="hidden" name="blueprintId" value={blueprint.id} />
       <input type="hidden" name="month" value={currentMonth()} />
       <MonthScopeQuestionnaire platformOptions={recommended} defaultSelected={recommended} />
-      <PendingSubmitButton pendingLabel="Генерируем месячный план..." disabled={blueprint.nextRecommendedAction === "request_more_brief_data"} className={wizardPrimaryButtonClass}>
-        Сгенерировать месячный план
+      {briefAdviceActive ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
+          <p className="text-sm font-bold text-amber-900">Стратегия рекомендует дополнить бриф</p>
+          <p className="mt-1 text-sm leading-6 text-amber-800">
+            Это совет AI-стратегии по содержанию брифа (не про поля scope ниже). План можно собрать и так — просто он будет опираться на меньше исходных данных.
+          </p>
+          {missingBriefFields.length > 0 ? (
+            <ul className="mt-2 grid list-disc gap-1 pl-5 text-sm leading-6 text-amber-800">
+              {missingBriefFields.slice(0, 6).map((field) => (
+                <li key={field}>{field}</li>
+              ))}
+            </ul>
+          ) : null}
+          <a href={clientSetupHref("brief", { client: blueprint.clientId, blueprint: blueprint.id })} className="mt-2 inline-flex text-sm font-bold text-amber-900 underline decoration-amber-300 underline-offset-2 hover:decoration-amber-500">
+            Дополнить бриф
+          </a>
+        </div>
+      ) : null}
+      <PendingSubmitButton pendingLabel="Генерируем месячный план..." className={wizardPrimaryButtonClass}>
+        {briefAdviceActive ? "Сгенерировать всё равно" : "Сгенерировать месячный план"}
       </PendingSubmitButton>
       <LongTaskProgress
         title="Генерация месячного плана"
         estimatedSeconds={120}
         stages={["Анализ Blueprint и scope", "Темы и календарная сетка", "Пары VK+TG и статьи", "Сохраняем план и ставим очередь"]}
       />
-      {blueprint.nextRecommendedAction === "request_more_brief_data" ? (
-        <p className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-900">
-          Месячный план нельзя сгенерировать, пока не заполнены недостающие данные брифа.
-        </p>
-      ) : null}
     </form>
   );
 }
@@ -5443,6 +5497,8 @@ function ClientSetupWizard({
   clientChannels = [],
   brandProfileReady = false,
   hasLogo = false,
+  brandProfile = null,
+  requestedBrandField,
 }: {
   clients: ClientSetupClient[];
   selectedClient: ClientSetupClient | null;
@@ -5454,6 +5510,8 @@ function ClientSetupWizard({
   clientChannels?: Array<{ platform: string; channelId: string; status: string }>;
   brandProfileReady?: boolean;
   hasLogo?: boolean;
+  brandProfile?: BrandProfileValues;
+  requestedBrandField?: string;
 }) {
   const activeStep = inferClientSetupStep({
     requestedStep,
@@ -5550,8 +5608,8 @@ function ClientSetupWizard({
                   </PendingSubmitButton>
                 </form>
               </details>
-              <a href={clientSetupHref("blueprint", { client: selectedClient.id, blueprint: blueprint?.id ?? selectedBrief.blueprint?.id })} className={`${wizardPrimaryButtonClass} text-center`}>
-                Дальше: Blueprint →
+              <a href={clientSetupHref("brand", { client: selectedClient.id, blueprint: blueprint?.id ?? selectedBrief.blueprint?.id })} className={`${wizardPrimaryButtonClass} text-center`}>
+                Дальше: бренд →
               </a>
             </div>
           ) : (
@@ -5596,8 +5654,8 @@ function ClientSetupWizard({
                   <MetricCard label="Площадок" value={blueprint.platformRecommendations.filter((platform) => platform.recommendation === "recommended").length} />
                 </div>
               </article>
-              <a href={clientSetupHref("brand", { client: selectedClient.id, blueprint: blueprint.id, plan: monthlyPlan?.id })} className={`${wizardPrimaryButtonClass} text-center`}>
-                Дальше: бренд →
+              <a href={clientSetupHref("channels", { client: selectedClient.id, blueprint: blueprint.id, plan: monthlyPlan?.id })} className={`${wizardPrimaryButtonClass} text-center`}>
+                Дальше: каналы →
               </a>
             </div>
           ) : (
@@ -5701,45 +5759,160 @@ function ClientSetupWizard({
         </WizardStepShell>
       ) : null}
 
-      {activeStep === "brand" ? (
-        <WizardStepShell
-          stepIndex={stepIndex}
-          totalSteps={totalSteps}
-          eyebrow={selectedClient?.name ?? "Онбординг клиента"}
-          title="Бренд клиента"
-          description="Профиль бренда, логотип и визуальная айдентика делают тексты и визуалы фирменными. Визуалы не генерируются без бренда — заполните до подготовки месяца (вернуться сюда можно в любой момент)."
-        >
-          {!selectedClient ? (
-            <EmptyState>Сначала создайте клиента.</EmptyState>
-          ) : (
-            <div className="grid gap-4">
-              <div className="grid gap-2 sm:grid-cols-2">
-                <div className={`rounded-2xl border p-4 ${brandProfileReady ? "border-emerald-100 bg-emerald-50/60" : "border-amber-200 bg-amber-50/70"}`}>
-                  <p className="text-sm font-bold text-stone-950">Профиль бренда</p>
-                  <p className={`mt-1 text-sm font-semibold ${brandProfileReady ? "text-emerald-700" : "text-amber-800"}`}>
-                    {brandProfileReady ? "Заполнен" : "Не заполнен — тональность, стиль и ограничения"}
-                  </p>
+      {activeStep === "brand" ? (() => {
+        const brandHref = (field?: string) => {
+          const searchParams = new URLSearchParams({ view: "client_setup", setupStep: "brand" });
+          if (context.client) searchParams.set("client", context.client);
+          if (context.blueprint) searchParams.set("blueprint", context.blueprint);
+          if (context.plan) searchParams.set("plan", context.plan);
+          if (field) searchParams.set("brandField", field);
+          return `/?${searchParams.toString()}`;
+        };
+        const blockIndex = brandWizardBlocks.findIndex((block) => block.field === requestedBrandField);
+        const isAssetsBlock = requestedBrandField === "assets";
+        const totalBlocks = brandWizardBlocks.length + 1;
+        const filledCount = brandWizardBlocks.filter((block) => Boolean(brandProfile?.[block.field])).length;
+        const firstEmpty = brandWizardBlocks.find((block) => !brandProfile?.[block.field]);
+
+        if (!selectedClient) {
+          return (
+            <WizardStepShell stepIndex={stepIndex} totalSteps={totalSteps} eyebrow="Онбординг клиента" title="Бренд клиента" description="Сначала создайте клиента.">
+              <EmptyState>Сначала создайте клиента.</EmptyState>
+            </WizardStepShell>
+          );
+        }
+
+        if (blockIndex >= 0) {
+          const block = brandWizardBlocks[blockIndex];
+          const nextBlock = brandWizardBlocks[blockIndex + 1];
+          const nextField = nextBlock ? nextBlock.field : "assets";
+
+          return (
+            <WizardStepShell
+              stepIndex={stepIndex}
+              totalSteps={totalSteps}
+              eyebrow={`${selectedClient.name} · Бренд · блок ${blockIndex + 1} из ${totalBlocks}`}
+              title={block.title}
+              description={block.hint}
+            >
+              <form action={saveBrandWizardField} className="grid gap-5">
+                <input type="hidden" name="clientId" value={selectedClient.id} />
+                <input type="hidden" name="field" value={block.field} />
+                <input type="hidden" name="nextField" value={nextField} />
+                {blueprint ? <input type="hidden" name="blueprintId" value={blueprint.id} /> : null}
+                {monthlyPlan ? <input type="hidden" name="planId" value={monthlyPlan.id} /> : null}
+                <AutoTextarea
+                  name="value"
+                  rows={4}
+                  defaultValue={brandProfile?.[block.field] ?? ""}
+                  placeholder={block.placeholder}
+                  className={wizardInputClass}
+                  autoFocus
+                />
+                <PendingSubmitButton pendingLabel="Сохраняем..." className={wizardPrimaryButtonClass}>
+                  Сохранить и дальше →
+                </PendingSubmitButton>
+                <div className="flex items-center justify-between text-sm font-semibold">
+                  <a href={blockIndex > 0 ? brandHref(brandWizardBlocks[blockIndex - 1].field) : brandHref()} className="text-stone-400 transition hover:text-violet-700">
+                    ← Назад
+                  </a>
+                  <a href={brandHref(nextField)} className="text-stone-400 transition hover:text-violet-700">
+                    Пропустить →
+                  </a>
                 </div>
-                <div className={`rounded-2xl border p-4 ${hasLogo ? "border-emerald-100 bg-emerald-50/60" : "border-amber-200 bg-amber-50/70"}`}>
-                  <p className="text-sm font-bold text-stone-950">Логотип</p>
-                  <p className={`mt-1 text-sm font-semibold ${hasLogo ? "text-emerald-700" : "text-amber-800"}`}>
-                    {hasLogo ? "Загружен" : "Не загружен — добавьте в материалы бренда"}
-                  </p>
+              </form>
+            </WizardStepShell>
+          );
+        }
+
+        if (isAssetsBlock) {
+          return (
+            <WizardStepShell
+              stepIndex={stepIndex}
+              totalSteps={totalSteps}
+              eyebrow={`${selectedClient.name} · Бренд · блок ${totalBlocks} из ${totalBlocks}`}
+              title="Логотип и файлы бренда"
+              description="Логотип нужен для фирменных визуалов. Брендбук, фото и примеры постов можно добавить позже в библиотеке бренда."
+            >
+              <div className="grid gap-5">
+                {hasLogo ? (
+                  <p className="rounded-2xl border border-emerald-100 bg-emerald-50/60 px-5 py-4 text-sm font-semibold text-emerald-700">Логотип уже загружен.</p>
+                ) : (
+                  <form action={createClientBrandAsset} className="grid gap-4 rounded-2xl border border-stone-200 bg-white p-5">
+                    <input type="hidden" name="clientId" value={selectedClient.id} />
+                    <input type="hidden" name="assetType" value="logo" />
+                    <input type="hidden" name="title" value="Логотип" />
+                    <input type="hidden" name="returnTo" value="wizard" />
+                    {blueprint ? <input type="hidden" name="blueprintId" value={blueprint.id} /> : null}
+                    {monthlyPlan ? <input type="hidden" name="planId" value={monthlyPlan.id} /> : null}
+                    <p className="text-sm font-bold text-stone-950">Загрузите логотип (PNG, JPG, WEBP или PDF)</p>
+                    <BrandAssetFileInput className={wizardInputClass} />
+                    <PendingSubmitButton pendingLabel="Загружаем..." className={wizardPrimaryButtonClass}>
+                      Загрузить логотип
+                    </PendingSubmitButton>
+                  </form>
+                )}
+                <a href={clientSetupHref("blueprint", context)} className={`${wizardPrimaryButtonClass} text-center`}>
+                  Завершить бренд — дальше стратегия →
+                </a>
+                <div className="flex items-center justify-between text-sm font-semibold">
+                  <a href={brandHref(brandWizardBlocks[brandWizardBlocks.length - 1].field)} className="text-stone-400 transition hover:text-violet-700">← Назад</a>
+                  <a href={workspaceHref("brand_assets", { client: selectedClient.id, blueprint: blueprint?.id, plan: monthlyPlan?.id })} className="text-stone-400 transition hover:text-violet-700">
+                    Полная библиотека бренда
+                  </a>
                 </div>
               </div>
-              <a
-                href={workspaceHref("brand_assets", { client: selectedClient.id, blueprint: blueprint?.id, plan: monthlyPlan?.id })}
-                className={`${wizardPrimaryButtonClass} text-center`}
-              >
-                {brandProfileReady ? "Открыть библиотеку бренда" : "Заполнить бренд"}
+            </WizardStepShell>
+          );
+        }
+
+        return (
+          <WizardStepShell
+            stepIndex={stepIndex}
+            totalSteps={totalSteps}
+            eyebrow={selectedClient.name}
+            title="Бренд клиента"
+            description="Часть единого брифа: тональность, аудитория, стиль и ограничения. Заполняется по одному блоку за раз — Blueprint и визуалы будут собираться уже с этим контекстом. Доредактировать можно в любой момент."
+          >
+            <div className="grid gap-4">
+              <div className="grid gap-2 sm:grid-cols-2">
+                {brandWizardBlocks.map((block, index) => {
+                  const filled = Boolean(brandProfile?.[block.field]);
+                  return (
+                    <a
+                      key={block.field}
+                      href={brandHref(block.field)}
+                      className={`rounded-2xl border p-4 transition hover:border-violet-300 ${filled ? "border-emerald-100 bg-emerald-50/50" : "border-stone-200 bg-white"}`}
+                    >
+                      <p className="text-xs font-bold text-stone-400">{index + 1}</p>
+                      <p className="mt-1 text-sm font-bold text-stone-950">{block.title}</p>
+                      <p className={`mt-1 text-xs font-semibold ${filled ? "text-emerald-700" : "text-stone-400"}`}>{filled ? "Заполнено" : "Пусто"}</p>
+                    </a>
+                  );
+                })}
+                <a
+                  href={brandHref("assets")}
+                  className={`rounded-2xl border p-4 transition hover:border-violet-300 ${hasLogo ? "border-emerald-100 bg-emerald-50/50" : "border-stone-200 bg-white"}`}
+                >
+                  <p className="text-xs font-bold text-stone-400">{totalBlocks}</p>
+                  <p className="mt-1 text-sm font-bold text-stone-950">Логотип и файлы</p>
+                  <p className={`mt-1 text-xs font-semibold ${hasLogo ? "text-emerald-700" : "text-stone-400"}`}>{hasLogo ? "Логотип загружен" : "Нет логотипа"}</p>
+                </a>
+              </div>
+              <a href={brandHref((firstEmpty ?? brandWizardBlocks[0]).field)} className={`${wizardPrimaryButtonClass} text-center`}>
+                {filledCount === 0 ? "Начать заполнение бренда" : `Продолжить (${filledCount}/${brandWizardBlocks.length} заполнено)`}
               </a>
-              <a href={clientSetupHref("channels", context)} className={`${wizardSecondaryButtonClass} text-center`}>
-                Дальше: каналы →
-              </a>
+              {brandProfileReady ? (
+                <a href={clientSetupHref("blueprint", context)} className={`${wizardSecondaryButtonClass} text-center`}>
+                  Дальше: стратегия (Blueprint) →
+                </a>
+              ) : (
+                <p className="text-center text-sm font-semibold text-stone-400">Заполните хотя бы тональность и аудиторию — стратегия станет точнее.</p>
+              )}
             </div>
-          )}
-        </WizardStepShell>
-      ) : null}
+          </WizardStepShell>
+        );
+      })() : null}
 
       <nav aria-label="Шаги онбординга" className="mt-6 flex flex-wrap items-center justify-center gap-1.5">
         {setupSteps.map((step, index) => (
@@ -7015,6 +7188,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 clientChannels={telegramChannels}
                 brandProfileReady={brandProfileReady}
                 hasLogo={Boolean(selectedBrandClient?.brandAssets.some((asset) => asset.assetType === "logo"))}
+                brandProfile={selectedBrandClient?.brandProfile ?? null}
+                requestedBrandField={params.brandField}
               />
             ) : null}
 

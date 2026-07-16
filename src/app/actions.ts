@@ -91,6 +91,7 @@ function workspaceLocation(
     portalLink?: string;
     productionRunId?: string;
     articleId?: string;
+    brandField?: string;
   } = {},
 ) {
   const searchParams = new URLSearchParams({ view });
@@ -109,6 +110,7 @@ function workspaceLocation(
   if (options.portalLink) searchParams.set("portalLink", options.portalLink);
   if (options.productionRunId) searchParams.set("productionRunId", options.productionRunId);
   if (options.articleId) searchParams.set("article", options.articleId);
+  if (options.brandField) searchParams.set("brandField", options.brandField);
 
   return `/?${searchParams.toString()}`;
 }
@@ -1103,30 +1105,86 @@ export async function updateClientBrandProfile(formData: FormData) {
   redirect(workspaceLocation("brand_assets", { clientId, brandStep: "materials", notice: "Профиль бренда обновлён." }));
 }
 
+const brandWizardFields = [
+  "toneOfVoice",
+  "targetAudienceNotes",
+  "keyMessages",
+  "brandColors",
+  "fonts",
+  "visualStyle",
+  "productServiceNotes",
+  "forbiddenTopics",
+  "requiredDisclaimers",
+  "legalNotes",
+] as const;
+
+/**
+ * Onboarding brand wizard: saves ONE ClientBrandProfile field per submit and
+ * moves to the next block, staying inside the guided wizard. Idempotent upsert;
+ * other fields are never touched, so the profile can be edited later as usual.
+ */
+export async function saveBrandWizardField(formData: FormData) {
+  const clientId = formText(formData, "clientId");
+  const field = formText(formData, "field");
+  const value = formText(formData, "value");
+  const nextField = formText(formData, "nextField");
+  const blueprintId = formText(formData, "blueprintId") || undefined;
+  const planId = formText(formData, "planId") || undefined;
+
+  if (!clientId) {
+    errorRedirect("Клиент не выбран.", "client_setup");
+  }
+  if (!brandWizardFields.includes(field as (typeof brandWizardFields)[number])) {
+    errorRedirect("Неизвестное поле бренда.", "client_setup");
+  }
+
+  await prisma.clientBrandProfile.upsert({
+    where: { clientId },
+    create: { clientId, [field]: value || null },
+    update: { [field]: value || null },
+  });
+
+  revalidatePath("/");
+  redirect(workspaceLocation("client_setup", {
+    clientId,
+    blueprintId,
+    planId,
+    setupStep: "brand",
+    brandField: nextField || undefined,
+  }));
+}
+
 export async function createClientBrandAsset(formData: FormData) {
   const clientId = formText(formData, "clientId");
   const assetType = formText(formData, "assetType");
   const title = formText(formData, "title");
   const file = formData.get("file");
+  // The onboarding wizard uploads the logo in place — keep the manager inside it.
+  const fromWizard = formText(formData, "returnTo") === "wizard";
+  const wizardBlueprintId = formText(formData, "blueprintId") || undefined;
+  const wizardPlanId = formText(formData, "planId") || undefined;
+  const assetOutcome = (outcome: { notice?: string; error?: string }) =>
+    fromWizard
+      ? workspaceLocation("client_setup", {
+          clientId,
+          blueprintId: wizardBlueprintId,
+          planId: wizardPlanId,
+          setupStep: "brand",
+          brandField: "assets",
+          ...outcome,
+        })
+      : workspaceLocation("brand_assets", { clientId, brandStep: "materials", ...outcome });
 
   if (!clientId || !assetType || !title) errorRedirect("Укажите клиента, тип и название материала.", "brand_assets");
 
   const hasFile = file instanceof File && file.size > 0;
 
   if (hasFile && file.size > MAX_BRAND_ASSET_FILE_SIZE) {
-    redirect(workspaceLocation("brand_assets", {
-      clientId,
-      brandStep: "materials",
-      error: "Файл слишком большой. Максимальный размер для MVP — 20 МБ.",
-    }));
+    redirect(assetOutcome({ error: "Файл слишком большой. Максимальный размер для MVP — 20 МБ." }));
   }
 
   if (hasFile && !supportedBrandAssetMimeTypes.has(file.type)) {
-    redirect(workspaceLocation("brand_assets", {
-      clientId,
-      brandStep: "materials",
-      error: "Этот формат пока не поддерживается. Загрузите PDF, PNG, JPG или WEBP.",
-    }));
+    redirect(assetOutcome({ error: "Этот формат пока не поддерживается. Загрузите PDF, PNG, JPG или WEBP." }));
   }
 
   let uploaded: Awaited<ReturnType<typeof storeClientBrandAssetFile>> = null;
@@ -1136,20 +1194,12 @@ export async function createClientBrandAsset(formData: FormData) {
       uploaded = await storeClientBrandAssetFile({ file, clientId, assetType });
     } catch (error) {
       console.error("Brand asset upload failed", error);
-      redirect(workspaceLocation("brand_assets", {
-        clientId,
-        brandStep: "materials",
-        error: "Не удалось загрузить файл. Попробуйте ещё раз или добавьте материал без файла.",
-      }));
+      redirect(assetOutcome({ error: "Не удалось загрузить файл. Попробуйте ещё раз или добавьте материал без файла." }));
     }
   }
 
   if (hasFile && !uploaded) {
-    redirect(workspaceLocation("brand_assets", {
-      clientId,
-      brandStep: "materials",
-      error: "Для загрузки файла подключите Vercel Blob. Пока можно добавить ссылку или текстовое описание.",
-    }));
+    redirect(assetOutcome({ error: "Для загрузки файла подключите Vercel Blob. Пока можно добавить ссылку или текстовое описание." }));
   }
 
   await prisma.clientBrandAsset.create({
@@ -1165,7 +1215,7 @@ export async function createClientBrandAsset(formData: FormData) {
   });
 
   revalidatePath("/");
-  redirect(workspaceLocation("brand_assets", { clientId, brandStep: "materials", notice: "Материал бренда добавлен." }));
+  redirect(assetOutcome({ notice: "Материал бренда добавлен." }));
 }
 
 export async function archiveClientBrandAsset(formData: FormData) {
@@ -1600,12 +1650,10 @@ async function createMonthlyPlanForBlueprint(
     errorRedirect("Blueprint не найден.");
   }
 
-  if (blueprint.nextRecommendedAction === "request_more_brief_data") {
-    blueprintErrorRedirect(
-      blueprint.id,
-      "Сначала добавьте недостающие данные в бриф. После этого можно будет сгенерировать месячный план.",
-    );
-  }
+  // nextRecommendedAction === "request_more_brief_data" is the strategy's ADVICE
+  // that the brief looks thin (and can be stale after a hung generation).
+  // It must not hard-block the month: the UI shows a soft warning and the
+  // manager decides — so no server-side rejection here.
 
   const month = currentMonth();
   const existingPlan = blueprint.monthlyPlans.find(
