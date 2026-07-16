@@ -1650,12 +1650,10 @@ async function createMonthlyPlanForBlueprint(
     errorRedirect("Blueprint не найден.");
   }
 
-  if (blueprint.nextRecommendedAction === "request_more_brief_data") {
-    blueprintErrorRedirect(
-      blueprint.id,
-      "Сначала добавьте недостающие данные в бриф. После этого можно будет сгенерировать месячный план.",
-    );
-  }
+  // nextRecommendedAction === "request_more_brief_data" is the strategy's ADVICE
+  // that the brief looks thin (and can be stale after a hung generation).
+  // It must not hard-block the month: the UI shows a soft warning and the
+  // manager decides — so no server-side rejection here.
 
   const month = currentMonth();
   const existingPlan = blueprint.monthlyPlans.find(
