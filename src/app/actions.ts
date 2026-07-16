@@ -1810,6 +1810,10 @@ async function createMonthlyPlanForBlueprint(
 
     createdId = created.id;
     await ensureArticleItemsForPlan(created.id, resolveArticlesPerMonth(formData));
+    // Channels the client decided to create from scratch get their Launch Kit tasks.
+    await ensureLaunchKitTasksForPlan(created.id, blueprint.clientId).catch((error) => {
+      console.error("Failed to ensure Launch Kit tasks", error);
+    });
     if (options.prepareTextsAfterCreate !== false) {
       const textPreparation = await prepareMissingTextsForMonthlyPlan(created.id);
       textPreparationNotice = textPreparation.notice;
@@ -3450,6 +3454,17 @@ export async function prepareMonthCreativeBriefs(formData: FormData) {
   }));
 }
 
+const BRAND_REQUIRED_FOR_VISUALS_MESSAGE =
+  "Сначала заполните бренд клиента (профиль и логотип в разделе «Бренд») — без него визуалы получаются нефирменными. Заполните бренд и повторите генерацию.";
+
+/** Visuals are brand-driven: without a brand profile we pause instead of generating generic art. */
+async function brandReadyForVisuals(clientId: string) {
+  const profile = await prisma.clientBrandProfile
+    .findUnique({ where: { clientId }, select: { id: true } })
+    .catch(() => null);
+  return Boolean(profile);
+}
+
 async function generateVisualForCreativeAssetId(creativeAssetId: string) {
   const asset = await prisma.creativeAsset.findUnique({
     where: { id: creativeAssetId },
@@ -3472,6 +3487,13 @@ async function generateVisualForCreativeAssetId(creativeAssetId: string) {
     return {
       status: "failed" as const,
       message: "Креативный материал не найден.",
+    };
+  }
+
+  if (!(await brandReadyForVisuals(asset.clientId))) {
+    return {
+      status: "failed" as const,
+      message: BRAND_REQUIRED_FOR_VISUALS_MESSAGE,
     };
   }
 
@@ -3661,6 +3683,18 @@ export async function prepareMonthVisuals(formData: FormData) {
 
   if (!monthlyPlanId) {
     errorRedirect("Не выбран месячный план для подготовки визуалов.", "drafts");
+  }
+
+  const planForBrandCheck = await prisma.monthlyOperatingPlan.findUnique({
+    where: { id: monthlyPlanId },
+    select: { clientId: true, blueprintId: true },
+  });
+  if (planForBrandCheck && !(await brandReadyForVisuals(planForBrandCheck.clientId))) {
+    redirect(workspaceLocation("drafts", {
+      blueprintId: planForBrandCheck.blueprintId,
+      planId: monthlyPlanId,
+      error: BRAND_REQUIRED_FOR_VISUALS_MESSAGE,
+    }));
   }
 
   const result = await prepareMissingVisualsForMonthlyPlan(monthlyPlanId);
@@ -5849,6 +5883,14 @@ export async function generateCreativeVisualVariantForAsset(formData: FormData) 
     errorRedirect("Креативный материал не найден.");
   }
 
+  if (!(await brandReadyForVisuals(asset.clientId))) {
+    redirect(workspaceLocation(returnViewFromForm(formData, "assets"), {
+      blueprintId: asset.blueprintId,
+      planId: asset.monthlyPlanId,
+      error: BRAND_REQUIRED_FOR_VISUALS_MESSAGE,
+    }));
+  }
+
   const generationJob = await createGenerationJob({
     clientId: asset.clientId,
     blueprintId: asset.blueprintId,
@@ -6248,4 +6290,131 @@ export async function archiveArticleAction(formData: FormData) {
   });
 
   articleRedirect(null, article.clientId, { notice: "Статья перенесена в архив." })
+}
+
+// ─── Onboarding: channels questionnaire ─────────────────────────────────────
+
+const ONBOARDING_CHANNEL_PLATFORMS = ["vk", "telegram", "zen"] as const;
+
+const channelPlatformLabels: Record<(typeof ONBOARDING_CHANNEL_PLATFORMS)[number], string> = {
+  vk: "VK",
+  telegram: "Telegram",
+  zen: "Дзен",
+};
+
+/**
+ * Creates Launch Kit manager tasks (cover + avatar) for channels the client
+ * decided to create from scratch. Idempotent per plan+platform.
+ */
+async function ensureLaunchKitTasksForPlan(monthlyPlanId: string, clientId: string) {
+  const toCreate = await prisma.clientChannel.findMany({
+    where: { clientId, status: "to_create" },
+    select: { platform: true },
+  });
+  if (toCreate.length === 0) return;
+
+  const existingTasks = await prisma.managerTask.findMany({
+    where: { monthlyPlanId, title: { startsWith: "Launch Kit" } },
+    select: { title: true },
+  });
+  const existingTitles = new Set(existingTasks.map((task) => task.title));
+
+  const tasks = toCreate
+    .map((channel) => {
+      const label = channelPlatformLabels[channel.platform as keyof typeof channelPlatformLabels] ?? channel.platform;
+      return {
+        monthlyPlanId,
+        title: `Launch Kit: завести канал ${label}`,
+        description: `Клиент решил завести ${label} с нуля: создать канал, оформить обложку и аватар в фирменном стиле, затем подключить в Настройки → Каналы клиента.`,
+        priority: "high",
+        dueDate: "before launch",
+        status: "open",
+      };
+    })
+    .filter((task) => !existingTitles.has(task.title));
+
+  if (tasks.length > 0) {
+    await prisma.managerTask.createMany({ data: tasks });
+  }
+}
+
+export async function saveOnboardingChannels(formData: FormData) {
+  const clientId = formText(formData, "clientId");
+  const blueprintId = formText(formData, "blueprintId") || undefined;
+  const planId = formText(formData, "planId") || undefined;
+
+  if (!clientId) {
+    errorRedirect("Клиент не выбран.", "client_setup");
+  }
+
+  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true } });
+  if (!client) {
+    errorRedirect("Клиент не найден.", "client_setup");
+  }
+
+  for (const platform of ONBOARDING_CHANNEL_PLATFORMS) {
+    const mode = formText(formData, `channel_${platform}_mode`);
+    const link = formText(formData, `channel_${platform}_link`);
+
+    const activeChannel = await prisma.clientChannel.findFirst({
+      where: { clientId, platform, status: "active" },
+      select: { id: true },
+    });
+    const draftChannel = await prisma.clientChannel.findFirst({
+      where: { clientId, platform, status: { in: ["pending_connect", "to_create"] } },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    });
+
+    if (activeChannel) {
+      // Already connected for real publishing — the questionnaire never downgrades it.
+      continue;
+    }
+
+    if (mode === "have" && link) {
+      if (draftChannel) {
+        await prisma.clientChannel.update({
+          where: { id: draftChannel.id },
+          data: { channelId: link, status: "pending_connect", title: null },
+        });
+      } else {
+        await prisma.clientChannel.create({
+          data: { clientId, platform, channelId: link, status: "pending_connect" },
+        });
+      }
+    } else if (mode === "create") {
+      if (draftChannel) {
+        await prisma.clientChannel.update({
+          where: { id: draftChannel.id },
+          data: { channelId: "new", status: "to_create" },
+        });
+      } else {
+        await prisma.clientChannel.create({
+          data: { clientId, platform, channelId: "new", status: "to_create" },
+        });
+      }
+    } else if (draftChannel) {
+      await prisma.clientChannel.delete({ where: { id: draftChannel.id } });
+    }
+  }
+
+  const plan = planId
+    ? await prisma.monthlyOperatingPlan.findUnique({ where: { id: planId }, select: { id: true } })
+    : await prisma.monthlyOperatingPlan.findFirst({
+        where: { clientId, status: { notIn: ["archived", "replaced"] } },
+        orderBy: { createdAt: "desc" },
+        select: { id: true },
+      });
+  if (plan) {
+    await ensureLaunchKitTasksForPlan(plan.id, clientId);
+  }
+
+  revalidatePath("/");
+  redirect(workspaceLocation("client_setup", {
+    clientId,
+    blueprintId,
+    planId,
+    setupStep: "monthly_plan",
+    notice: "Каналы сохранены: подключим при публикации, а для новых добавили Launch Kit в задачи.",
+  }));
 }
