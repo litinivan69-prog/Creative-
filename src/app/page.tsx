@@ -154,7 +154,8 @@ type WorkspaceContext = {
   client?: string;
 };
 
-const setupSteps = ["create_client", "brief", "blueprint", "channels", "monthly_plan", "brand"] as const;
+// Brand comes BEFORE the month: visuals are brand-driven, so the wizard collects it first.
+const setupSteps = ["create_client", "brief", "blueprint", "brand", "channels", "monthly_plan"] as const;
 type SetupStep = (typeof setupSteps)[number];
 
 const setupStepLabels: Record<SetupStep, string> = {
@@ -5325,6 +5326,7 @@ function inferClientSetupStep({
   blueprint,
   monthlyPlan,
   hasChannelAnswers,
+  brandReady,
 }: {
   requestedStep?: string;
   clients: ClientSetupClient[];
@@ -5333,15 +5335,16 @@ function inferClientSetupStep({
   blueprint: ClientSetupBlueprint | null;
   monthlyPlan: ClientSetupBlueprint["monthlyPlans"][number] | null;
   hasChannelAnswers: boolean;
+  brandReady: boolean;
 }): SetupStep {
   if (setupSteps.includes(requestedStep as SetupStep)) return requestedStep as SetupStep;
   if (clients.length === 0) return "create_client";
   if (!selectedClient) return "create_client";
   if (!selectedBrief) return "brief";
   if (!blueprint) return "blueprint";
+  if (!brandReady && !monthlyPlan) return "brand";
   if (!hasChannelAnswers && !monthlyPlan) return "channels";
-  if (!monthlyPlan) return "monthly_plan";
-  return "brand";
+  return "monthly_plan";
 }
 
 function setupStepState(step: SetupStep, activeStep: SetupStep) {
@@ -5402,6 +5405,33 @@ const wizardPrimaryButtonClass =
 const wizardSecondaryButtonClass =
   "rounded-xl border border-stone-300 bg-white px-6 py-3.5 text-base font-semibold text-stone-800 transition hover:border-violet-300 hover:text-violet-700 active:scale-[0.99]";
 
+function MonthPlanGenerateForm({ blueprint }: { blueprint: ClientSetupBlueprint }) {
+  const recommended = blueprint.platformRecommendations
+    .filter((platform) => platform.recommendation === "recommended")
+    .map((platform) => platform.platformName);
+
+  return (
+    <form action={generateMonthlyPlan} className="grid gap-5">
+      <input type="hidden" name="blueprintId" value={blueprint.id} />
+      <input type="hidden" name="month" value={currentMonth()} />
+      <MonthScopeQuestionnaire platformOptions={recommended} defaultSelected={recommended} />
+      <PendingSubmitButton pendingLabel="Генерируем месячный план..." disabled={blueprint.nextRecommendedAction === "request_more_brief_data"} className={wizardPrimaryButtonClass}>
+        Сгенерировать месячный план
+      </PendingSubmitButton>
+      <LongTaskProgress
+        title="Генерация месячного плана"
+        estimatedSeconds={120}
+        stages={["Анализ Blueprint и scope", "Темы и календарная сетка", "Пары VK+TG и статьи", "Сохраняем план и ставим очередь"]}
+      />
+      {blueprint.nextRecommendedAction === "request_more_brief_data" ? (
+        <p className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-900">
+          Месячный план нельзя сгенерировать, пока не заполнены недостающие данные брифа.
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
 function ClientSetupWizard({
   clients,
   selectedClient,
@@ -5411,6 +5441,8 @@ function ClientSetupWizard({
   requestedStep,
   workspaceContext,
   clientChannels = [],
+  brandProfileReady = false,
+  hasLogo = false,
 }: {
   clients: ClientSetupClient[];
   selectedClient: ClientSetupClient | null;
@@ -5420,6 +5452,8 @@ function ClientSetupWizard({
   requestedStep?: string;
   workspaceContext: WorkspaceContext;
   clientChannels?: Array<{ platform: string; channelId: string; status: string }>;
+  brandProfileReady?: boolean;
+  hasLogo?: boolean;
 }) {
   const activeStep = inferClientSetupStep({
     requestedStep,
@@ -5429,6 +5463,7 @@ function ClientSetupWizard({
     blueprint,
     monthlyPlan,
     hasChannelAnswers: clientChannels.length > 0,
+    brandReady: brandProfileReady,
   });
   const context = {
     ...workspaceContext,
@@ -5444,7 +5479,7 @@ function ClientSetupWizard({
     blueprint: Boolean(blueprint),
     channels: clientChannels.length > 0,
     monthly_plan: Boolean(monthlyPlan),
-    brand: false,
+    brand: brandProfileReady,
   };
   const channelPrefill: ChannelPrefill[] = (["vk", "telegram", "zen"] as const).map((platform) => {
     const rows = clientChannels.filter((channel) => channel.platform === platform);
@@ -5561,8 +5596,8 @@ function ClientSetupWizard({
                   <MetricCard label="Площадок" value={blueprint.platformRecommendations.filter((platform) => platform.recommendation === "recommended").length} />
                 </div>
               </article>
-              <a href={clientSetupHref("channels", { client: selectedClient.id, blueprint: blueprint.id, plan: monthlyPlan?.id })} className={`${wizardPrimaryButtonClass} text-center`}>
-                Дальше: каналы →
+              <a href={clientSetupHref("brand", { client: selectedClient.id, blueprint: blueprint.id, plan: monthlyPlan?.id })} className={`${wizardPrimaryButtonClass} text-center`}>
+                Дальше: бренд →
               </a>
             </div>
           ) : (
@@ -5618,6 +5653,21 @@ function ClientSetupWizard({
         >
           {!blueprint ? (
             <EmptyState>Blueprint появится после генерации на основе брифа.</EmptyState>
+          ) : !brandProfileReady && !monthlyPlan ? (
+            <div className="grid gap-4">
+              <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-900">
+                Сначала заполните бренд: без профиля бренда визуалы месяца не генерируются. План можно собрать, но производство визуалов остановится.
+              </p>
+              <a href={clientSetupHref("brand", context)} className={`${wizardPrimaryButtonClass} text-center`}>
+                Заполнить бренд
+              </a>
+              <details className="rounded-2xl border border-stone-200 bg-white px-5 py-3.5 text-sm font-bold text-stone-700">
+                <summary className="cursor-pointer">Всё равно собрать месяц сейчас</summary>
+                <div className="mt-4 border-t border-stone-200 pt-4 font-normal">
+                  <MonthPlanGenerateForm blueprint={blueprint} />
+                </div>
+              </details>
+            </div>
           ) : monthlyPlan ? (
             <div className="grid gap-5">
               <article className="rounded-2xl border border-violet-200 bg-violet-50/70 p-5">
@@ -5630,8 +5680,8 @@ function ClientSetupWizard({
                   <MetricCard label="План всего" value={monthlyPlan.totalPlannedUnits} />
                 </div>
               </article>
-              <a href={clientSetupHref("brand", { client: blueprint.clientId, blueprint: blueprint.id, plan: monthlyPlan.id })} className={`${wizardPrimaryButtonClass} text-center`}>
-                Дальше →
+              <a href={workspaceHref("drafts", { client: blueprint.clientId, blueprint: blueprint.id, plan: monthlyPlan.id })} className={`${wizardPrimaryButtonClass} text-center`}>
+                Онбординг готов — к материалам месяца →
               </a>
               <details className="rounded-2xl border border-stone-200 bg-white px-5 py-3.5 text-sm font-semibold text-stone-700">
                 <summary className="cursor-pointer">Переделать месяц</summary>
@@ -5646,31 +5696,7 @@ function ClientSetupWizard({
               </details>
             </div>
           ) : (
-            <form action={generateMonthlyPlan} className="grid gap-5">
-              <input type="hidden" name="blueprintId" value={blueprint.id} />
-              <input type="hidden" name="month" value={currentMonth()} />
-              <MonthScopeQuestionnaire
-                platformOptions={blueprint.platformRecommendations
-                  .filter((platform) => platform.recommendation === "recommended")
-                  .map((platform) => platform.platformName)}
-                defaultSelected={blueprint.platformRecommendations
-                  .filter((platform) => platform.recommendation === "recommended")
-                  .map((platform) => platform.platformName)}
-              />
-              <PendingSubmitButton pendingLabel="Генерируем месячный план..." disabled={blueprint.nextRecommendedAction === "request_more_brief_data"} className={wizardPrimaryButtonClass}>
-                Сгенерировать месячный план
-              </PendingSubmitButton>
-              <LongTaskProgress
-                title="Генерация месячного плана"
-                estimatedSeconds={120}
-                stages={["Анализ Blueprint и scope", "Темы и календарная сетка", "Пары VK+TG и статьи", "Сохраняем план и ставим очередь"]}
-              />
-              {blueprint.nextRecommendedAction === "request_more_brief_data" ? (
-                <p className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-900">
-                  Месячный план нельзя сгенерировать, пока не заполнены недостающие данные брифа.
-                </p>
-              ) : null}
-            </form>
+            <MonthPlanGenerateForm blueprint={blueprint} />
           )}
         </WizardStepShell>
       ) : null}
@@ -5681,20 +5707,34 @@ function ClientSetupWizard({
           totalSteps={totalSteps}
           eyebrow={selectedClient?.name ?? "Онбординг клиента"}
           title="Бренд клиента"
-          description="Профиль бренда, логотип и материалы делают тексты и визуалы фирменными. Заполнить можно в любой момент — но лучше до подготовки месяца."
+          description="Профиль бренда, логотип и визуальная айдентика делают тексты и визуалы фирменными. Визуалы не генерируются без бренда — заполните до подготовки месяца (вернуться сюда можно в любой момент)."
         >
           {!selectedClient ? (
             <EmptyState>Сначала создайте клиента.</EmptyState>
           ) : (
             <div className="grid gap-4">
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className={`rounded-2xl border p-4 ${brandProfileReady ? "border-emerald-100 bg-emerald-50/60" : "border-amber-200 bg-amber-50/70"}`}>
+                  <p className="text-sm font-bold text-stone-950">Профиль бренда</p>
+                  <p className={`mt-1 text-sm font-semibold ${brandProfileReady ? "text-emerald-700" : "text-amber-800"}`}>
+                    {brandProfileReady ? "Заполнен" : "Не заполнен — тональность, стиль и ограничения"}
+                  </p>
+                </div>
+                <div className={`rounded-2xl border p-4 ${hasLogo ? "border-emerald-100 bg-emerald-50/60" : "border-amber-200 bg-amber-50/70"}`}>
+                  <p className="text-sm font-bold text-stone-950">Логотип</p>
+                  <p className={`mt-1 text-sm font-semibold ${hasLogo ? "text-emerald-700" : "text-amber-800"}`}>
+                    {hasLogo ? "Загружен" : "Не загружен — добавьте в материалы бренда"}
+                  </p>
+                </div>
+              </div>
               <a
                 href={workspaceHref("brand_assets", { client: selectedClient.id, blueprint: blueprint?.id, plan: monthlyPlan?.id })}
                 className={`${wizardPrimaryButtonClass} text-center`}
               >
-                Открыть библиотеку бренда
+                {brandProfileReady ? "Открыть библиотеку бренда" : "Заполнить бренд"}
               </a>
-              <a href={workspaceHref("drafts", context)} className={`${wizardSecondaryButtonClass} text-center`}>
-                К материалам месяца
+              <a href={clientSetupHref("channels", context)} className={`${wizardSecondaryButtonClass} text-center`}>
+                Дальше: каналы →
               </a>
             </div>
           )}
@@ -6973,6 +7013,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 requestedStep={params.setupStep}
                 workspaceContext={workspaceContext}
                 clientChannels={telegramChannels}
+                brandProfileReady={brandProfileReady}
+                hasLogo={Boolean(selectedBrandClient?.brandAssets.some((asset) => asset.assetType === "logo"))}
               />
             ) : null}
 

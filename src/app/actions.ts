@@ -3454,6 +3454,17 @@ export async function prepareMonthCreativeBriefs(formData: FormData) {
   }));
 }
 
+const BRAND_REQUIRED_FOR_VISUALS_MESSAGE =
+  "Сначала заполните бренд клиента (профиль и логотип в разделе «Бренд») — без него визуалы получаются нефирменными. Заполните бренд и повторите генерацию.";
+
+/** Visuals are brand-driven: without a brand profile we pause instead of generating generic art. */
+async function brandReadyForVisuals(clientId: string) {
+  const profile = await prisma.clientBrandProfile
+    .findUnique({ where: { clientId }, select: { id: true } })
+    .catch(() => null);
+  return Boolean(profile);
+}
+
 async function generateVisualForCreativeAssetId(creativeAssetId: string) {
   const asset = await prisma.creativeAsset.findUnique({
     where: { id: creativeAssetId },
@@ -3476,6 +3487,13 @@ async function generateVisualForCreativeAssetId(creativeAssetId: string) {
     return {
       status: "failed" as const,
       message: "Креативный материал не найден.",
+    };
+  }
+
+  if (!(await brandReadyForVisuals(asset.clientId))) {
+    return {
+      status: "failed" as const,
+      message: BRAND_REQUIRED_FOR_VISUALS_MESSAGE,
     };
   }
 
@@ -3665,6 +3683,18 @@ export async function prepareMonthVisuals(formData: FormData) {
 
   if (!monthlyPlanId) {
     errorRedirect("Не выбран месячный план для подготовки визуалов.", "drafts");
+  }
+
+  const planForBrandCheck = await prisma.monthlyOperatingPlan.findUnique({
+    where: { id: monthlyPlanId },
+    select: { clientId: true, blueprintId: true },
+  });
+  if (planForBrandCheck && !(await brandReadyForVisuals(planForBrandCheck.clientId))) {
+    redirect(workspaceLocation("drafts", {
+      blueprintId: planForBrandCheck.blueprintId,
+      planId: monthlyPlanId,
+      error: BRAND_REQUIRED_FOR_VISUALS_MESSAGE,
+    }));
   }
 
   const result = await prepareMissingVisualsForMonthlyPlan(monthlyPlanId);
@@ -5851,6 +5881,14 @@ export async function generateCreativeVisualVariantForAsset(formData: FormData) 
 
   if (!asset) {
     errorRedirect("Креативный материал не найден.");
+  }
+
+  if (!(await brandReadyForVisuals(asset.clientId))) {
+    redirect(workspaceLocation(returnViewFromForm(formData, "assets"), {
+      blueprintId: asset.blueprintId,
+      planId: asset.monthlyPlanId,
+      error: BRAND_REQUIRED_FOR_VISUALS_MESSAGE,
+    }));
   }
 
   const generationJob = await createGenerationJob({
