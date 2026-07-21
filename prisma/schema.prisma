@@ -29,6 +29,7 @@ model Client {
   brandAssets ClientBrandAsset[]
   channels ClientChannel[]
   articles Article[]
+  geoAudits GeoAudit[]
 }
 
 model ClientBrief {
@@ -729,4 +730,83 @@ model ClientChannel {
   @@index([clientId])
   @@index([platform])
   @@index([status])
+}
+
+model GeoAudit {
+  id               String   @id @default(cuid())
+  clientId         String
+  auditDate        DateTime
+  periodLabel      String
+  presenceIndex    Int      @default(0)
+  sovScore         Int      @default(0)
+  sovMax           Int      @default(40)
+  positionScore    Int      @default(0)
+  positionMax      Int      @default(25)
+  toneScore        Int      @default(0)
+  toneMax          Int      @default(20)
+  accuracyScore    Int      @default(0)
+  accuracyMax      Int      @default(15)
+  sovPercent       Float    @default(0)
+  mentionPercent   Float    @default(0)
+  queriesTotal     Int      @default(0)
+  queriesCategorical Int    @default(0)
+  queriesBrand     Int      @default(0)
+  reportFileUrl    String?
+  reportStorageKey String?
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  client           Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  engineResults    GeoEngineResult[]
+  competitors      GeoCompetitor[]
+  sources          GeoSource[]
+  growthPoints     GeoGrowthPoint[]
+
+  @@index([clientId])
+  @@index([auditDate])
+  @@index([clientId, auditDate])
+}
+
+model GeoEngineResult {
+  id          String   @id @default(cuid())
+  geoAuditId  String
+  engine      String
+  mentions    Int      @default(0)
+  spontaneous Int      @default(0)
+  geoAudit    GeoAudit @relation(fields: [geoAuditId], references: [id], onDelete: Cascade)
+
+  @@index([geoAuditId])
+}
+
+model GeoCompetitor {
+  id           String   @id @default(cuid())
+  geoAuditId   String
+  name         String
+  mentions     Int      @default(0)
+  sharePercent Float?
+  note         String?
+  geoAudit     GeoAudit @relation(fields: [geoAuditId], references: [id], onDelete: Cascade)
+
+  @@index([geoAuditId])
+}
+
+model GeoSource {
+  id         String   @id @default(cuid())
+  geoAuditId String
+  domain     String
+  citations  Int?
+  geoAudit   GeoAudit @relation(fields: [geoAuditId], references: [id], onDelete: Cascade)
+
+  @@index([geoAuditId])
+}
+
+model GeoGrowthPoint {
+  id         String   @id @default(cuid())
+  geoAuditId String
+  area       String
+  citations  Int?
+  note       String?
+  geoAudit   GeoAudit @relation(fields: [geoAuditId], references: [id], onDelete: Cascade)
+
+  @@index([geoAuditId])
 }
