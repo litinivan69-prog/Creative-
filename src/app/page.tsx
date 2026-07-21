@@ -83,6 +83,9 @@ import { MonthScopeQuestionnaire } from "@/app/month-scope-questionnaire";
 import { ARTICLE_STAGES, ARTICLE_STAGE_LABELS, articleHeroUrl, type ArticleStage } from "@/lib/article-engine";
 import type { ArticleCallout, ArticleFaqItem, ArticleImage, ArticleSource } from "@/lib/article-schema";
 import { anthropicAvailable, openaiAvailable } from "@/lib/writer";
+import { GeoDashboard, type GeoDashboardAudit } from "@/app/geo-dashboard";
+import { GeoAuditForm, type GeoAuditFormValues } from "@/app/geo-audit-form";
+import { uploadGeoAudit, deleteGeoAudit } from "@/app/actions";
 import { AutoTextarea } from "@/app/auto-textarea";
 import { BrandAssetFileInput } from "@/app/brand-asset-file-input";
 import { LongTaskProgress } from "@/app/long-task-progress";
@@ -131,6 +134,7 @@ type SearchParams = Promise<{
   filter?: string;
   article?: string;
   brandField?: string;
+  audit?: string;
 }>;
 
 const workspaceViews = [
@@ -144,6 +148,7 @@ const workspaceViews = [
   "brand_assets",
   "client_portal",
   "articles",
+  "geo",
   "reports",
   "settings",
 ] as const;
@@ -224,6 +229,7 @@ const viewTitles: Record<WorkspaceView, string> = {
   brand_assets: "Бренд",
   client_portal: "Клиентский календарь",
   articles: "Статьи",
+  geo: "Видимость в нейросетях",
   reports: "Отчёты",
   settings: "Настройки",
 };
@@ -3344,6 +3350,7 @@ function WorkspaceSwitcher({
     { label: "Материалы", view: "drafts" as const },
     { label: "Бренд", view: "brand_assets" as const },
     { label: "Статьи", view: "articles" as const },
+    { label: "GEO", view: "geo" as const },
     { label: "Клиентский вид", view: "client_portal" as const },
     { label: "Отчёт", view: "reports" as const },
   ];
@@ -6487,6 +6494,137 @@ function ArticlesView({
   );
 }
 
+function geoGoalPresence(audits: GeoDashboardAudit[]): number | undefined {
+  if (audits.length < 2) return undefined;
+  // Default aspirational target: ~15 points above the best achieved index.
+  const best = Math.max(...audits.map((audit) => audit.presenceIndex));
+  return Math.min(95, best + 15);
+}
+
+function GeoManagerView({
+  audits,
+  selected,
+  selectedForm,
+  clientId,
+  clientName,
+  workspaceContext,
+}: {
+  audits: GeoDashboardAudit[];
+  selected: GeoDashboardAudit | null;
+  selectedForm: GeoAuditFormValues | null;
+  clientId: string | null;
+  clientName: string | null;
+  workspaceContext: WorkspaceContext;
+}) {
+  const geoAuditHref = (auditId: string) => {
+    const searchParams = new URLSearchParams({ view: "geo" });
+    if (workspaceContext.client) searchParams.set("client", workspaceContext.client);
+    if (workspaceContext.blueprint) searchParams.set("blueprint", workspaceContext.blueprint);
+    if (workspaceContext.plan) searchParams.set("plan", workspaceContext.plan);
+    searchParams.set("audit", auditId);
+    return `/?${searchParams.toString()}`;
+  };
+
+  return (
+    <section>
+      <WorkspaceViewHeader
+        eyebrow="GEO · внешний аудит Creative Command"
+        title="Видимость в нейросетях"
+        description="Метрики GEO-аудита присутствия бренда в Perplexity, YandexGPT и GigaChat. Загрузите PPTX-отчёт — ключевые числа распознаются автоматически, вы подтверждаете форму. APOS хранит аудиты и показывает динамику по месяцам."
+      />
+
+      {!clientId ? (
+        <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+          Сначала выберите клиента в разделе «Клиенты».
+        </div>
+      ) : (
+        <div className="mt-6 grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
+          <div className="grid content-start gap-4">
+            <article className={`${panelClass} p-5`}>
+              <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-violet-700">Новый аудит</p>
+              <h3 className="mt-1 font-semibold text-stone-950">{clientName ?? "Клиент"}</h3>
+              <form action={uploadGeoAudit} className="mt-4 grid gap-3">
+                <input type="hidden" name="clientId" value={clientId} />
+                <p className="text-sm font-semibold text-stone-700">Загрузите PPTX-отчёт GEO-аудита</p>
+                <BrandAssetFileInput className="rounded-lg border border-stone-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-violet-500" />
+                <PendingSubmitButton pendingLabel="Загружаем и распознаём..." className={primaryButtonClass}>
+                  Загрузить отчёт
+                </PendingSubmitButton>
+                <p className="text-xs leading-5 text-stone-400">
+                  Числа распознаются best-effort и предзаполнят форму. Не сработало — заполните вручную, форма источник правды.
+                </p>
+              </form>
+              <form action={uploadGeoAudit} className="mt-3 border-t border-stone-100 pt-3">
+                <input type="hidden" name="clientId" value={clientId} />
+                <PendingSubmitButton pendingLabel="Создаём..." className={secondaryButtonClass}>
+                  Создать аудит вручную (без файла)
+                </PendingSubmitButton>
+              </form>
+            </article>
+
+            <article className={`${panelClass} p-5`}>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-violet-700">Аудиты клиента</p>
+                <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-bold text-stone-600">{audits.length}</span>
+              </div>
+              <div className="mt-3 grid gap-2">
+                {audits.map((audit) => (
+                  <a
+                    key={audit.id}
+                    href={geoAuditHref(audit.id)}
+                    className={`rounded-lg border p-3 transition ${
+                      selected?.id === audit.id ? "border-violet-300 bg-violet-50/60" : "border-stone-200 bg-white hover:border-violet-200"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-stone-950">{audit.periodLabel}</p>
+                      <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-bold text-violet-700">Индекс {audit.presenceIndex}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-stone-500">SoV {audit.sovPercent}% · упоминания {audit.mentionPercent}%</p>
+                  </a>
+                ))}
+                {audits.length === 0 ? <p className={mutedTextClass}>Аудитов пока нет — загрузите первый отчёт.</p> : null}
+              </div>
+            </article>
+          </div>
+
+          <div className="grid content-start gap-4">
+            <GeoDashboard
+              audits={audits}
+              selected={selected}
+              clientName={clientName ?? undefined}
+              goalPresence={geoGoalPresence(audits)}
+            />
+
+            {selectedForm ? (
+              <article className={`${panelClass} p-5 sm:p-6`}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-violet-700">Проверьте и подтвердите</p>
+                    <h3 className="mt-1 font-semibold text-stone-950">Данные аудита — источник правды</h3>
+                  </div>
+                  <form action={deleteGeoAudit}>
+                    <input type="hidden" name="geoAuditId" value={selectedForm.id} />
+                    <PendingSubmitButton pendingLabel="Удаляем..." className={destructiveButtonClass}>
+                      Удалить аудит
+                    </PendingSubmitButton>
+                  </form>
+                </div>
+                <details className="mt-4 rounded-2xl border border-stone-200 bg-white">
+                  <summary className="cursor-pointer px-5 py-3.5 text-sm font-bold text-stone-700">Редактировать метрики</summary>
+                  <div className="border-t border-stone-200 p-5">
+                    <GeoAuditForm audit={selectedForm} />
+                  </div>
+                </details>
+              </article>
+            ) : null}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default async function Dashboard({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   const activeView = getActiveView(params);
@@ -6905,6 +7043,76 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
     sources: (article.sources as ArticleSource[]) ?? [],
     wordCount: article.wordCount,
   }));
+  const geoClientId = workspaceContext.client ?? null;
+  const geoAuditsNeeded = (activeView === "geo" || activeView === "client_portal") && geoClientId;
+  const geoAuditRows = geoAuditsNeeded && !isProductionBuild
+    ? await prisma.geoAudit
+        .findMany({
+          where: { clientId: geoClientId },
+          orderBy: { auditDate: "desc" },
+          take: 24,
+          include: {
+            engineResults: true,
+            competitors: { orderBy: { mentions: "desc" } },
+            sources: true,
+            growthPoints: true,
+          },
+        })
+        .catch(() => [])
+    : [];
+  const geoDashboardAudits: GeoDashboardAudit[] = geoAuditRows.map((audit) => ({
+    id: audit.id,
+    auditDateISO: audit.auditDate.toISOString(),
+    periodLabel: audit.periodLabel,
+    presenceIndex: audit.presenceIndex,
+    sovScore: audit.sovScore,
+    sovMax: audit.sovMax,
+    positionScore: audit.positionScore,
+    positionMax: audit.positionMax,
+    toneScore: audit.toneScore,
+    toneMax: audit.toneMax,
+    accuracyScore: audit.accuracyScore,
+    accuracyMax: audit.accuracyMax,
+    sovPercent: audit.sovPercent,
+    mentionPercent: audit.mentionPercent,
+    queriesTotal: audit.queriesTotal,
+    queriesCategorical: audit.queriesCategorical,
+    queriesBrand: audit.queriesBrand,
+    reportFileUrl: audit.reportFileUrl,
+    notes: audit.notes,
+    engineResults: audit.engineResults.map((entry) => ({ engine: entry.engine, mentions: entry.mentions, spontaneous: entry.spontaneous })),
+    competitors: audit.competitors.map((entry) => ({ name: entry.name, mentions: entry.mentions, sharePercent: entry.sharePercent, note: entry.note })),
+    sources: audit.sources.map((entry) => ({ domain: entry.domain, citations: entry.citations })),
+    growthPoints: audit.growthPoints.map((entry) => ({ area: entry.area, citations: entry.citations, note: entry.note })),
+  }));
+  const selectedGeoAudit =
+    geoDashboardAudits.find((audit) => audit.id === params.audit) ?? geoDashboardAudits[0] ?? null;
+  const selectedGeoFormValues: GeoAuditFormValues | null = selectedGeoAudit
+    ? {
+        id: selectedGeoAudit.id,
+        auditDateISO: selectedGeoAudit.auditDateISO,
+        periodLabel: selectedGeoAudit.periodLabel,
+        presenceIndex: selectedGeoAudit.presenceIndex,
+        sovScore: selectedGeoAudit.sovScore,
+        sovMax: selectedGeoAudit.sovMax,
+        positionScore: selectedGeoAudit.positionScore,
+        positionMax: selectedGeoAudit.positionMax,
+        toneScore: selectedGeoAudit.toneScore,
+        toneMax: selectedGeoAudit.toneMax,
+        accuracyScore: selectedGeoAudit.accuracyScore,
+        accuracyMax: selectedGeoAudit.accuracyMax,
+        sovPercent: selectedGeoAudit.sovPercent,
+        mentionPercent: selectedGeoAudit.mentionPercent,
+        queriesTotal: selectedGeoAudit.queriesTotal,
+        queriesCategorical: selectedGeoAudit.queriesCategorical,
+        queriesBrand: selectedGeoAudit.queriesBrand,
+        notes: selectedGeoAudit.notes ?? "",
+        engineResults: selectedGeoAudit.engineResults,
+        competitors: selectedGeoAudit.competitors,
+        sources: selectedGeoAudit.sources,
+        growthPoints: selectedGeoAudit.growthPoints,
+      }
+    : null;
   const telegramChannels = telegramClientId
     ? await prisma.clientChannel
         .findMany({
@@ -7145,6 +7353,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                   items={selectedMonthlyPlan?.plannedContentItems ?? []}
                   publications={selectedMonthlyPlan?.scheduledPublications ?? []}
                   articles={portalArticles}
+                  geoAudits={geoDashboardAudits}
                   showPreviewNotice
                 />
               </>
@@ -7155,6 +7364,17 @@ export default async function Dashboard({ searchParams }: { searchParams: Search
                 articles={articles}
                 selectedArticle={selectedArticle}
                 clientId={articlesClientId}
+                clientName={telegramClientName}
+                workspaceContext={workspaceContext}
+              />
+            ) : null}
+
+            {activeView === "geo" ? (
+              <GeoManagerView
+                audits={geoDashboardAudits}
+                selected={selectedGeoAudit}
+                selectedForm={selectedGeoFormValues}
+                clientId={geoClientId}
                 clientName={telegramClientName}
                 workspaceContext={workspaceContext}
               />
