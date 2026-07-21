@@ -57,6 +57,8 @@ import {
 } from "@/lib/client-portal-links";
 import { storeGeneratedVisual } from "@/lib/visual-storage";
 import { storeClientBrandAssetFile } from "@/lib/brand-asset-storage";
+import { storeGeoReportFile } from "@/lib/geo-storage";
+import { extractGeoAudit, type GeoAuditExtraction } from "@/lib/geo-pptx-extract";
 import { getClientBrandContext } from "@/lib/brand-context";
 import { runArticlePipeline, runArticleForPlannedItem } from "@/lib/article-engine";
 
@@ -72,7 +74,7 @@ function formInt(formData: FormData, key: string): number | null {
   return Math.max(0, Math.round(parsed));
 }
 
-type WorkspaceView = "overview" | "clients" | "client_setup" | "approvals" | "calendar" | "drafts" | "assets" | "brand_assets" | "client_portal" | "articles" | "reports" | "settings";
+type WorkspaceView = "overview" | "clients" | "client_setup" | "approvals" | "calendar" | "drafts" | "assets" | "brand_assets" | "client_portal" | "articles" | "geo" | "reports" | "settings";
 
 function workspaceLocation(
   view: WorkspaceView,
@@ -92,6 +94,7 @@ function workspaceLocation(
     productionRunId?: string;
     articleId?: string;
     brandField?: string;
+    geoAuditId?: string;
   } = {},
 ) {
   const searchParams = new URLSearchParams({ view });
@@ -111,6 +114,7 @@ function workspaceLocation(
   if (options.productionRunId) searchParams.set("productionRunId", options.productionRunId);
   if (options.articleId) searchParams.set("article", options.articleId);
   if (options.brandField) searchParams.set("brandField", options.brandField);
+  if (options.geoAuditId) searchParams.set("audit", options.geoAuditId);
 
   return `/?${searchParams.toString()}`;
 }
@@ -6465,4 +6469,209 @@ export async function saveOnboardingChannels(formData: FormData) {
     setupStep: "monthly_plan",
     notice: "Каналы сохранены: подключим при публикации, а для новых добавили Launch Kit в задачи.",
   }));
+}
+
+// ─── GEO audit: input (upload + best-effort extract) & source-of-truth form ──
+
+const MAX_GEO_REPORT_FILE_SIZE = 40 * 1024 * 1024;
+
+function jsonArrayFromForm<T>(formData: FormData, key: string): T[] {
+  const raw = formText(formData, key);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as T[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function geoChildrenFromExtraction(extraction: GeoAuditExtraction) {
+  return {
+    engineResults: extraction.engines.map((entry) => ({
+      engine: entry.engine,
+      mentions: entry.mentions,
+      spontaneous: entry.spontaneous,
+    })),
+    competitors: extraction.competitors.map((entry) => ({
+      name: entry.name,
+      mentions: entry.mentions,
+      sharePercent: entry.sharePercent,
+      note: null as string | null,
+    })),
+    sources: extraction.sources.map((domain) => ({ domain, citations: null as number | null })),
+    growthPoints: extraction.growthPoints.map((entry) => ({
+      area: entry.area,
+      citations: entry.citations,
+      note: null as string | null,
+    })),
+  };
+}
+
+export async function uploadGeoAudit(formData: FormData) {
+  const clientId = formText(formData, "clientId");
+  if (!clientId) errorRedirect("Выберите клиента для GEO-аудита.", "geo");
+
+  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true, name: true } });
+  if (!client) errorRedirect("Клиент не найден.", "geo");
+
+  const file = formData.get("file");
+  const hasFile = file instanceof File && file.size > 0;
+
+  if (hasFile && file.size > MAX_GEO_REPORT_FILE_SIZE) {
+    redirect(workspaceLocation("geo", { clientId, error: "Файл слишком большой. Максимум для GEO-отчёта — 40 МБ." }));
+  }
+  if (hasFile && !/\.pptx$/i.test(file.name) && !file.type.includes("presentation")) {
+    redirect(workspaceLocation("geo", { clientId, error: "Загрузите PPTX-отчёт GEO-аудита." }));
+  }
+
+  let extraction: GeoAuditExtraction | null = null;
+  let stored: Awaited<ReturnType<typeof storeGeoReportFile>> = null;
+
+  if (hasFile) {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    try {
+      extraction = await extractGeoAudit(buffer);
+    } catch (error) {
+      console.error("GEO PPTX extraction failed", error);
+      extraction = null;
+    }
+    try {
+      stored = await storeGeoReportFile({ file, clientId });
+    } catch (error) {
+      console.error("GEO report upload failed", error);
+      stored = null;
+    }
+  }
+
+  const now = new Date();
+  const auditDate = extraction?.auditDateISO ? new Date(extraction.auditDateISO) : now;
+  const periodLabel = extraction?.periodLabel ?? new Intl.DateTimeFormat("ru-RU", { month: "long", year: "numeric" }).format(now);
+  const children = extraction ? geoChildrenFromExtraction(extraction) : { engineResults: [], competitors: [], sources: [], growthPoints: [] };
+
+  const created = await prisma.geoAudit.create({
+    data: {
+      clientId,
+      auditDate,
+      periodLabel,
+      presenceIndex: extraction?.presenceIndex ?? 0,
+      sovScore: extraction?.sovScore ?? 0,
+      sovMax: extraction?.sovMax ?? 40,
+      positionScore: extraction?.positionScore ?? 0,
+      positionMax: extraction?.positionMax ?? 25,
+      toneScore: extraction?.toneScore ?? 0,
+      toneMax: extraction?.toneMax ?? 20,
+      accuracyScore: extraction?.accuracyScore ?? 0,
+      accuracyMax: extraction?.accuracyMax ?? 15,
+      sovPercent: extraction?.sovPercent ?? 0,
+      mentionPercent: extraction?.mentionPercent ?? 0,
+      queriesTotal: extraction?.queriesTotal ?? 0,
+      queriesCategorical: extraction?.queriesCategorical ?? 0,
+      queriesBrand: extraction?.queriesBrand ?? 0,
+      reportFileUrl: stored?.reportFileUrl ?? null,
+      reportStorageKey: stored?.reportStorageKey ?? null,
+      engineResults: { create: children.engineResults },
+      competitors: { create: children.competitors },
+      sources: { create: children.sources },
+      growthPoints: { create: children.growthPoints },
+    },
+    select: { id: true },
+  });
+
+  revalidatePath("/");
+  const notice = !hasFile
+    ? "Пустой аудит создан. Заполните метрики вручную и сохраните."
+    : extraction?.matched
+      ? "Отчёт загружен, ключевые числа распознаны. Проверьте и подтвердите форму."
+      : "Отчёт загружен. Авто-распознавание не сработало — заполните метрики вручную.";
+  redirect(workspaceLocation("geo", { clientId, geoAuditId: created.id, notice }));
+}
+
+export async function updateGeoAudit(formData: FormData) {
+  const geoAuditId = formText(formData, "geoAuditId");
+  if (!geoAuditId) errorRedirect("Не выбран аудит.", "geo");
+
+  const audit = await prisma.geoAudit.findUnique({ where: { id: geoAuditId }, select: { id: true, clientId: true } });
+  if (!audit) errorRedirect("Аудит не найден.", "geo");
+
+  const auditDateRaw = formText(formData, "auditDate");
+  const parsedDate = auditDateRaw ? new Date(auditDateRaw) : null;
+
+  const engineResults = jsonArrayFromForm<{ engine?: string; mentions?: unknown; spontaneous?: unknown }>(formData, "engineResults")
+    .filter((entry) => typeof entry.engine === "string" && entry.engine.trim())
+    .map((entry) => ({
+      engine: String(entry.engine).trim(),
+      mentions: Math.max(0, Math.round(Number(entry.mentions) || 0)),
+      spontaneous: Math.max(0, Math.round(Number(entry.spontaneous) || 0)),
+    }));
+  const competitors = jsonArrayFromForm<{ name?: string; mentions?: unknown; sharePercent?: unknown; note?: string }>(formData, "competitors")
+    .filter((entry) => typeof entry.name === "string" && entry.name.trim())
+    .map((entry) => ({
+      name: String(entry.name).trim(),
+      mentions: Math.max(0, Math.round(Number(entry.mentions) || 0)),
+      sharePercent: Number.isFinite(Number(entry.sharePercent)) && String(entry.sharePercent ?? "") !== "" ? Number(entry.sharePercent) : null,
+      note: entry.note ? String(entry.note).trim() : null,
+    }));
+  const sources = jsonArrayFromForm<{ domain?: string; citations?: unknown }>(formData, "sources")
+    .filter((entry) => typeof entry.domain === "string" && entry.domain.trim())
+    .map((entry) => ({
+      domain: String(entry.domain).trim(),
+      citations: Number.isFinite(Number(entry.citations)) && String(entry.citations ?? "") !== "" ? Math.round(Number(entry.citations)) : null,
+    }));
+  const growthPoints = jsonArrayFromForm<{ area?: string; citations?: unknown; note?: string }>(formData, "growthPoints")
+    .filter((entry) => typeof entry.area === "string" && entry.area.trim())
+    .map((entry) => ({
+      area: String(entry.area).trim(),
+      citations: Number.isFinite(Number(entry.citations)) && String(entry.citations ?? "") !== "" ? Math.round(Number(entry.citations)) : null,
+      note: entry.note ? String(entry.note).trim() : null,
+    }));
+
+  await prisma.$transaction([
+    prisma.geoEngineResult.deleteMany({ where: { geoAuditId } }),
+    prisma.geoCompetitor.deleteMany({ where: { geoAuditId } }),
+    prisma.geoSource.deleteMany({ where: { geoAuditId } }),
+    prisma.geoGrowthPoint.deleteMany({ where: { geoAuditId } }),
+    prisma.geoAudit.update({
+      where: { id: geoAuditId },
+      data: {
+        auditDate: parsedDate && !Number.isNaN(parsedDate.getTime()) ? parsedDate : undefined,
+        periodLabel: formText(formData, "periodLabel") || "Период",
+        presenceIndex: Math.max(0, Math.min(100, formInt(formData, "presenceIndex") ?? 0)),
+        sovScore: formInt(formData, "sovScore") ?? 0,
+        sovMax: formInt(formData, "sovMax") ?? 40,
+        positionScore: formInt(formData, "positionScore") ?? 0,
+        positionMax: formInt(formData, "positionMax") ?? 25,
+        toneScore: formInt(formData, "toneScore") ?? 0,
+        toneMax: formInt(formData, "toneMax") ?? 20,
+        accuracyScore: formInt(formData, "accuracyScore") ?? 0,
+        accuracyMax: formInt(formData, "accuracyMax") ?? 15,
+        sovPercent: Number(formText(formData, "sovPercent").replace(",", ".")) || 0,
+        mentionPercent: Number(formText(formData, "mentionPercent").replace(",", ".")) || 0,
+        queriesTotal: formInt(formData, "queriesTotal") ?? 0,
+        queriesCategorical: formInt(formData, "queriesCategorical") ?? 0,
+        queriesBrand: formInt(formData, "queriesBrand") ?? 0,
+        notes: formText(formData, "notes") || null,
+        engineResults: { create: engineResults },
+        competitors: { create: competitors },
+        sources: { create: sources },
+        growthPoints: { create: growthPoints },
+      },
+    }),
+  ]);
+
+  revalidatePath("/");
+  redirect(workspaceLocation("geo", { clientId: audit.clientId, geoAuditId, notice: "GEO-аудит сохранён." }));
+}
+
+export async function deleteGeoAudit(formData: FormData) {
+  const geoAuditId = formText(formData, "geoAuditId");
+  if (!geoAuditId) errorRedirect("Не выбран аудит.", "geo");
+
+  const audit = await prisma.geoAudit.findUnique({ where: { id: geoAuditId }, select: { clientId: true } });
+  if (!audit) errorRedirect("Аудит не найден.", "geo");
+
+  await prisma.geoAudit.delete({ where: { id: geoAuditId } });
+
+  revalidatePath("/");
+  redirect(workspaceLocation("geo", { clientId: audit.clientId, notice: "GEO-аудит удалён." }));
 }
