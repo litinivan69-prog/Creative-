@@ -9,6 +9,7 @@ import {
 } from "@/app/actions";
 import { ArticleReader } from "@/app/article-reader";
 import { AutoTextarea } from "@/app/auto-textarea";
+import { GeoDashboard, type GeoDashboardAudit } from "@/app/geo-dashboard";
 import { PendingSubmitButton } from "@/app/pending-submit-button";
 import { getGeneratedVariantImageSrc } from "@/lib/generated-visuals";
 import type { ArticleCallout, ArticleFaqItem, ArticleImage, ArticleSource } from "@/lib/article-schema";
@@ -454,6 +455,7 @@ const portalSections = [
   { key: "visuals", label: "Визуалы" },
   { key: "materials", label: "Материалы" },
   { key: "articles", label: "Статьи" },
+  { key: "geo", label: "Видимость в ИИ" },
   { key: "revisions", label: "Правки" },
   { key: "files", label: "Файлы" },
 ] as const;
@@ -478,6 +480,7 @@ export function ClientPortalView({
   items,
   publications,
   articles = [],
+  geoAudits = [],
   portalToken,
   notice,
   error,
@@ -488,6 +491,7 @@ export function ClientPortalView({
   items: ClientPortalItem[];
   publications: ClientPortalPublication[];
   articles?: ClientPortalArticle[];
+  geoAudits?: GeoDashboardAudit[];
   portalToken?: string;
   notice?: string;
   error?: string;
@@ -528,7 +532,12 @@ export function ClientPortalView({
   const [section, setSection] = useState<PortalSection>("overview");
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const activeArticle = articles.find((article) => article.id === selectedArticleId) ?? articles[0] ?? null;
-  const visibleSections = portalSections.filter((entry) => entry.key !== "articles" || articles.length > 0);
+  const selectedGeoAudit = geoAudits[0] ?? null;
+  const visibleSections = portalSections.filter((entry) => {
+    if (entry.key === "articles") return articles.length > 0;
+    if (entry.key === "geo") return geoAudits.length > 0;
+    return true;
+  });
   const handleSelectMaterial = (id: string) => {
     setSelectedId(id);
     setTextExpanded(false);
@@ -1110,6 +1119,17 @@ export function ClientPortalView({
                   <ArticleReader article={activeArticle} />
                 </article>
               ) : null}
+            </section>
+          ) : null}
+
+          {section === "geo" ? (
+            <section className="grid gap-5">
+              <div className="rounded-[28px] border border-white/70 bg-white/70 p-5 sm:p-6">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-600">Видимость в нейросетях</p>
+                <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">Насколько заметен бренд, когда клиент спрашивает совета у ИИ</h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">Аудит присутствия в Perplexity, YandexGPT и GigaChat. Индекс присутствия, доля голоса и динамика по месяцам.</p>
+              </div>
+              <GeoDashboard audits={geoAudits} selected={selectedGeoAudit} clientName={clientName} />
             </section>
           ) : null}
 

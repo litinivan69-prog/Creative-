@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ClientPortalView, type ClientPortalArticle } from "@/app/client-portal-view";
+import type { GeoDashboardAudit } from "@/app/geo-dashboard";
 import type { ArticleCallout, ArticleFaqItem, ArticleImage, ArticleSource } from "@/lib/article-schema";
 import { hashPortalToken } from "@/lib/client-portal-links";
 import { prisma } from "@/lib/prisma";
@@ -172,6 +173,47 @@ export default async function ClientPortalPage({
     )
     .catch(() => []);
 
+  const geoAudits: GeoDashboardAudit[] = await prisma.geoAudit
+    .findMany({
+      where: { clientId: portalLink.clientId },
+      orderBy: { auditDate: "desc" },
+      take: 24,
+      include: {
+        engineResults: true,
+        competitors: { orderBy: { mentions: "desc" } },
+        sources: true,
+        growthPoints: true,
+      },
+    })
+    .then((rows) =>
+      rows.map((audit) => ({
+        id: audit.id,
+        auditDateISO: audit.auditDate.toISOString(),
+        periodLabel: audit.periodLabel,
+        presenceIndex: audit.presenceIndex,
+        sovScore: audit.sovScore,
+        sovMax: audit.sovMax,
+        positionScore: audit.positionScore,
+        positionMax: audit.positionMax,
+        toneScore: audit.toneScore,
+        toneMax: audit.toneMax,
+        accuracyScore: audit.accuracyScore,
+        accuracyMax: audit.accuracyMax,
+        sovPercent: audit.sovPercent,
+        mentionPercent: audit.mentionPercent,
+        queriesTotal: audit.queriesTotal,
+        queriesCategorical: audit.queriesCategorical,
+        queriesBrand: audit.queriesBrand,
+        reportFileUrl: audit.reportFileUrl,
+        notes: audit.notes,
+        engineResults: audit.engineResults.map((entry) => ({ engine: entry.engine, mentions: entry.mentions, spontaneous: entry.spontaneous })),
+        competitors: audit.competitors.map((entry) => ({ name: entry.name, mentions: entry.mentions, sharePercent: entry.sharePercent, note: entry.note })),
+        sources: audit.sources.map((entry) => ({ domain: entry.domain, citations: entry.citations })),
+        growthPoints: audit.growthPoints.map((entry) => ({ area: entry.area, citations: entry.citations, note: entry.note })),
+      })),
+    )
+    .catch(() => []);
+
   return (
     <ClientPortalView
       clientName={portalLink.client.name}
@@ -179,6 +221,7 @@ export default async function ClientPortalPage({
       items={portalLink.monthlyPlan.plannedContentItems}
       publications={portalLink.monthlyPlan.scheduledPublications}
       articles={articles}
+      geoAudits={geoAudits}
       portalToken={token}
       notice={query.notice}
       error={query.error}
