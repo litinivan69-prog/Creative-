@@ -38,7 +38,28 @@ Creative Command uses Adaptive Presence OS as:
 3. a future SaaS/semi-SaaS foundation.
 
 Current focus:
-make the MVP flow reliable and make the client portal a premium product surface.
+build a much lighter self-service SaaS while preserving the proven generation core.
+
+## Current product pivot
+
+Adaptive Presence is moving away from a manager-led agency console.
+
+The new customer product is self-service:
+
+```text
+email sign-in → payment → short brand brief → channels and rhythm → monthly content kit → edit/copy/download/publish
+```
+
+Core formats:
+
+- VK posts;
+- Telegram posts;
+- Dzen articles;
+- VC.ru articles.
+
+The normal rhythm is one or two content themes per week and up to two long-form articles per month. Quick announcements and review replies are lightweight on-demand helpers.
+
+The current manager console is legacy during the transition. Do not delete or refactor it as part of self-service work. Build new routes and components separately, reuse the data and generation core through small application-service functions, and expose only simple customer-facing states.
 
 ## Tech stack
 
