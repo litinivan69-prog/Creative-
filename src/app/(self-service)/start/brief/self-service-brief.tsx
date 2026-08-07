@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   SELF_SERVICE_ARTICLE_RHYTHMS,
   SELF_SERVICE_FORMATS,
@@ -34,6 +34,8 @@ const EMPTY_BRIEF: BriefValues = {
   monthGoal: "",
   monthTopics: "",
 };
+
+const BRIEF_STORAGE_KEY = "adaptive-presence:brief-draft:v1";
 
 const toneOptions = [
   ["Спокойно и экспертно", "Уверенно, понятно, без громких обещаний"],
@@ -75,9 +77,33 @@ function SummaryItem({ label, value }: { label: string; value: string }) {
 }
 
 export function SelfServiceBrief({ selection }: { selection: SelfServiceSelection }) {
+  const [storageReady, setStorageReady] = useState(false);
   const [values, setValues] = useState<BriefValues>(EMPTY_BRIEF);
   const [showPreview, setShowPreview] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(BRIEF_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved) as Partial<Record<keyof BriefValues, unknown>>;
+        const restored = { ...EMPTY_BRIEF };
+        for (const key of Object.keys(EMPTY_BRIEF) as Array<keyof BriefValues>) {
+          if (typeof parsed[key] === "string") restored[key] = parsed[key];
+        }
+        setValues(restored);
+      }
+    } catch {
+      window.localStorage.removeItem(BRIEF_STORAGE_KEY);
+    } finally {
+      setStorageReady(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!storageReady) return;
+    window.localStorage.setItem(BRIEF_STORAGE_KEY, JSON.stringify(values));
+  }, [storageReady, values]);
 
   const selectedFormats = useMemo(
     () => SELF_SERVICE_FORMATS.filter((format) => selection.formatIds.includes(format.id)),

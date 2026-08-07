@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   DEFAULT_SELF_SERVICE_SELECTION,
@@ -13,6 +13,7 @@ import {
 
 const coreFormats = SELF_SERVICE_FORMATS.filter((format) => format.core);
 const helperFormats = SELF_SERVICE_FORMATS.filter((format) => !format.core);
+const START_SELECTION_STORAGE_KEY = "adaptive-presence:start-selection:v1";
 
 const iconPaths: Record<string, React.ReactNode> = {
   mark: <path d="M4.75 12.25 9.1 16.6 19.25 6.45" />,
@@ -69,6 +70,7 @@ function SelectCard({
 
 export function SelfServiceStart() {
   const router = useRouter();
+  const [storageReady, setStorageReady] = useState(false);
   const [selectedFormats, setSelectedFormats] = useState<SelfServiceFormatId[]>(DEFAULT_SELF_SERVICE_SELECTION.formatIds);
   const [postRhythm, setPostRhythm] = useState<(typeof SELF_SERVICE_POST_RHYTHMS)[number]["id"]>(
     DEFAULT_SELF_SERVICE_SELECTION.postRhythmId,
@@ -76,6 +78,42 @@ export function SelfServiceStart() {
   const [articleRhythm, setArticleRhythm] = useState<(typeof SELF_SERVICE_ARTICLE_RHYTHMS)[number]["id"]>(
     DEFAULT_SELF_SERVICE_SELECTION.articleRhythmId,
   );
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(START_SELECTION_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved) as {
+          formatIds?: unknown;
+          postRhythmId?: unknown;
+          articleRhythmId?: unknown;
+        };
+        const validFormatIds = new Set(SELF_SERVICE_FORMATS.map((format) => format.id));
+        const restoredFormats = Array.isArray(parsed.formatIds)
+          ? parsed.formatIds.filter((id): id is SelfServiceFormatId => typeof id === "string" && validFormatIds.has(id as SelfServiceFormatId))
+          : [];
+        if (restoredFormats.length > 0) setSelectedFormats(restoredFormats);
+        if (SELF_SERVICE_POST_RHYTHMS.some((rhythm) => rhythm.id === parsed.postRhythmId)) {
+          setPostRhythm(parsed.postRhythmId as (typeof SELF_SERVICE_POST_RHYTHMS)[number]["id"]);
+        }
+        if (SELF_SERVICE_ARTICLE_RHYTHMS.some((rhythm) => rhythm.id === parsed.articleRhythmId)) {
+          setArticleRhythm(parsed.articleRhythmId as (typeof SELF_SERVICE_ARTICLE_RHYTHMS)[number]["id"]);
+        }
+      }
+    } catch {
+      window.localStorage.removeItem(START_SELECTION_STORAGE_KEY);
+    } finally {
+      setStorageReady(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!storageReady) return;
+    window.localStorage.setItem(
+      START_SELECTION_STORAGE_KEY,
+      JSON.stringify({ formatIds: selectedFormats, postRhythmId: postRhythm, articleRhythmId: articleRhythm }),
+    );
+  }, [articleRhythm, postRhythm, selectedFormats, storageReady]);
 
   const selectedPostRhythm = SELF_SERVICE_POST_RHYTHMS.find((option) => option.id === postRhythm)!;
   const selectedArticleRhythm = SELF_SERVICE_ARTICLE_RHYTHMS.find((option) => option.id === articleRhythm)!;

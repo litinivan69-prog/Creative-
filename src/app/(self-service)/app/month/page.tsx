@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { startSelfServiceMonth } from "@/app/actions";
+import {
+  SelfServiceMonthStarter,
+  SelfServiceProductionRunner,
+} from "@/app/(self-service)/app/month/self-service-month-progress";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { signOutSelfService } from "@/lib/self-service/auth-actions";
@@ -41,7 +46,12 @@ function materialState(item: { contentDraft: { id: string } | null; generatedCre
   return "Готовится";
 }
 
-export default async function SelfServiceMonthPage() {
+export default async function SelfServiceMonthPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ autostart?: string; notice?: string; error?: string }>;
+}) {
+  const query = await searchParams;
   const session = await auth();
   const email = session?.user?.email?.trim().toLowerCase();
   if (!email) redirect("/sign-in?callbackUrl=/app/month");
@@ -56,6 +66,7 @@ export default async function SelfServiceMonthPage() {
             orderBy: { createdAt: "desc" },
             take: 1,
             include: {
+              productionRuns: { orderBy: { createdAt: "desc" }, take: 1 },
               plannedContentItems: {
                 orderBy: { plannedDate: "asc" },
                 include: {
@@ -74,6 +85,7 @@ export default async function SelfServiceMonthPage() {
 
   const workspace = membership.client;
   const plan = workspace.monthlyPlans[0] ?? null;
+  const productionRun = plan?.productionRuns[0] ?? null;
   const items = plan?.plannedContentItems ?? [];
   const readyTexts = items.filter((item) => item.contentDraft).length;
   const readyVisuals = items.filter((item) => item.generatedCreativeVariants.length > 0).length;
@@ -100,7 +112,14 @@ export default async function SelfServiceMonthPage() {
               <span className="inline-flex rounded-full bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700">Бренд сохранён</span>
               <h1 className="mt-5 font-heading text-5xl font-semibold tracking-[-0.05em] text-slate-950">Соберём первый контент-набор.</h1>
               <p className="mx-auto mt-4 max-w-xl text-base leading-7 text-slate-600">Здесь появятся темы, тексты и визуалы для VK, Telegram, Дзена и VC.ru — без внутренних очередей и менеджерских статусов.</p>
-              <div className="mx-auto mt-7 inline-flex rounded-2xl border border-violet-100 bg-white px-5 py-3 text-sm font-semibold text-violet-700 shadow-sm">Генерация месяца — следующий шаг</div>
+              {query.error === "blueprint_failed" ? <p className="mx-auto mt-5 max-w-xl rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">Не удалось подготовить профиль с первого раза. Бриф сохранён — можно повторить безопасно.</p> : null}
+              {query.autostart === "1" ? (
+                <SelfServiceMonthStarter active />
+              ) : (
+                <form action={startSelfServiceMonth} className="mt-7">
+                  <button className="inline-flex rounded-2xl bg-violet-600 px-6 py-3.5 text-sm font-semibold text-white shadow-[0_14px_35px_rgba(124,58,237,0.22)] transition hover:bg-violet-700">Собрать первый месяц</button>
+                </form>
+              )}
             </div>
           </section>
         ) : (
@@ -122,18 +141,30 @@ export default async function SelfServiceMonthPage() {
               <article className="rounded-[24px] border border-white bg-white p-5 shadow-[0_18px_55px_rgba(77,61,112,0.06)]"><p className="text-xs text-slate-400">Визуалы готовы</p><p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950">{readyVisuals}</p><div className="mt-4 h-1.5 rounded-full bg-slate-100"><div className="h-full rounded-full bg-violet-400" style={{ width: `${items.length ? Math.round((readyVisuals / items.length) * 100) : 0}%` }} /></div></article>
             </section>
 
+            {productionRun ? (
+              <div className="mt-5">
+                <SelfServiceProductionRunner
+                  productionRunId={productionRun.id}
+                  enabled={!['paused', 'completed', 'completed_with_errors'].includes(productionRun.status)}
+                  currentStage={productionRun.currentStage}
+                  completedTasks={productionRun.completedTasks}
+                  totalTasks={productionRun.totalTasks}
+                />
+              </div>
+            ) : null}
+
             <section className="mt-5 overflow-hidden rounded-[28px] border border-white bg-white shadow-[0_22px_70px_rgba(77,61,112,0.07)]">
               <div className="border-b border-slate-100 px-5 py-5 sm:px-7"><h2 className="text-base font-semibold text-slate-950">Материалы по порядку</h2><p className="mt-1 text-xs text-slate-400">Без производственных этапов — только дата, площадка и результат.</p></div>
               <div className="divide-y divide-slate-100">
                 {items.map((item, index) => {
                   const state = materialState(item);
                   return (
-                    <article key={item.id} className="grid gap-4 px-5 py-5 transition hover:bg-violet-50/35 sm:grid-cols-[70px_120px_minmax(0,1fr)_110px] sm:items-center sm:px-7">
+                    <Link href={`/app/month/${item.id}`} key={item.id} className="grid gap-4 px-5 py-5 transition hover:bg-violet-50/35 sm:grid-cols-[70px_120px_minmax(0,1fr)_110px] sm:items-center sm:px-7">
                       <div><p className="text-sm font-semibold text-slate-950">{formatDate(item.plannedDate)}</p><p className="mt-0.5 text-[11px] text-slate-400">#{String(index + 1).padStart(2, "0")}</p></div>
                       <span className="w-fit rounded-full bg-slate-100 px-3 py-1.5 text-[11px] font-semibold text-slate-600">{platformLabel(item.platformName)}</span>
                       <div className="min-w-0"><h3 className="truncate text-sm font-semibold text-slate-950 sm:whitespace-normal">{item.topic}</h3><p className="mt-1 line-clamp-1 text-xs text-slate-400">{item.goal}</p></div>
                       <span className={`w-fit rounded-full px-3 py-1.5 text-[11px] font-semibold ${state === "Готов" ? "bg-violet-50 text-violet-700" : "bg-slate-100 text-slate-500"}`}>{state}</span>
-                    </article>
+                    </Link>
                   );
                 })}
               </div>

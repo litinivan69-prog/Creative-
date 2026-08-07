@@ -28,7 +28,19 @@ export default async function SelfServiceSetupPage() {
   if (user?.memberships.length) redirect("/app");
 
   const cookieStore = await cookies();
-  const hasDraft = Boolean(cookieStore.get(SELF_SERVICE_ONBOARDING_COOKIE)?.value);
+  const hasDraftCookie = Boolean(cookieStore.get(SELF_SERVICE_ONBOARDING_COOKIE)?.value);
+  const hasDraft = hasDraftCookie
+    ? true
+    : Boolean(
+        await prisma.selfServiceOnboardingDraft.findFirst({
+          where: {
+            email,
+            claimedAt: null,
+            expiresAt: { gt: new Date() },
+          },
+          select: { id: true },
+        }),
+      );
 
   return (
     <main className="grid min-h-screen place-items-center px-4 py-10">
