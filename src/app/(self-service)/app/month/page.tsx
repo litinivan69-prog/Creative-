@@ -89,6 +89,15 @@ export default async function SelfServiceMonthPage({
   const items = plan?.plannedContentItems ?? [];
   const readyTexts = items.filter((item) => item.contentDraft).length;
   const readyVisuals = items.filter((item) => item.generatedCreativeVariants.length > 0).length;
+  const visualUsage = plan
+    ? await prisma.generatedCreativeVariant.aggregate({
+        where: { monthlyPlanId: plan.id },
+        _sum: { estimatedCostUsd: true },
+      })
+    : null;
+  const visualCostUsd = visualUsage?._sum.estimatedCostUsd ?? 0;
+  const configuredBudget = Number(process.env.SELF_SERVICE_MONTH_VISUAL_BUDGET_USD ?? "3");
+  const visualBudgetUsd = Number.isFinite(configuredBudget) && configuredBudget > 0 ? configuredBudget : 3;
 
   return (
     <main className="relative min-h-screen overflow-hidden px-4 py-5 sm:px-7 sm:py-7">
@@ -112,6 +121,7 @@ export default async function SelfServiceMonthPage({
               <span className="inline-flex rounded-full bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700">Бренд сохранён</span>
               <h1 className="mt-5 font-heading text-5xl font-semibold tracking-[-0.05em] text-slate-950">Соберём первый контент-набор.</h1>
               <p className="mx-auto mt-4 max-w-xl text-base leading-7 text-slate-600">Здесь появятся темы, тексты и визуалы для VK, Telegram, Дзена и VC.ru — без внутренних очередей и менеджерских статусов.</p>
+              <p className="mx-auto mt-3 max-w-xl text-xs leading-5 text-slate-400">Перед генерацией действует защитный лимит визуалов до ${visualBudgetUsd.toFixed(2)} на месяц. Повторный запуск не создаёт уже готовые материалы заново.</p>
               {query.error === "blueprint_failed" ? <p className="mx-auto mt-5 max-w-xl rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">Не удалось подготовить профиль с первого раза. Бриф сохранён — можно повторить безопасно.</p> : null}
               {query.autostart === "1" ? (
                 <SelfServiceMonthStarter active />
@@ -135,10 +145,11 @@ export default async function SelfServiceMonthPage({
               </div>
             </section>
 
-            <section className="grid gap-4 sm:grid-cols-3">
+            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <article className="rounded-[24px] border border-white bg-white p-5 shadow-[0_18px_55px_rgba(77,61,112,0.06)]"><p className="text-xs text-slate-400">План месяца</p><p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950">{items.length}</p><div className="mt-4 h-1.5 rounded-full bg-slate-100"><div className="h-full w-full rounded-full bg-violet-500" /></div></article>
               <article className="rounded-[24px] border border-white bg-white p-5 shadow-[0_18px_55px_rgba(77,61,112,0.06)]"><p className="text-xs text-slate-400">Тексты готовы</p><p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950">{readyTexts}</p><div className="mt-4 h-1.5 rounded-full bg-slate-100"><div className="h-full rounded-full bg-violet-500" style={{ width: `${items.length ? Math.round((readyTexts / items.length) * 100) : 0}%` }} /></div></article>
               <article className="rounded-[24px] border border-white bg-white p-5 shadow-[0_18px_55px_rgba(77,61,112,0.06)]"><p className="text-xs text-slate-400">Визуалы готовы</p><p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950">{readyVisuals}</p><div className="mt-4 h-1.5 rounded-full bg-slate-100"><div className="h-full rounded-full bg-violet-400" style={{ width: `${items.length ? Math.round((readyVisuals / items.length) * 100) : 0}%` }} /></div></article>
+              <article className="rounded-[24px] border border-white bg-white p-5 shadow-[0_18px_55px_rgba(77,61,112,0.06)]"><p className="text-xs text-slate-400">Визуалы API</p><p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950">${visualCostUsd.toFixed(2)}</p><p className="mt-3 text-[11px] text-slate-400">лимит ${visualBudgetUsd.toFixed(2)} / месяц</p></article>
             </section>
 
             {productionRun ? (

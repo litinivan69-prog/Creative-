@@ -20,6 +20,20 @@ type BriefValues = {
   restrictions: string;
   monthGoal: string;
   monthTopics: string;
+  telegramUrl: string;
+  vkUrl: string;
+  instagramUrl: string;
+  dzenUrl: string;
+  vcruUrl: string;
+  otherSocialUrls: string;
+  starterKitPlatformIds: string[];
+  brandColors: string;
+  fonts: string;
+  visualStyle: string;
+  likedVisualReferences: string;
+  dislikedVisualReferences: string;
+  logoUrl: string;
+  brandbookUrl: string;
 };
 
 const EMPTY_BRIEF: BriefValues = {
@@ -33,6 +47,20 @@ const EMPTY_BRIEF: BriefValues = {
   restrictions: "",
   monthGoal: "",
   monthTopics: "",
+  telegramUrl: "",
+  vkUrl: "",
+  instagramUrl: "",
+  dzenUrl: "",
+  vcruUrl: "",
+  otherSocialUrls: "",
+  starterKitPlatformIds: [],
+  brandColors: "",
+  fonts: "",
+  visualStyle: "",
+  likedVisualReferences: "",
+  dislikedVisualReferences: "",
+  logoUrl: "",
+  brandbookUrl: "",
 };
 
 const BRIEF_STORAGE_KEY = "adaptive-presence:brief-draft:v1";
@@ -42,6 +70,22 @@ const toneOptions = [
   ["Тепло и по-человечески", "Дружелюбно, заботливо и без канцелярита"],
   ["Смело и энергично", "Быстрый темп, яркие формулировки, больше характера"],
   ["Сдержанно и премиально", "Коротко, точно, с ощущением высокого качества"],
+] as const;
+
+const socialFields = [
+  ["telegramUrl", "Telegram", "https://t.me/..."],
+  ["vkUrl", "VK", "https://vk.com/..."],
+  ["instagramUrl", "Instagram", "https://instagram.com/..."],
+  ["dzenUrl", "Дзен", "https://dzen.ru/..."],
+  ["vcruUrl", "VC.ru", "https://vc.ru/..."],
+] as const;
+
+const starterKitPlatforms = [
+  ["telegram", "Telegram"],
+  ["vk", "VK"],
+  ["instagram", "Instagram"],
+  ["dzen", "Дзен"],
+  ["vcru", "VC.ru"],
 ] as const;
 
 const inputClass =
@@ -89,7 +133,11 @@ export function SelfServiceBrief({ selection }: { selection: SelfServiceSelectio
         const parsed = JSON.parse(saved) as Partial<Record<keyof BriefValues, unknown>>;
         const restored = { ...EMPTY_BRIEF };
         for (const key of Object.keys(EMPTY_BRIEF) as Array<keyof BriefValues>) {
-          if (typeof parsed[key] === "string") restored[key] = parsed[key];
+          if (key === "starterKitPlatformIds") {
+            if (Array.isArray(parsed[key])) restored[key] = parsed[key].filter((value): value is string => typeof value === "string");
+          } else if (typeof parsed[key] === "string") {
+            restored[key] = parsed[key];
+          }
         }
         setValues(restored);
       }
@@ -111,12 +159,13 @@ export function SelfServiceBrief({ selection }: { selection: SelfServiceSelectio
   );
   const postRhythm = SELF_SERVICE_POST_RHYTHMS.find((rhythm) => rhythm.id === selection.postRhythmId)!;
   const articleRhythm = SELF_SERVICE_ARTICLE_RHYTHMS.find((rhythm) => rhythm.id === selection.articleRhythmId)!;
-  const requiredFields = [values.brandName, values.businessDescription, values.priorityOffer, values.audience];
+  const visualFoundation = values.visualStyle || values.brandbookUrl;
+  const requiredFields = [values.brandName, values.businessDescription, values.priorityOffer, values.audience, visualFoundation];
   const completedRequired = requiredFields.filter((value) => value.trim()).length;
   const canPreview = completedRequired === requiredFields.length;
   const progress = showPreview ? 75 : 50;
 
-  const update = (key: keyof BriefValues, value: string) => {
+  const update = <Key extends keyof BriefValues>(key: Key, value: BriefValues[Key]) => {
     setValues((current) => ({ ...current, [key]: value }));
     setConfirmed(false);
   };
@@ -163,6 +212,8 @@ export function SelfServiceBrief({ selection }: { selection: SelfServiceSelectio
                 <SummaryItem label="Главная мысль" value={values.keyMessage} />
                 <SummaryItem label="Цель месяца" value={values.monthGoal} />
                 <SummaryItem label="Темы месяца" value={values.monthTopics} />
+                <SummaryItem label="Визуальный характер" value={values.visualStyle || (values.brandbookUrl ? "Определим по брендбуку" : "")} />
+                <SummaryItem label="Площадки" value={socialFields.filter(([key]) => values[key]).map(([, label]) => label).join(", ")} />
               </div>
 
               {values.restrictions ? (
@@ -183,8 +234,11 @@ export function SelfServiceBrief({ selection }: { selection: SelfServiceSelectio
                   <input type="hidden" name="formatIds" value={selection.formatIds.join(",")} />
                   <input type="hidden" name="postRhythmId" value={selection.postRhythmId} />
                   <input type="hidden" name="articleRhythmId" value={selection.articleRhythmId} />
-                  {Object.entries(values).map(([key, value]) => (
-                    <input key={key} type="hidden" name={key} value={value} />
+                  {Object.entries(values).filter(([key]) => key !== "starterKitPlatformIds").map(([key, value]) => (
+                    <input key={key} type="hidden" name={key} value={String(value)} />
+                  ))}
+                  {values.starterKitPlatformIds.map((platform) => (
+                    <input key={platform} type="hidden" name="starterKitPlatformIds" value={platform} />
                   ))}
                   <button type="submit" className="rounded-2xl bg-violet-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-violet-700">Сохранить и продолжить</button>
                 </form>
@@ -239,6 +293,70 @@ export function SelfServiceBrief({ selection }: { selection: SelfServiceSelectio
                 <input value={values.website} onChange={(event) => update("website", event.target.value)} placeholder="https://..." className={inputClass} />
               </Field>
             </div>
+
+            <section className="mt-7 border-t border-slate-100 pt-6">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Где бренд уже присутствует?</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">Добавьте ссылки — они станут частью профиля бренда и позже помогут подключить публикации.</p>
+              </div>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                {socialFields.map(([key, label, placeholder]) => (
+                  <Field key={key} label={label} hint="необязательно">
+                    <input type="url" value={values[key]} onChange={(event) => update(key, event.target.value)} placeholder={placeholder} className={inputClass} />
+                  </Field>
+                ))}
+                <Field label="Другие площадки" hint="необязательно">
+                  <textarea rows={2} value={values.otherSocialUrls} onChange={(event) => update("otherSocialUrls", event.target.value)} placeholder="Ссылки на остальные площадки — каждая с новой строки" className={`${inputClass} resize-y`} />
+                </Field>
+              </div>
+
+              <div className="mt-5 rounded-[22px] border border-violet-100 bg-violet-50/55 p-4">
+                <p className="text-xs font-semibold text-violet-950">Какие площадки нужно оформить с нуля?</p>
+                <p className="mt-1 text-xs leading-5 text-violet-700">Подготовим стартовый комплект: аватар, обложку и базовые рубрики в корректных размерах.</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {starterKitPlatforms.map(([id, label]) => {
+                    const selected = values.starterKitPlatformIds.includes(id);
+                    return (
+                      <button key={id} type="button" onClick={() => update("starterKitPlatformIds", selected ? values.starterKitPlatformIds.filter((value) => value !== id) : [...values.starterKitPlatformIds, id])} className={`rounded-full border px-3 py-2 text-xs font-semibold transition ${selected ? "border-violet-300 bg-white text-violet-700" : "border-transparent bg-white/65 text-slate-500 hover:text-violet-700"}`}>
+                        {selected ? "✓ " : "+ "}{label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+
+            <section className="mt-7 border-t border-slate-100 pt-6">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Визуальная система бренда</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">Эти правила будут передаваться в каждую генерацию, чтобы материалы выглядели как одна система.</p>
+              </div>
+              <div className="mt-4 grid gap-5 sm:grid-cols-2">
+                <Field label="Фирменные цвета" hint="необязательно">
+                  <input value={values.brandColors} onChange={(event) => update("brandColors", event.target.value)} placeholder="Например: #6D4AFF, молочный, графитовый" className={inputClass} />
+                </Field>
+                <Field label="Шрифты" hint="необязательно">
+                  <input value={values.fonts} onChange={(event) => update("fonts", event.target.value)} placeholder="Основной, дополнительный, акцентный" className={inputClass} />
+                </Field>
+                <Field label="Ссылка на логотип" hint="необязательно">
+                  <input type="url" value={values.logoUrl} onChange={(event) => update("logoUrl", event.target.value)} placeholder="Google Drive, Dropbox или прямая ссылка" className={inputClass} />
+                </Field>
+                <Field label="Ссылка на брендбук" hint="необязательно">
+                  <input type="url" value={values.brandbookUrl} onChange={(event) => update("brandbookUrl", event.target.value)} placeholder="PDF в облаке или прямая ссылка" className={inputClass} />
+                </Field>
+                <div className="sm:col-span-2">
+                  <Field label="Как должны выглядеть материалы?" hint="обязательно, если нет брендбука">
+                    <textarea rows={3} value={values.visualStyle} onChange={(event) => update("visualStyle", event.target.value)} placeholder="Фотостиль, композиция, настроение, графика, 3D, минимализм — обычными словами" className={`${inputClass} resize-y`} />
+                  </Field>
+                </div>
+                <Field label="Что визуально нравится" hint="ссылки или описание">
+                  <textarea rows={3} value={values.likedVisualReferences} onChange={(event) => update("likedVisualReferences", event.target.value)} placeholder="Примеры, бренды, публикации, стили" className={`${inputClass} resize-y`} />
+                </Field>
+                <Field label="Что точно не нравится" hint="необязательно">
+                  <textarea rows={3} value={values.dislikedVisualReferences} onChange={(event) => update("dislikedVisualReferences", event.target.value)} placeholder="Цвета, стили, приёмы, которых нужно избегать" className={`${inputClass} resize-y`} />
+                </Field>
+              </div>
+            </section>
 
             <div className="mt-5 grid gap-5">
               <Field label="Чем вы занимаетесь?" hint="1–3 предложения">

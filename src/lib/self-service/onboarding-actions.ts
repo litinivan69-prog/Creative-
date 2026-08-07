@@ -17,6 +17,36 @@ function tokenHash(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
 
+const socialChannelFields = [
+  ["telegram", "telegramUrl", "Telegram"],
+  ["vk", "vkUrl", "VK"],
+  ["instagram", "instagramUrl", "Instagram"],
+  ["dzen", "dzenUrl", "Дзен"],
+  ["vcru", "vcruUrl", "VC.ru"],
+] as const;
+
+function onboardingChannels(input: SelfServiceOnboarding) {
+  return socialChannelFields.flatMap(([platform, field, title]) => {
+    const url = input.brief[field];
+    if (url) return [{ platform, channelId: url, title, status: "active" }];
+    if (input.brief.starterKitPlatformIds.includes(platform)) {
+      return [{ platform, channelId: "pending_setup", title: `${title}: подготовить оформление`, status: "to_create" }];
+    }
+    return [];
+  });
+}
+
+function onboardingBrandAssets(input: SelfServiceOnboarding) {
+  return [
+    input.brief.logoUrl
+      ? { assetType: "logo", title: "Логотип", sourceUrl: input.brief.logoUrl, storageProvider: "external_url" }
+      : null,
+    input.brief.brandbookUrl
+      ? { assetType: "brandbook", title: "Брендбук", sourceUrl: input.brief.brandbookUrl, storageProvider: "external_url" }
+      : null,
+  ].filter((asset): asset is NonNullable<typeof asset> => Boolean(asset));
+}
+
 async function createWorkspaceForUser(userId: string, input: SelfServiceOnboarding) {
   const existingMembership = await prisma.workspaceMembership.findFirst({
     where: { userId, role: "owner" },
@@ -41,9 +71,17 @@ async function createWorkspaceForUser(userId: string, input: SelfServiceOnboardi
           targetAudienceNotes: input.brief.audience,
           forbiddenTopics: input.brief.restrictions || null,
           productServiceNotes: input.brief.priorityOffer,
-          visualStyle: null,
+          brandColors: input.brief.brandColors || null,
+          fonts: input.brief.fonts || null,
+          visualStyle: [
+            input.brief.visualStyle,
+            input.brief.likedVisualReferences ? `Нравится: ${input.brief.likedVisualReferences}` : "",
+            input.brief.dislikedVisualReferences ? `Не нравится: ${input.brief.dislikedVisualReferences}` : "",
+          ].filter(Boolean).join("\n") || null,
         },
       },
+      channels: { create: onboardingChannels(input) },
+      brandAssets: { create: onboardingBrandAssets(input) },
       memberships: {
         create: {
           userId,
@@ -179,8 +217,17 @@ export async function claimSelfServiceOnboarding() {
               targetAudienceNotes: input.brief.audience,
               forbiddenTopics: input.brief.restrictions || null,
               productServiceNotes: input.brief.priorityOffer,
+              brandColors: input.brief.brandColors || null,
+              fonts: input.brief.fonts || null,
+              visualStyle: [
+                input.brief.visualStyle,
+                input.brief.likedVisualReferences ? `Нравится: ${input.brief.likedVisualReferences}` : "",
+                input.brief.dislikedVisualReferences ? `Не нравится: ${input.brief.dislikedVisualReferences}` : "",
+              ].filter(Boolean).join("\n") || null,
             },
           },
+          channels: { create: onboardingChannels(input) },
+          brandAssets: { create: onboardingBrandAssets(input) },
           memberships: { create: { userId: user.id, role: "owner" } },
           subscription: { create: { planCode: "trial", status: "pending" } },
         },

@@ -3833,6 +3833,10 @@ async function generateVisualForCreativeAssetId(creativeAssetId: string) {
         quality: variant.quality,
         size: variant.size,
         textMode: variant.textMode,
+        inputTokens: variant.inputTokens,
+        outputTokens: variant.outputTokens,
+        totalTokens: variant.totalTokens,
+        estimatedCostUsd: variant.estimatedCostUsd,
         qualityStatus: "needs_manual_review",
         qualityNotes: "Проверьте читаемость текста, лица, руки, медицинские утверждения и соответствие ТЗ.",
         notes: null,
@@ -4542,6 +4546,21 @@ async function processMonthProductionTask(taskId: string) {
 
     if (task.taskType === "generate_visual") {
       if (!task.plannedContentItemId) throw new Error("Материал для визуала не найден.");
+      const selfServiceSubscription = await prisma.subscription.findUnique({
+        where: { clientId: task.clientId },
+        select: { id: true },
+      });
+      if (selfServiceSubscription) {
+        const configuredBudget = Number(process.env.SELF_SERVICE_MONTH_VISUAL_BUDGET_USD ?? "3");
+        const visualBudgetUsd = Number.isFinite(configuredBudget) && configuredBudget > 0 ? configuredBudget : 3;
+        const usage = await prisma.generatedCreativeVariant.aggregate({
+          where: { monthlyPlanId: task.monthlyPlanId },
+          _sum: { estimatedCostUsd: true },
+        });
+        if ((usage._sum.estimatedCostUsd ?? 0) >= visualBudgetUsd) {
+          throw new Error(`AI-бюджет визуалов на месяц достиг лимита $${visualBudgetUsd.toFixed(2)}. Уже созданные материалы сохранены.`);
+        }
+      }
       const asset = await prisma.creativeAsset.findFirst({
         where: task.creativeAssetId
           ? { id: task.creativeAssetId }
@@ -4621,6 +4640,7 @@ function isCriticalProductionErrorMessage(message: string) {
   const lower = message.toLowerCase();
 
   return lower.includes("api-лимит") ||
+    lower.includes("ai-бюджет") ||
     lower.includes("quota") ||
     lower.includes("billing") ||
     lower.includes("rate limit") ||
@@ -6234,6 +6254,10 @@ export async function generateCreativeVisualVariantForAsset(formData: FormData) 
         quality: variant.quality,
         size: variant.size,
         textMode: variant.textMode,
+        inputTokens: variant.inputTokens,
+        outputTokens: variant.outputTokens,
+        totalTokens: variant.totalTokens,
+        estimatedCostUsd: variant.estimatedCostUsd,
         qualityStatus: "needs_manual_review",
         qualityNotes: "Проверьте читаемость текста, лица, руки, медицинские утверждения и соответствие ТЗ.",
         notes: null,

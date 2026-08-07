@@ -82,7 +82,63 @@ function configuredValue<T extends string>(value: string | undefined, allowed: r
 const visualProvider = configuredValue(process.env.VISUAL_PROVIDER, visualProviders, "openai");
 const visualTextMode = configuredValue(process.env.VISUAL_TEXT_MODE, visualTextModes, "image_text");
 const imageQuality = configuredValue(process.env.OPENAI_IMAGE_QUALITY, imageQualities, "high");
-const imageSize = configuredValue(process.env.OPENAI_IMAGE_SIZE ?? "auto", imageSizes, "1024x1024");
+const configuredImageSize = process.env.OPENAI_IMAGE_SIZE
+  ? configuredValue(process.env.OPENAI_IMAGE_SIZE, imageSizes, "1024x1024")
+  : null;
+
+function platformImageProfile(input: CreativeVisualVariantInput): { size: ImageSize; instruction: string } {
+  const target = [
+    input.scheduledPublication.platformName,
+    input.scheduledPublication.format,
+    input.creativeAsset.formatRequirements,
+  ].filter(Boolean).join(" ").toLowerCase();
+
+  if (/stories|story|сторис|reels|рилс|9\s*:\s*16/.test(target)) {
+    return {
+      size: "1024x1536",
+      instruction: "Use a vertical mobile-first composition with a 9:16 safe crop and generous text-safe margins.",
+    };
+  }
+
+  if (/dzen|дзен|vc\.ru|статья|article|обложк/.test(target)) {
+    return {
+      size: "1536x1024",
+      instruction: "Use a wide editorial cover composition suitable for an article preview, with a clear central focal point.",
+    };
+  }
+
+  if (input.creativeAsset.assetType === "carousel_slide") {
+    return {
+      size: "1024x1024",
+      instruction: "Use a square carousel-card composition. Keep shared margins and a repeatable visual grid across the series.",
+    };
+  }
+
+  if (/telegram|телеграм|\btg\b|vkontakte|вконтакте|\bvk\b|\bвк\b/.test(target)) {
+    return {
+      size: "1024x1024",
+      instruction: "Use a square feed composition optimized for Telegram or VK preview on mobile.",
+    };
+  }
+
+  return { size: "1024x1024", instruction: "Use a balanced square social-media composition." };
+}
+
+function imageGenerationUsage(response: { usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number; input_tokens_details?: { image_tokens?: number; text_tokens?: number } } }) {
+  const usage = response.usage;
+  if (!usage) return { inputTokens: null, outputTokens: null, totalTokens: null, estimatedCostUsd: null };
+
+  const textInputTokens = usage.input_tokens_details?.text_tokens ?? 0;
+  const imageInputTokens = usage.input_tokens_details?.image_tokens ?? 0;
+  const outputTokens = usage.output_tokens ?? 0;
+  const inputTokens = usage.input_tokens ?? textInputTokens + imageInputTokens;
+  const totalTokens = usage.total_tokens ?? inputTokens + outputTokens;
+  const estimatedCostUsd = imageModel === "gpt-image-2"
+    ? ((textInputTokens * 5) + (imageInputTokens * 8) + (outputTokens * 30)) / 1_000_000
+    : null;
+
+  return { inputTokens, outputTokens, totalTokens, estimatedCostUsd };
+}
 
 function supportsReasoningEffort(model: string) {
   return /^gpt-5(?:[.-]|$)/i.test(model) || /^o\d/i.test(model);
@@ -447,6 +503,7 @@ function textRenderingInstruction(input: CreativeVisualVariantInput, mode: Visua
 
 function premiumVisualPrompt(input: CreativeVisualVariantInput, textMode: VisualTextMode) {
   const isCarouselSlide = input.creativeAsset.assetType === "carousel_slide";
+  const profile = platformImageProfile(input);
 
   return [
     "Create one premium client-facing social media visual. Act as a senior art director, advertising photographer, and SMM designer.",
@@ -468,6 +525,7 @@ function premiumVisualPrompt(input: CreativeVisualVariantInput, textMode: Visual
       ? `Brand and safety notes: ${input.creativeAsset.notes}`
       : null,
     input.brandContext ? `Brand context / Контекст бренда клиента:\n${input.brandContext}` : null,
+    `Platform-native canvas: ${profile.instruction}`,
     `Draft title: ${input.contentDraft.draftTitle}.`,
     `Draft context: ${input.contentDraft.draftBody}`,
     isCarouselSlide
@@ -498,7 +556,7 @@ async function generateVisualWithOpenAI(input: CreativeVisualVariantInput) {
 
   const prompt = premiumVisualPrompt(input, visualTextMode);
 
-  let selectedSize: ImageSize = imageSize;
+  let selectedSize: ImageSize = configuredImageSize ?? platformImageProfile(input).size;
   let response;
 
   try {
@@ -542,6 +600,7 @@ async function generateVisualWithOpenAI(input: CreativeVisualVariantInput) {
     quality: imageQuality,
     size: selectedSize,
     textMode: visualTextMode,
+    ...imageGenerationUsage(response),
   };
 }
 

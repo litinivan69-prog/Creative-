@@ -52,7 +52,12 @@ export function SelfServiceProductionRunner(props: {
   const processing = useRef(false);
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState("Готовим материалы автоматически…");
-  const percent = props.totalTasks > 0 ? Math.round((props.completedTasks / props.totalTasks) * 100) : 0;
+  const serverPercent = props.totalTasks > 0 ? Math.round((props.completedTasks / props.totalTasks) * 100) : 0;
+  const [percent, setPercent] = useState(serverPercent);
+
+  useEffect(() => {
+    setPercent(serverPercent);
+  }, [serverPercent]);
 
   useEffect(() => {
     if (!props.enabled) return;
@@ -69,6 +74,7 @@ export function SelfServiceProductionRunner(props: {
           setMessage(result.message || "Подготовка временно остановилась.");
           return;
         }
+        setPercent(result.percent);
         if (result.status === "completed") setMessage("Контент-набор готов.");
         else if (result.status === "completed_with_errors") setMessage("Основные материалы готовы. Некоторые элементы можно повторить позже.");
         else if (result.status === "paused") setMessage(result.message || "Подготовка временно остановилась.");
