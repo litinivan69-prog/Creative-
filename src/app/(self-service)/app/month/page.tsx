@@ -46,6 +46,66 @@ function materialState(item: { contentDraft: { id: string } | null; generatedCre
   return "Готовится";
 }
 
+type CalendarItem = {
+  id: string;
+  plannedDate: string;
+  platformName: string;
+  topic: string;
+};
+
+function MonthCalendar({ month, items }: { month: string; items: CalendarItem[] }) {
+  const [yearText, monthText] = month.split("-");
+  const year = Number(yearText);
+  const monthIndex = Number(monthText) - 1;
+  if (!Number.isInteger(year) || monthIndex < 0 || monthIndex > 11) return null;
+
+  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+  const mondayFirstOffset = (new Date(year, monthIndex, 1).getDay() + 6) % 7;
+  const cells = Array.from({ length: mondayFirstOffset + daysInMonth }, (_, index) => {
+    const day = index - mondayFirstOffset + 1;
+    return day > 0 ? day : null;
+  });
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const byDay = new Map<number, CalendarItem[]>();
+  for (const item of items) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(item.plannedDate);
+    if (!match || Number(match[1]) !== year || Number(match[2]) !== monthIndex + 1) continue;
+    const day = Number(match[3]);
+    byDay.set(day, [...(byDay.get(day) ?? []), item]);
+  }
+
+  return (
+    <section id="calendar" className="mt-5 rounded-[28px] border border-white bg-white p-4 shadow-[0_22px_70px_rgba(77,61,112,0.07)] sm:p-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div><h2 className="text-base font-semibold text-slate-950">Календарь публикаций</h2><p className="mt-1 text-xs text-slate-400">Нажмите на материал в нужный день, чтобы открыть текст и визуал.</p></div>
+        <span className="rounded-full bg-violet-50 px-3 py-1.5 text-[11px] font-semibold text-violet-700">{items.length} материалов</span>
+      </div>
+
+      <div className="mt-5 grid grid-cols-7 gap-1.5 sm:gap-2">
+        {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((day) => <div key={day} className="pb-1 text-center text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">{day}</div>)}
+        {cells.map((day, index) => {
+          const dayItems = day ? byDay.get(day) ?? [] : [];
+          return (
+            <div key={`${day ?? "blank"}-${index}`} className={`min-h-16 min-w-0 rounded-2xl border p-1.5 sm:min-h-24 sm:p-2.5 ${day ? "border-slate-100 bg-slate-50/55" : "border-transparent bg-transparent"}`}>
+              {day ? <p className={`text-[11px] font-semibold ${dayItems.length ? "text-violet-700" : "text-slate-400"}`}>{day}</p> : null}
+              <div className="mt-1 grid min-w-0 gap-1">
+                {dayItems.slice(0, 2).map((item) => (
+                  <Link key={item.id} href={`/app/month/${item.id}`} title={item.topic} className="min-w-0 rounded-lg bg-white px-1.5 py-1 text-[9px] font-semibold leading-3 text-slate-600 shadow-sm transition hover:bg-violet-50 hover:text-violet-700 sm:px-2 sm:text-[10px]">
+                    <span className="block truncate">{platformLabel(item.platformName)}</span>
+                    <span className="hidden truncate font-normal text-slate-400 xl:block">{item.topic}</span>
+                  </Link>
+                ))}
+                {dayItems.length > 2 ? <span className="px-1 text-[9px] font-semibold text-violet-600">+{dayItems.length - 2}</span> : null}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export default async function SelfServiceMonthPage({
   searchParams,
 }: {
@@ -110,7 +170,8 @@ export default async function SelfServiceMonthPage({
           </div>
           <nav className="flex items-center gap-1 rounded-full border border-slate-200/80 bg-white/90 p-1 text-xs font-semibold text-slate-500">
             <Link href="/app" className="rounded-full px-3.5 py-2 transition hover:text-slate-900">Главная</Link>
-            <Link href="/app/month" className="rounded-full bg-violet-50 px-3.5 py-2 text-violet-700">Месяц</Link>
+            <Link href="/app/month#calendar" className="rounded-full bg-violet-50 px-3.5 py-2 text-violet-700">Календарь</Link>
+            <Link href="/app/channels" className="rounded-full px-3.5 py-2 transition hover:text-slate-900">Площадки</Link>
           </nav>
           <form action={signOutSelfService}><button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600">Выйти</button></form>
         </header>
@@ -122,6 +183,7 @@ export default async function SelfServiceMonthPage({
               <h1 className="mt-5 font-heading text-5xl font-semibold tracking-[-0.05em] text-slate-950">Соберём первый контент-набор.</h1>
               <p className="mx-auto mt-4 max-w-xl text-base leading-7 text-slate-600">Здесь появятся темы, тексты и визуалы для VK, Telegram, Дзена и VC.ru — без внутренних очередей и менеджерских статусов.</p>
               <p className="mx-auto mt-3 max-w-xl text-xs leading-5 text-slate-400">Перед генерацией действует защитный лимит визуалов до ${visualBudgetUsd.toFixed(2)} на месяц. Повторный запуск не создаёт уже готовые материалы заново.</p>
+              {query.notice === "channels_saved" ? <p className="mx-auto mt-5 max-w-xl rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm font-medium text-violet-900">Площадки сохранены. Теперь можно собрать первый месяц — публикации сразу появятся в календаре.</p> : null}
               {query.error === "blueprint_failed" ? <p className="mx-auto mt-5 max-w-xl rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">Не удалось подготовить профиль с первого раза. Бриф сохранён — можно повторить безопасно.</p> : null}
               {query.autostart === "1" ? (
                 <SelfServiceMonthStarter active />
@@ -163,6 +225,12 @@ export default async function SelfServiceMonthPage({
                 />
               </div>
             ) : null}
+
+            {query.notice === "channels_saved" ? (
+              <div className="mt-5 rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm font-medium text-violet-900">Площадки сохранены. Теперь собирайте месяц — материалы сразу лягут в календарь.</div>
+            ) : null}
+
+            <MonthCalendar month={plan.month} items={items} />
 
             <section className="mt-5 overflow-hidden rounded-[28px] border border-white bg-white shadow-[0_22px_70px_rgba(77,61,112,0.07)]">
               <div className="border-b border-slate-100 px-5 py-5 sm:px-7"><h2 className="text-base font-semibold text-slate-950">Материалы по порядку</h2><p className="mt-1 text-xs text-slate-400">Без производственных этапов — только дата, площадка и результат.</p></div>
