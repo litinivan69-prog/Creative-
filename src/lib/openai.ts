@@ -12,9 +12,9 @@ import type { MonthlyProductionScope } from "@/lib/production-scope";
 
 const legacyModel = process.env.OPENAI_MODEL;
 
-export const TEXT_MODEL_DEFAULT = process.env.TEXT_MODEL_DEFAULT ?? legacyModel ?? "gpt-5.4";
-export const TEXT_MODEL_PREMIUM = process.env.TEXT_MODEL_PREMIUM ?? process.env.TEXT_MODEL_DEFAULT ?? legacyModel ?? "gpt-5.5";
-export const TEXT_MODEL_FAST = process.env.TEXT_MODEL_FAST ?? legacyModel ?? "gpt-5.4-mini";
+export const TEXT_MODEL_DEFAULT = process.env.TEXT_MODEL_DEFAULT ?? legacyModel ?? "gpt-5.6-terra";
+export const TEXT_MODEL_PREMIUM = process.env.TEXT_MODEL_PREMIUM ?? process.env.TEXT_MODEL_DEFAULT ?? legacyModel ?? "gpt-5.6-sol";
+export const TEXT_MODEL_FAST = process.env.TEXT_MODEL_FAST ?? legacyModel ?? "gpt-5.6-luna";
 export const TEXT_MODEL_STRATEGY = process.env.TEXT_MODEL_STRATEGY ?? TEXT_MODEL_PREMIUM;
 export const TEXT_MODEL_MONTHLY_PLAN = process.env.TEXT_MODEL_MONTHLY_PLAN ?? TEXT_MODEL_PREMIUM;
 export const TEXT_MODEL_CONTENT = process.env.TEXT_MODEL_CONTENT ?? TEXT_MODEL_DEFAULT;
