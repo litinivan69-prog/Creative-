@@ -7,6 +7,56 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id            String                @id @default(cuid())
+  name          String?
+  email         String?               @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  memberships   WorkspaceMembership[]
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
 model Client {
   id         String                    @id @default(cuid())
   name       String
@@ -30,6 +80,57 @@ model Client {
   channels ClientChannel[]
   articles Article[]
   geoAudits GeoAudit[]
+  memberships WorkspaceMembership[]
+  subscription Subscription?
+}
+
+model WorkspaceMembership {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  clientId  String
+  role      String   @default("owner")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([role])
+}
+
+model Subscription {
+  id                     String    @id @default(cuid())
+  clientId               String    @unique
+  planCode               String    @default("trial")
+  status                 String    @default("pending")
+  provider               String?
+  providerCustomerId     String?   @unique
+  providerSubscriptionId String?   @unique
+  currentPeriodStart     DateTime?
+  currentPeriodEnd       DateTime?
+  cancelAtPeriodEnd      Boolean   @default(false)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  client                 Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([planCode])
+}
+
+model SelfServiceOnboardingDraft {
+  id              String    @id @default(cuid())
+  tokenHash       String    @unique
+  email           String?
+  payload         Json
+  expiresAt       DateTime
+  claimedAt       DateTime?
+  claimedByUserId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([expiresAt])
+  @@index([claimedAt])
+  @@index([email])
 }
 
 model ClientBrief {
