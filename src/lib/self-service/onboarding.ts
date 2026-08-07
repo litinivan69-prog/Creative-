@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const SELF_SERVICE_ONBOARDING_COOKIE = "ap_onboarding";
+export const SELF_SERVICE_AUTH_REDIRECT_COOKIE = "ap_auth_redirect";
 
 const trimmed = (max: number) => z.string().trim().max(max);
 

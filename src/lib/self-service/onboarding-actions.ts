@@ -136,14 +136,25 @@ export async function claimSelfServiceOnboarding() {
 
   const cookieStore = await cookies();
   const rawToken = cookieStore.get(SELF_SERVICE_ONBOARDING_COOKIE)?.value;
-  if (!rawToken) redirect("/start?error=onboarding_missing");
-
-  const draft = await prisma.selfServiceOnboardingDraft.findUnique({
-    where: { tokenHash: tokenHash(rawToken) },
-  });
+  let draft = rawToken
+    ? await prisma.selfServiceOnboardingDraft.findUnique({
+        where: { tokenHash: tokenHash(rawToken) },
+      })
+    : null;
 
   if (!draft || draft.claimedAt || draft.expiresAt < new Date()) {
-    cookieStore.delete(SELF_SERVICE_ONBOARDING_COOKIE);
+    draft = await prisma.selfServiceOnboardingDraft.findFirst({
+      where: {
+        email,
+        claimedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { updatedAt: "desc" },
+    });
+  }
+
+  if (!draft || draft.claimedAt || draft.expiresAt < new Date()) {
+    if (rawToken) cookieStore.delete(SELF_SERVICE_ONBOARDING_COOKIE);
     redirect("/start?error=onboarding_expired");
   }
 
@@ -186,6 +197,6 @@ export async function claimSelfServiceOnboarding() {
     });
   });
 
-  cookieStore.delete(SELF_SERVICE_ONBOARDING_COOKIE);
+  if (rawToken) cookieStore.delete(SELF_SERVICE_ONBOARDING_COOKIE);
   redirect("/app?notice=brand_created");
 }
