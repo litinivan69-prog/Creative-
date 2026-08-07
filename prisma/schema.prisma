@@ -508,6 +508,10 @@ model GeneratedCreativeVariant {
   quality                String?
   size                   String?
   textMode               String?
+  inputTokens            Int?
+  outputTokens           Int?
+  totalTokens            Int?
+  estimatedCostUsd       Float?
   qualityStatus          String                  @default("unchecked")
   qualityNotes           String?
   notes                  String?
@@ -524,6 +528,7 @@ model GeneratedCreativeVariant {
 
   @@index([clientId])
   @@index([monthlyPlanId])
+  @@index([monthlyPlanId, createdAt])
   @@index([creativeAssetId])
   @@index([status])
   @@index([storageProvider])
