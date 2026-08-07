@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Prisma } from "@prisma/client";
+import { auth } from "@/auth";
 import {
   generateClientPresenceBlueprint,
   generateContentDraft,
@@ -38,6 +39,7 @@ import { MonthlyPlanRevisionProposalSchema } from "@/lib/monthly-plan-revision-s
 import {
   enforceCadenceOnPlannedItems,
   enforceProductionScope,
+  buildProductionScope,
   normalizeScopeToken,
   parseCadenceLimits,
   productionScopeFromFormData,
@@ -1288,9 +1290,7 @@ export async function updateClientBrief(formData: FormData) {
   redirect(workspaceLocation("client_setup", { clientId: existingBrief.clientId, setupStep: "blueprint", notice: "Бриф обновлён. Когда будете готовы, сгенерируйте новый Blueprint." }));
 }
 
-export async function generateBlueprint(formData: FormData) {
-  const briefId = formText(formData, "briefId");
-
+async function ensureBlueprintForBrief(briefId: string) {
   const brief = await prisma.clientBrief.findUnique({
     where: { id: briefId },
     include: { client: true, blueprint: true },
@@ -1301,103 +1301,123 @@ export async function generateBlueprint(formData: FormData) {
   }
 
   if (brief.blueprint) {
-    redirect(workspaceLocation("client_setup", { blueprintId: brief.blueprint.id, clientId: brief.clientId, setupStep: "monthly_plan" }));
+    return { blueprintId: brief.blueprint.id, clientId: brief.clientId, created: false };
   }
 
-  let createdId: string;
+  const generated = await generateClientPresenceBlueprint({
+    clientName: brief.client.name,
+    website: brief.client.website,
+    industry: brief.client.industry,
+    rawBrief: brief.rawBrief,
+    brandContext: await getClientBrandContext(brief.clientId),
+  });
+
+  const blueprint = validateBlueprintForPersistence(generated);
 
   try {
-    const generated = await generateClientPresenceBlueprint({
-      clientName: brief.client.name,
-      website: brief.client.website,
-      industry: brief.client.industry,
-      rawBrief: brief.rawBrief,
-      brandContext: await getClientBrandContext(brief.clientId),
-    });
-
-    const blueprint = validateBlueprintForPersistence(generated);
-
     const created = await prisma.clientPresenceBlueprint.create({
-      data: {
-        clientId: brief.clientId,
-        briefId: brief.id,
-        clientSummary: blueprint.clientSummary,
-        businessGoals: blueprint.businessGoals,
-        missingBriefFields: blueprint.missingBriefFields,
-        assumptions: blueprint.assumptions,
-        confidenceScore: blueprint.confidenceScore,
-        nextRecommendedAction: blueprint.nextRecommendedAction,
-        notRecommendedPlatforms: blueprint.notRecommendedPlatforms,
-        recommendedMonthlyContentScope: blueprint.recommendedMonthlyContentScope,
-        totalContentUnitsMin: blueprint.recommendedMonthlyContentScope.totalContentUnitsMin,
-        totalContentUnitsMax: blueprint.recommendedMonthlyContentScope.totalContentUnitsMax,
-        publishingFrequency: blueprint.publishingFrequency,
-        integrationRequirements: blueprint.integrationRequirements,
-        humanReviewPolicy: blueprint.humanReviewPolicy,
-        approvalMode: blueprint.approvalMode,
-        managerAttentionLevel: blueprint.managerAttentionLevel,
-        rawBlueprintJson: blueprint as unknown as Prisma.InputJsonValue,
-        selectedModules: {
-          create: blueprint.selectedModules.map((module) => ({
-            moduleType: module.moduleType,
-            name: module.name,
-            purpose: module.purpose,
-            rationale: module.rationale,
-            priority: module.priority,
-            monthlyContentScope: module.monthlyContentScope as unknown as Prisma.InputJsonValue,
-          })),
+        data: {
+          clientId: brief.clientId,
+          briefId: brief.id,
+          clientSummary: blueprint.clientSummary,
+          businessGoals: blueprint.businessGoals,
+          missingBriefFields: blueprint.missingBriefFields,
+          assumptions: blueprint.assumptions,
+          confidenceScore: blueprint.confidenceScore,
+          nextRecommendedAction: blueprint.nextRecommendedAction,
+          notRecommendedPlatforms: blueprint.notRecommendedPlatforms,
+          recommendedMonthlyContentScope: blueprint.recommendedMonthlyContentScope,
+          totalContentUnitsMin: blueprint.recommendedMonthlyContentScope.totalContentUnitsMin,
+          totalContentUnitsMax: blueprint.recommendedMonthlyContentScope.totalContentUnitsMax,
+          publishingFrequency: blueprint.publishingFrequency,
+          integrationRequirements: blueprint.integrationRequirements,
+          humanReviewPolicy: blueprint.humanReviewPolicy,
+          approvalMode: blueprint.approvalMode,
+          managerAttentionLevel: blueprint.managerAttentionLevel,
+          rawBlueprintJson: blueprint as unknown as Prisma.InputJsonValue,
+          selectedModules: {
+            create: blueprint.selectedModules.map((module) => ({
+              moduleType: module.moduleType,
+              name: module.name,
+              purpose: module.purpose,
+              rationale: module.rationale,
+              priority: module.priority,
+              monthlyContentScope: module.monthlyContentScope as unknown as Prisma.InputJsonValue,
+            })),
+          },
+          platformRecommendations: {
+            create: [...blueprint.recommendedPlatforms, ...blueprint.notRecommendedPlatforms].map(
+              (platform) => ({
+                platformName: platform.platformName,
+                platformType: platform.platformType,
+                recommendation: platform.recommendation,
+                priority: platform.priority,
+                automationStatus: platform.automationStatus,
+                requiredCredentials: platform.requiredCredentials,
+                permissionsNeeded: platform.permissionsNeeded,
+                contentFormats: platform.contentFormats,
+                rationale: platform.rationale,
+                contentRole: platform.contentRole,
+                suggestedFrequency: platform.suggestedFrequency,
+                automationOpportunity: platform.automationOpportunity,
+              }),
+            ),
+          },
+          automationPlans: {
+            create: blueprint.automationPlan.map((automation) => ({
+              name: automation.name,
+              trigger: automation.trigger,
+              action: automation.action,
+              humanCheckpoint: automation.humanCheckpoint,
+              toolCategory: automation.toolCategory,
+              priority: automation.priority,
+            })),
+          },
+          riskRules: {
+            create: blueprint.riskRules.map((rule) => ({
+              ruleName: rule.ruleName,
+              riskDescription: rule.riskDescription,
+              preventionAction: rule.preventionAction,
+              severity: rule.severity,
+              approvalRequired: rule.approvalRequired,
+            })),
+          },
         },
-        platformRecommendations: {
-          create: [...blueprint.recommendedPlatforms, ...blueprint.notRecommendedPlatforms].map(
-            (platform) => ({
-              platformName: platform.platformName,
-              platformType: platform.platformType,
-              recommendation: platform.recommendation,
-              priority: platform.priority,
-              automationStatus: platform.automationStatus,
-              requiredCredentials: platform.requiredCredentials,
-              permissionsNeeded: platform.permissionsNeeded,
-              contentFormats: platform.contentFormats,
-              rationale: platform.rationale,
-              contentRole: platform.contentRole,
-              suggestedFrequency: platform.suggestedFrequency,
-              automationOpportunity: platform.automationOpportunity,
-            }),
-          ),
-        },
-        automationPlans: {
-          create: blueprint.automationPlan.map((automation) => ({
-            name: automation.name,
-            trigger: automation.trigger,
-            action: automation.action,
-            humanCheckpoint: automation.humanCheckpoint,
-            toolCategory: automation.toolCategory,
-            priority: automation.priority,
-          })),
-        },
-        riskRules: {
-          create: blueprint.riskRules.map((rule) => ({
-            ruleName: rule.ruleName,
-            riskDescription: rule.riskDescription,
-            preventionAction: rule.preventionAction,
-            severity: rule.severity,
-            approvalRequired: rule.approvalRequired,
-          })),
-        },
-      },
-    });
+      });
 
-    createdId = created.id;
+    return { blueprintId: created.id, clientId: brief.clientId, created: true };
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "OpenAI не смог обработать бриф. Проверьте данные и попробуйте ещё раз.";
+    if (isPrismaUniqueConstraintError(error)) {
+      const existing = await prisma.clientPresenceBlueprint.findUnique({
+        where: { briefId: brief.id },
+        select: { id: true },
+      });
+      if (existing) return { blueprintId: existing.id, clientId: brief.clientId, created: false };
+    }
+    throw error;
+  }
+}
+
+export async function generateBlueprint(formData: FormData) {
+  const briefId = formText(formData, "briefId");
+  let result: Awaited<ReturnType<typeof ensureBlueprintForBrief>>;
+
+  try {
+    result = await ensureBlueprintForBrief(briefId);
+  } catch (error) {
+    const message = error instanceof Error
+      ? error.message
+      : "OpenAI не смог обработать бриф. Проверьте данные и попробуйте ещё раз.";
     errorRedirect(`Не удалось сгенерировать Blueprint: ${message}`);
   }
 
   revalidatePath("/");
-  redirect(workspaceLocation("client_setup", { blueprintId: createdId, clientId: brief.clientId, setupStep: "monthly_plan", notice: "Blueprint сгенерирован. Следующий шаг — месячный план." }));
+  redirect(workspaceLocation("client_setup", {
+    blueprintId: result.blueprintId,
+    clientId: result.clientId,
+    setupStep: "monthly_plan",
+    notice: result.created ? "Blueprint сгенерирован. Следующий шаг — месячный план." : undefined,
+  }));
 }
 
 const ARTICLE_ITEM_PLATFORM_NAME = "Сайт / Блог";
@@ -1635,6 +1655,7 @@ async function createMonthlyPlanForBlueprint(
     forceNewVersion?: boolean;
     prepareTextsAfterCreate?: boolean;
     productionScopeOverride?: MonthlyProductionScope;
+    throwOnError?: boolean;
   } = {},
 ) {
   const blueprint = await prisma.clientPresenceBlueprint.findUnique({
@@ -1700,6 +1721,9 @@ async function createMonthlyPlanForBlueprint(
       productionScope.allowedPlatforms.map(normalizeScopeToken).includes(normalizeScopeToken(platformName)));
 
   if (allowedPlatformNames.length === 0) {
+    if (options.throwOnError) {
+      throw new Error("Не удалось подобрать площадки для контент-набора. Обновите бриф и попробуйте ещё раз.");
+    }
     blueprintErrorRedirect(blueprint.id, "Scope месяца не содержит ни одной разрешённой площадки из Blueprint.");
   }
 
@@ -1895,6 +1919,7 @@ async function createMonthlyPlanForBlueprint(
       error instanceof Error
         ? error.message
         : "Не удалось сгенерировать месячный план. Проверьте Blueprint и попробуйте ещё раз.";
+    if (options.throwOnError) throw new Error(message);
     blueprintErrorRedirect(blueprint.id, `Не удалось сгенерировать месячный план: ${message}`);
   }
 
@@ -1932,6 +1957,179 @@ export async function generateMonthlyPlan(formData: FormData) {
     setupStep: "brand",
     notice: `${result.notice} Материалы месяца готовятся в фоне — прогресс виден на экране «Материалы». Теперь заполните библиотеку бренда.`,
   }));
+}
+
+const SELF_SERVICE_PLATFORM_SPECS = [
+  { id: "vk_post", name: "VK", match: /(\bvk\b|vkontakte|вконтакте|(^|\s)вк(\s|$))/i, type: "social", formats: ["пост VK"] },
+  { id: "telegram_post", name: "Telegram", match: /telegram|телег/i, type: "messenger", formats: ["пост Telegram"] },
+  { id: "dzen_article", name: "Дзен", match: /дзен|dzen/i, type: "publishing", formats: ["статья Дзен"] },
+  { id: "vcru_article", name: "VC.ru", match: /vc\.ru|виси/i, type: "publishing", formats: ["статья VC.ru"] },
+] as const;
+
+function selfServiceBriefSetting(rawBrief: string, label: string) {
+  const line = rawBrief.split(/\r?\n/).find((item) => item.toLowerCase().startsWith(`${label.toLowerCase()}:`));
+  return line?.slice(line.indexOf(":") + 1).trim() ?? "";
+}
+
+function selfServiceFormatIds(rawBrief: string) {
+  const selected = selfServiceBriefSetting(rawBrief, "Выбранные форматы")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const known = new Set(SELF_SERVICE_PLATFORM_SPECS.map((item) => item.id));
+  const valid = selected.filter((item) => known.has(item as (typeof SELF_SERVICE_PLATFORM_SPECS)[number]["id"]));
+  return valid.length > 0 ? valid : SELF_SERVICE_PLATFORM_SPECS.map((item) => item.id);
+}
+
+function selfServicePostFrequency(rawBrief: string) {
+  return selfServiceBriefSetting(rawBrief, "Ритм постов") === "calm" ? 1 : 2;
+}
+
+function selfServiceArticleFrequency(rawBrief: string) {
+  const value = selfServiceBriefSetting(rawBrief, "Ритм статей");
+  if (value === "none") return 0;
+  if (value === "one") return 1;
+  return 2;
+}
+
+async function ensureSelfServicePlatformRecommendations(blueprintId: string, formatIds: string[]) {
+  const recommendations = await prisma.platformRecommendation.findMany({ where: { blueprintId } });
+  const selectedSpecs = SELF_SERVICE_PLATFORM_SPECS.filter((spec) => formatIds.includes(spec.id));
+
+  for (const spec of selectedSpecs) {
+    const existing = recommendations.find((item) => spec.match.test(item.platformName));
+    if (existing) {
+      if (existing.recommendation !== "recommended") {
+        await prisma.platformRecommendation.update({
+          where: { id: existing.id },
+          data: { recommendation: "recommended", priority: "high" },
+        });
+      }
+      continue;
+    }
+
+    await prisma.platformRecommendation.create({
+      data: {
+        blueprintId,
+        platformName: spec.name,
+        platformType: spec.type,
+        recommendation: "recommended",
+        priority: "high",
+        automationStatus: "manual_ready",
+        requiredCredentials: [],
+        permissionsNeeded: [],
+        contentFormats: spec.formats,
+        rationale: "Площадка выбрана пользователем в self-service onboarding.",
+        contentRole: spec.id.includes("article") ? "Экспертные материалы и поисковая видимость" : "Регулярное присутствие бренда",
+        suggestedFrequency: spec.id.includes("article") ? "1–2 материала в месяц" : "1–2 темы в неделю",
+        automationOpportunity: "Подготовка контента внутри Adaptive Presence",
+      },
+    });
+  }
+
+  const refreshed = await prisma.platformRecommendation.findMany({
+    where: { blueprintId, recommendation: "recommended" },
+    select: { platformName: true },
+  });
+
+  return selectedSpecs.flatMap((spec) => {
+    const platform = refreshed.find((item) => spec.match.test(item.platformName));
+    return platform ? [platform.platformName] : [];
+  });
+}
+
+async function currentSelfServiceWorkspace() {
+  const session = await auth();
+  const email = session?.user?.email?.trim().toLowerCase();
+  if (!email) return null;
+
+  return prisma.workspaceMembership.findFirst({
+    where: { user: { email } },
+    include: {
+      client: {
+        include: {
+          briefs: { orderBy: { createdAt: "desc" }, take: 1, include: { blueprint: true } },
+          monthlyPlans: {
+            where: { month: currentMonth(), status: { notIn: ["archived", "replaced"] } },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
+        },
+      },
+    },
+  });
+}
+
+export async function startSelfServiceMonth() {
+  const membership = await currentSelfServiceWorkspace();
+  if (!membership) redirect("/sign-in?callbackUrl=/app/month");
+  if (membership.client.monthlyPlans[0]) redirect("/app/month?notice=month_exists");
+
+  const brief = membership.client.briefs[0];
+  if (!brief) redirect("/start?error=onboarding_missing");
+
+  try {
+    await ensureBlueprintForBrief(brief.id);
+  } catch (error) {
+    console.error("Self-service blueprint generation failed", error);
+    redirect("/app/month?error=blueprint_failed");
+  }
+
+  revalidatePath("/app/month");
+  redirect("/app/month?autostart=1");
+}
+
+export async function continueSelfServiceMonth() {
+  const membership = await currentSelfServiceWorkspace();
+  if (!membership) return { ok: false as const, message: "Сессия завершилась. Войдите ещё раз." };
+
+  const existingPlan = membership.client.monthlyPlans[0];
+  if (existingPlan) {
+    const run = await createMonthProductionRun(existingPlan.id);
+    return { ok: true as const, monthlyPlanId: existingPlan.id, productionRunId: run.id };
+  }
+
+  const brief = membership.client.briefs[0];
+  const blueprintId = brief?.blueprint?.id;
+  if (!brief || !blueprintId) return { ok: false as const, message: "Не удалось найти профиль бренда. Вернитесь к короткому брифу." };
+
+  try {
+    const formatIds = selfServiceFormatIds(brief.rawBrief);
+    const allowedPlatforms = await ensureSelfServicePlatformRecommendations(blueprintId, formatIds);
+    const postsPerWeek = selfServicePostFrequency(brief.rawBrief);
+    const articlesPerMonth = selfServiceArticleFrequency(brief.rawBrief);
+    const strategicThemes = [
+      selfServiceBriefSetting(brief.rawBrief, "Цель ближайшего месяца"),
+      selfServiceBriefSetting(brief.rawBrief, "Обязательные темы ближайшего месяца"),
+    ].filter(Boolean);
+    const scope = buildProductionScope({
+      allowedPlatforms,
+      allowedDeliverables: ["пост", "статья", "article", "post", "визуал"],
+      cadenceRules: [
+        `VK: ${postsPerWeek} поста в неделю`,
+        `Telegram: ${postsPerWeek} поста в неделю`,
+        `Статьи: ${articlesPerMonth} в месяц`,
+      ],
+      strategicThemes,
+    });
+    const generationForm = new FormData();
+    generationForm.set("articlesPerMonth", String(articlesPerMonth));
+    const result = await createMonthlyPlanForBlueprint(blueprintId, generationForm, {
+      prepareTextsAfterCreate: false,
+      productionScopeOverride: scope,
+      throwOnError: true,
+    });
+    const run = await createMonthProductionRun(result.monthlyPlanId);
+    revalidatePath("/app");
+    revalidatePath("/app/month");
+    return { ok: true as const, monthlyPlanId: result.monthlyPlanId, productionRunId: run.id };
+  } catch (error) {
+    console.error("Self-service month generation failed", error);
+    return {
+      ok: false as const,
+      message: "Не удалось собрать месяц с первого раза. Ваш бриф сохранён — можно безопасно повторить.",
+    };
+  }
 }
 
 export async function autoScheduleMonthlyPlanDates(formData: FormData) {
@@ -4535,6 +4733,24 @@ export async function processNextMonthProductionBatch(productionRunId: string) {
   const snapshot = await processNextMonthProductionBatchInternal(productionRunId);
   revalidatePath("/");
 
+  return snapshot;
+}
+
+export async function processNextSelfServiceProductionBatch(productionRunId: string) {
+  const membership = await currentSelfServiceWorkspace();
+  if (!membership) return { ok: false as const, message: "Сессия завершилась. Войдите ещё раз." };
+
+  const run = await prisma.monthProductionRun.findUnique({
+    where: { id: productionRunId },
+    select: { clientId: true },
+  });
+  if (!run || run.clientId !== membership.clientId) {
+    return { ok: false as const, message: "Подготовка этого месяца недоступна." };
+  }
+
+  const snapshot = await processNextMonthProductionBatchInternal(productionRunId);
+  revalidatePath("/app");
+  revalidatePath("/app/month");
   return snapshot;
 }
 
