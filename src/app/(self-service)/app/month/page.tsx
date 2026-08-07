@@ -159,12 +159,12 @@ export default async function SelfServiceMonthPage({
                 {items.map((item, index) => {
                   const state = materialState(item);
                   return (
-                    <article key={item.id} className="grid gap-4 px-5 py-5 transition hover:bg-violet-50/35 sm:grid-cols-[70px_120px_minmax(0,1fr)_110px] sm:items-center sm:px-7">
+                    <Link href={`/app/month/${item.id}`} key={item.id} className="grid gap-4 px-5 py-5 transition hover:bg-violet-50/35 sm:grid-cols-[70px_120px_minmax(0,1fr)_110px] sm:items-center sm:px-7">
                       <div><p className="text-sm font-semibold text-slate-950">{formatDate(item.plannedDate)}</p><p className="mt-0.5 text-[11px] text-slate-400">#{String(index + 1).padStart(2, "0")}</p></div>
                       <span className="w-fit rounded-full bg-slate-100 px-3 py-1.5 text-[11px] font-semibold text-slate-600">{platformLabel(item.platformName)}</span>
                       <div className="min-w-0"><h3 className="truncate text-sm font-semibold text-slate-950 sm:whitespace-normal">{item.topic}</h3><p className="mt-1 line-clamp-1 text-xs text-slate-400">{item.goal}</p></div>
                       <span className={`w-fit rounded-full px-3 py-1.5 text-[11px] font-semibold ${state === "Готов" ? "bg-violet-50 text-violet-700" : "bg-slate-100 text-slate-500"}`}>{state}</span>
-                    </article>
+                    </Link>
                   );
                 })}
               </div>
