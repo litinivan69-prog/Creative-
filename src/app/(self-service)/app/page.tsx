@@ -74,8 +74,13 @@ export default async function SelfServiceHomePage() {
   return (
     <main className="min-h-screen px-4 py-5 sm:px-7 sm:py-7">
       <div className="mx-auto max-w-[1180px]">
-        <header className="flex items-center justify-between rounded-[24px] border border-white/80 bg-white/80 px-4 py-3 shadow-[0_18px_55px_rgba(77,61,112,0.07)] sm:px-5">
+        <header className="flex flex-wrap items-center justify-between gap-4 rounded-[24px] border border-white/80 bg-white/80 px-4 py-3 shadow-[0_18px_55px_rgba(77,61,112,0.07)] sm:px-5">
           <div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-2xl bg-violet-600 text-xs font-extrabold lowercase text-white">cc.</div><div><p className="text-sm font-semibold text-slate-950">{workspace.name}</p><p className="text-[11px] text-slate-400">Adaptive Presence</p></div></div>
+          <nav className="flex items-center gap-1 rounded-full border border-slate-200/80 bg-white/90 p-1 text-xs font-semibold text-slate-500">
+            <Link href="/app" className="rounded-full bg-violet-50 px-3.5 py-2 text-violet-700">Главная</Link>
+            <Link href="/app/month" className="rounded-full px-3.5 py-2 transition hover:text-slate-900">Календарь</Link>
+            <Link href="/app/channels" className="rounded-full px-3.5 py-2 transition hover:text-slate-900">Площадки</Link>
+          </nav>
           <form action={signOutSelfService}><button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600">Выйти</button></form>
         </header>
         <section className="py-10">
@@ -86,9 +91,10 @@ export default async function SelfServiceHomePage() {
             <article className="rounded-[24px] border border-white bg-white p-5 shadow-[0_18px_55px_rgba(77,61,112,0.06)]"><p className="text-xs text-slate-400">Текущий месяц</p><p className="mt-2 text-xl font-semibold text-slate-950">{latestPlan?.month ?? "Ещё не собран"}</p></article>
             <article className="rounded-[24px] border border-white bg-white p-5 shadow-[0_18px_55px_rgba(77,61,112,0.06)]"><p className="text-xs text-slate-400">Материалов</p><p className="mt-2 text-xl font-semibold text-slate-950">{latestPlan?.plannedContentItems.length ?? 0}</p></article>
           </div>
-          <Link href="/app/month" className="mt-5 inline-flex rounded-2xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-violet-700">
-            Открыть контент месяца
-          </Link>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Link href="/app/month" className="inline-flex rounded-2xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-violet-700">Открыть календарь месяца</Link>
+            <Link href="/app/channels" className="inline-flex rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-600 transition hover:border-violet-200 hover:text-violet-700">Настроить площадки</Link>
+          </div>
         </section>
       </div>
     </main>
