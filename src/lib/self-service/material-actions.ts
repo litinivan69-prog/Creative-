@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { scheduledAutopublishDefaults } from "@/lib/scheduled-autopublish";
 
 async function currentClientId() {
   const session = await auth();
@@ -81,7 +82,7 @@ export async function markSelfServiceMaterialReady(formData: FormData) {
         },
       },
       generatedCreativeVariants: { select: { id: true }, take: 1 },
-      scheduledPublications: { select: { id: true } },
+      scheduledPublications: { select: { id: true, scheduledTime: true, timezone: true } },
     },
   });
   if (!item) redirect("/app/month?error=material_missing");
@@ -119,7 +120,13 @@ export async function markSelfServiceMaterialReady(formData: FormData) {
     if (item.scheduledPublications.length > 0) {
       await transaction.scheduledPublication.updateMany({
         where: { id: { in: item.scheduledPublications.map((publication) => publication.id) } },
-        data: { status: "ready" },
+        data: {
+          status: "ready",
+          scheduledTime: item.scheduledPublications[0]?.scheduledTime || scheduledAutopublishDefaults.time,
+          timezone: item.scheduledPublications[0]?.timezone || scheduledAutopublishDefaults.timezone,
+          publishStatus: "queued",
+          publishErrorMessage: null,
+        },
       });
     }
   });
@@ -128,4 +135,41 @@ export async function markSelfServiceMaterialReady(formData: FormData) {
   revalidatePath("/app/month");
   revalidatePath(`/app/month/${item.id}`);
   redirect(`/app/month/${item.id}?notice=ready`);
+}
+
+export async function saveSelfServicePublicationSchedule(formData: FormData) {
+  const itemId = String(formData.get("itemId") ?? "").trim();
+  const scheduledDate = String(formData.get("scheduledDate") ?? "").trim();
+  const scheduledTime = String(formData.get("scheduledTime") ?? "").trim();
+  const clientId = await currentClientId();
+
+  if (!clientId) redirect(`/sign-in?callbackUrl=/app/month/${encodeURIComponent(itemId)}`);
+  if (!itemId || !/^\d{4}-\d{2}-\d{2}$/.test(scheduledDate) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(scheduledTime)) {
+    redirect(`/app/month/${encodeURIComponent(itemId)}?error=schedule_invalid`);
+  }
+
+  const publication = await prisma.scheduledPublication.findFirst({
+    where: { plannedContentItemId: itemId, clientId },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, publishStatus: true },
+  });
+  if (!publication) redirect(`/app/month/${encodeURIComponent(itemId)}?error=publication_missing`);
+  if (publication.publishStatus === "published") redirect(`/app/month/${encodeURIComponent(itemId)}?error=already_published`);
+
+  await prisma.scheduledPublication.update({
+    where: { id: publication.id },
+    data: {
+      scheduledDate,
+      scheduledTime,
+      timezone: scheduledAutopublishDefaults.timezone,
+      publishStatus: "queued",
+      publishErrorMessage: null,
+    },
+  });
+
+  revalidatePath("/app");
+  revalidatePath("/app/month");
+  revalidatePath(`/app/month/${itemId}`);
+  revalidatePath("/app/autoposting");
+  redirect(`/app/month/${itemId}?notice=schedule_saved`);
 }

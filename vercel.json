@@ -1,3 +1,9 @@
 {
-  "buildCommand": "pnpm vercel-build"
+  "buildCommand": "pnpm vercel-build",
+  "crons": [
+    {
+      "path": "/api/cron/autopublish",
+      "schedule": "*/5 * * * *"
+    }
+  ]
 }

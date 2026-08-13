@@ -35,6 +35,16 @@ export type TelegramPublishOutcome =
     }
   | { ok: false; error: string; results?: PlatformPublishResult[] };
 
+async function recordPublishFailure(scheduledPublicationId: string, error: string) {
+  await prisma.scheduledPublication.update({
+    where: { id: scheduledPublicationId },
+    data: {
+      publishStatus: "failed",
+      publishErrorMessage: error.slice(0, 500),
+    },
+  }).catch(() => {});
+}
+
 /**
  * Active visuals for a publication, following the carousel rules:
  * carousel_slide assets are the required visuals (one image per slide);
@@ -124,6 +134,13 @@ export async function publishScheduledPublication(
     return { ok: false, error: "Публикация не найдена." };
   }
 
+  if (publication.publishStatus === "published" && !options.force) {
+    const existing = publication.results.find((result) => result.externalUrl);
+    return existing
+      ? { ok: true, url: existing.externalUrl, alreadyPublished: true, results: publication.results.map((result) => ({ platform: result.platform, ok: true, alreadyPublished: true, url: result.externalUrl, externalId: result.externalId })) }
+      : { ok: false, error: "Материал уже отмечен как опубликованный." };
+  }
+
   const channels = await prisma.clientChannel.findMany({
     where: {
       clientId: publication.clientId,
@@ -136,6 +153,30 @@ export async function publishScheduledPublication(
 
   if (channels.length === 0) {
     return { ok: false, error: "У клиента нет подключённых каналов. Добавьте каналы в настройках." };
+  }
+
+  if (!options.force) {
+    const staleBefore = new Date(Date.now() - 15 * 60 * 1000);
+    const claimed = await prisma.scheduledPublication.updateMany({
+      where: {
+        id: publication.id,
+        publishStatus: { not: "published" },
+        OR: [
+          { publishStatus: null },
+          { publishStatus: { in: ["failed", "queued"] } },
+          { publishStatus: "publishing", lastPublishAttemptAt: { lt: staleBefore } },
+        ],
+      },
+      data: {
+        publishStatus: "publishing",
+        publishErrorMessage: null,
+        publishAttempts: { increment: 1 },
+        lastPublishAttemptAt: new Date(),
+      },
+    });
+    if (claimed.count === 0) {
+      return { ok: false, error: "Публикация уже выполняется. Подождите несколько секунд." };
+    }
   }
 
   // One target channel per platform (first added wins).
@@ -264,6 +305,7 @@ export async function publishScheduledPublication(
   const successes = results.filter((result) => result.ok && result.url);
   if (successes.length === 0) {
     const firstError = results.find((result) => !result.ok)?.error ?? "Не удалось опубликовать.";
+    await recordPublishFailure(publication.id, firstError);
     return { ok: false, error: firstError, results };
   }
 
@@ -274,6 +316,7 @@ export async function publishScheduledPublication(
       where: { id: publication.id },
       data: {
         publishStatus: "published",
+        publishErrorMessage: null,
         publishedAt: new Date(),
         externalUrl: primary.url,
         externalId: primary.externalId ?? null,
