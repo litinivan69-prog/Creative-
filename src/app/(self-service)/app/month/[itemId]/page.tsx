@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { MaterialEditor } from "@/app/(self-service)/app/month/[itemId]/material-editor";
 import { darkCardClass, SelfServiceAppShell } from "@/app/(self-service)/app/self-service-app-shell";
 import { markSelfServiceMaterialReady } from "@/lib/self-service/material-actions";
+import { publishSelfServiceMaterialNow } from "@/lib/self-service/channel-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +49,15 @@ export default async function SelfServiceMaterialPage({
 
   const membership = await prisma.workspaceMembership.findFirst({
     where: { user: { email } },
-    select: { clientId: true, client: { select: { name: true } } },
+    select: {
+      clientId: true,
+      client: {
+        select: {
+          name: true,
+          channels: { where: { status: "active", platform: { in: ["vk", "telegram"] } }, select: { id: true, platform: true } },
+        },
+      },
+    },
   });
   if (!membership) redirect("/start");
 
@@ -65,7 +74,7 @@ export default async function SelfServiceMaterialPage({
       scheduledPublications: {
         orderBy: { createdAt: "desc" },
         take: 1,
-        select: { scheduledDate: true, scheduledTime: true, status: true, publishStatus: true },
+        select: { id: true, scheduledDate: true, scheduledTime: true, status: true, publishStatus: true, externalUrl: true },
       },
     },
   });
@@ -84,6 +93,10 @@ export default async function SelfServiceMaterialPage({
   const materialTitle = article?.title || item.contentDraft?.draftTitle || item.topic;
   const publication = item.scheduledPublications[0] ?? null;
   const isReady = item.contentDraft?.status === "ready_to_schedule" || item.contentDraft?.status === "approved" || publication?.status === "ready";
+  const isPublished = publication?.publishStatus === "published";
+  const targetPlatform = /vk|вконтакт/i.test(item.platformName) ? "vk" : /telegram|телеграм|\btg\b/i.test(item.platformName) ? "telegram" : null;
+  const supportsDirectPublish = Boolean(targetPlatform);
+  const canPublish = Boolean(publication && targetPlatform && membership.client.channels.some((channel) => channel.platform === targetPlatform));
   const visualReady = slides.length > 0 ? visuals.length === slides.length : visuals.length > 0;
 
   return (
@@ -103,7 +116,9 @@ export default async function SelfServiceMaterialPage({
 
         {query.notice === "saved" ? <div className="mb-5 rounded-2xl border border-violet-400/15 bg-violet-500/10 px-4 py-3 text-xs font-semibold text-violet-100">Изменения сохранены.</div> : null}
         {query.notice === "ready" ? <div className="mb-5 rounded-2xl border border-violet-400/15 bg-violet-500/10 px-4 py-3 text-xs font-semibold text-violet-100">Готово. Материал подтверждён и подготовлен к публикации.</div> : null}
-        {query.error ? <div className="mb-5 rounded-2xl border border-rose-400/15 bg-rose-500/10 px-4 py-3 text-xs text-rose-100">{query.error === "text_not_ready" ? "Текст пока готовится." : query.error === "material_not_ready" ? "Сначала дождитесь текста и всех изображений." : "Проверьте текст и попробуйте ещё раз."}</div> : null}
+        {query.notice === "published" ? <div className="mb-5 rounded-2xl border border-violet-400/15 bg-violet-500/10 px-4 py-3 text-xs font-semibold text-violet-100">Материал опубликован.</div> : null}
+        {query.notice === "already_published" ? <div className="mb-5 rounded-2xl border border-violet-400/15 bg-violet-500/10 px-4 py-3 text-xs font-semibold text-violet-100">Материал уже был опубликован — повтор не создавался.</div> : null}
+        {query.error ? <div className="mb-5 rounded-2xl border border-rose-400/15 bg-rose-500/10 px-4 py-3 text-xs text-rose-100">{query.error === "text_not_ready" ? "Текст пока готовится." : query.error === "material_not_ready" ? "Сначала дождитесь текста и всех изображений." : query.error === "confirm_first" ? "Сначала подтвердите готовность материала." : query.error === "publication_missing" ? "Публикация ещё не добавлена в календарь." : query.error === "manual_export_only" ? "Для статей Дзен и VC.ru пока используйте скачивание и ручное размещение." : "Не удалось опубликовать. Проверьте подключение площадки и попробуйте ещё раз."}</div> : null}
 
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.12fr)_minmax(340px,.88fr)]">
           <section className={`${darkCardClass} p-5 sm:p-6`}>
@@ -125,7 +140,7 @@ export default async function SelfServiceMaterialPage({
             </section>
 
             <section className={`${darkCardClass} p-5`}>
-              {isReady ? <div className="flex items-center justify-between gap-4"><div><p className="text-sm font-semibold text-white/78">Всё готово</p><p className="mt-1 text-[10px] text-white/28">Материал стоит в очереди на выбранную дату.</p></div><span className="text-lg text-violet-300">✓</span></div> : <form action={markSelfServiceMaterialReady}><input type="hidden" name="itemId" value={item.id} /><button disabled={!body || !visualReady} className="w-full rounded-xl bg-violet-500 px-5 py-3.5 text-xs font-semibold text-white shadow-[0_14px_35px_rgba(124,92,255,.2)] transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-white/[0.06] disabled:text-white/25 disabled:shadow-none">Готово к публикации</button><p className="mt-3 text-center text-[10px] leading-4 text-white/24">Подтвердите, когда текст и изображение вас устраивают.</p></form>}
+              {isPublished ? <div className="flex items-center justify-between gap-4"><div><p className="text-sm font-semibold text-white/78">Опубликовано</p><p className="mt-1 text-[10px] text-white/28">Материал уже вышел на подключённой площадке.</p></div>{publication?.externalUrl ? <a href={publication.externalUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-violet-300">Открыть ↗</a> : <span className="text-lg text-violet-300">✓</span>}</div> : isReady ? <div>{!supportsDirectPublish ? <div className="rounded-xl border border-white/[0.06] bg-black/15 px-4 py-3 text-center text-xs font-semibold text-white/55">Готово к ручному размещению</div> : canPublish ? <form action={publishSelfServiceMaterialNow}><input type="hidden" name="itemId" value={item.id} /><button className="w-full rounded-xl bg-violet-500 px-5 py-3.5 text-xs font-semibold text-white shadow-[0_14px_35px_rgba(124,92,255,.2)] transition hover:bg-violet-400">Опубликовать сейчас</button></form> : <Link href="/app/channels" className="block w-full rounded-xl border border-violet-400/20 bg-violet-500/10 px-5 py-3.5 text-center text-xs font-semibold text-violet-200">Подключить {targetPlatform === "vk" ? "VK" : "Telegram"}</Link>}<p className="mt-3 text-center text-[10px] leading-4 text-white/24">{supportsDirectPublish ? "Материал подтверждён. Можно отправить его сейчас." : "Скопируйте текст и скачайте визуал из блоков выше."}</p></div> : <form action={markSelfServiceMaterialReady}><input type="hidden" name="itemId" value={item.id} /><button disabled={!body || !visualReady} className="w-full rounded-xl bg-violet-500 px-5 py-3.5 text-xs font-semibold text-white shadow-[0_14px_35px_rgba(124,92,255,.2)] transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-white/[0.06] disabled:text-white/25 disabled:shadow-none">Готово к публикации</button><p className="mt-3 text-center text-[10px] leading-4 text-white/24">Подтвердите, когда текст и изображение вас устраивают.</p></form>}
             </section>
 
             <details className={`${darkCardClass} group p-5`}><summary className="cursor-pointer list-none text-xs font-semibold text-white/48">Зачем этот материал <span className="float-right text-white/20 transition group-open:rotate-45">+</span></summary><p className="mt-3 text-xs leading-5 text-white/30">{item.sequenceReason || item.channelRole || item.goal}</p></details>

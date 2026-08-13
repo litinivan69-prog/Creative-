@@ -823,14 +823,18 @@ model Article {
 }
 
 model ClientChannel {
-  id        String   @id @default(cuid())
-  clientId  String
-  platform  String   @default("telegram")
-  channelId String
-  title     String?
-  status    String   @default("active")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                  String    @id @default(cuid())
+  clientId            String
+  platform            String    @default("telegram")
+  channelId           String
+  title               String?
+  status              String    @default("active")
+  credentialEncrypted String?
+  credentialHint      String?
+  autopublishEnabled  Boolean   @default(false)
+  connectedAt         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
   client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@index([clientId])

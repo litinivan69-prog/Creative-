@@ -3,6 +3,7 @@ import { stripCarouselSlideLabel } from "@/lib/creative-asset-schema";
 import { prisma } from "@/lib/prisma";
 import { getIntegrationSetting, getTelegramBotToken, sendTelegramPost } from "@/lib/telegram";
 import { VK_ACCESS_TOKEN_KEY, sendVkPost } from "@/lib/vk";
+import { decryptChannelCredential } from "@/lib/channel-credentials";
 
 /** Maps a planned platform name (free text from the plan) to a channel platform. */
 function mapPublicationPlatform(name?: string | null): "vk" | "telegram" | null {
@@ -103,7 +104,7 @@ async function logIntegrationEvent(data: {
  */
 export async function publishScheduledPublication(
   scheduledPublicationId: string,
-  options: { force?: boolean } = {},
+  options: { force?: boolean; platforms?: Array<"vk" | "telegram"> } = {},
 ): Promise<TelegramPublishOutcome> {
   const publication = await prisma.scheduledPublication.findUnique({
     where: { id: scheduledPublicationId },
@@ -124,9 +125,13 @@ export async function publishScheduledPublication(
   }
 
   const channels = await prisma.clientChannel.findMany({
-    where: { clientId: publication.clientId, status: "active" },
+    where: {
+      clientId: publication.clientId,
+      status: "active",
+      platform: { in: options.platforms?.length ? options.platforms : ["vk", "telegram"] },
+    },
     orderBy: { createdAt: "asc" },
-    select: { id: true, channelId: true, platform: true },
+    select: { id: true, channelId: true, platform: true, credentialEncrypted: true },
   });
 
   if (channels.length === 0) {
@@ -155,7 +160,8 @@ export async function publishScheduledPublication(
     }
 
     if (channel.platform === "vk") {
-      const vkToken = await getIntegrationSetting(VK_ACCESS_TOKEN_KEY);
+      const vkToken = decryptChannelCredential(channel.credentialEncrypted)
+        ?? await getIntegrationSetting(VK_ACCESS_TOKEN_KEY);
       if (!vkToken) {
         results.push({ platform: "vk", ok: false, error: "VK не подключён в настройках." });
         continue;
@@ -182,7 +188,8 @@ export async function publishScheduledPublication(
         errorMessage: vk.ok ? undefined : vk.error,
       });
     } else {
-      const token = await getTelegramBotToken();
+      const token = decryptChannelCredential(channel.credentialEncrypted)
+        ?? await getTelegramBotToken();
       if (!token) {
         results.push({ platform: "telegram", ok: false, error: "Telegram-бот не подключён в настройках." });
         continue;
