@@ -13,6 +13,31 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+function overviewVisual(item: {
+  id: string;
+  creativeAssets: Array<{
+    assetType: string;
+    notes: string | null;
+    generatedVariants: Array<{ id: string }>;
+  }>;
+  generatedCreativeVariants: Array<{ id: string }>;
+}) {
+  const slides = item.creativeAssets.filter((asset) => asset.assetType === "carousel_slide");
+  const activeAssets = slides.length > 0
+    ? slides
+    : item.creativeAssets.filter((asset) => !asset.notes?.includes("legacyCombinedCarouselAsset=true"));
+  const variant = activeAssets.flatMap((asset) => asset.generatedVariants)[0]
+    ?? (slides.length === 0 ? item.generatedCreativeVariants[0] : null)
+    ?? null;
+
+  return variant
+    ? {
+        src: `/api/self-service/materials/${item.id}/visuals?variant=${variant.id}&inline=1`,
+        slideCount: slides.length,
+      }
+    : null;
+}
+
 export default async function SelfServiceHomePage() {
   const session = await auth();
   const email = session?.user?.email?.trim().toLowerCase();
@@ -43,6 +68,14 @@ export default async function SelfServiceHomePage() {
                       plannedDate: true,
                       contentDraft: { select: { id: true } },
                       generatedCreativeVariants: { select: { id: true }, take: 1 },
+                      creativeAssets: {
+                        orderBy: { createdAt: "asc" },
+                        select: {
+                          assetType: true,
+                          notes: true,
+                          generatedVariants: { orderBy: { createdAt: "desc" }, select: { id: true }, take: 1 },
+                        },
+                      },
                     },
                   },
                 },
@@ -83,8 +116,9 @@ export default async function SelfServiceHomePage() {
 
   const latestPlan = workspace.monthlyPlans[0] ?? null;
   const items = latestPlan?.plannedContentItems ?? [];
-  const readyItems = items.filter((item) => item.contentDraft && item.generatedCreativeVariants.length > 0).length;
+  const readyItems = items.filter((item) => item.contentDraft && overviewVisual(item)).length;
   const nextItem = items.find((item) => item.plannedDate >= new Date().toISOString().slice(0, 10)) ?? items[0] ?? null;
+  const nextVisual = nextItem ? overviewVisual(nextItem) : null;
 
   return (
     <SelfServiceAppShell
@@ -106,7 +140,12 @@ export default async function SelfServiceHomePage() {
       </section>
 
       <section className="mt-4 grid gap-4 lg:grid-cols-[1.15fr_.85fr]">
-        <article className={`${darkCardClass} p-5 sm:p-6`}><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-sm font-semibold text-white">Следующая публикация</p><p className="mt-1 text-[10px] text-white/30">{nextItem ? `${nextItem.plannedDate} · ${nextItem.platformName}` : "появится после подготовки месяца"}</p></div>{nextItem ? <span className="rounded-full bg-violet-500/10 px-3 py-1.5 text-[10px] font-semibold text-violet-200">{nextItem.contentDraft ? "текст готов" : "готовится"}</span> : null}</div><div className="mt-5 rounded-2xl border border-white/[0.06] bg-black/15 p-4"><p className="text-sm font-medium leading-6 text-white/78">{nextItem?.topic ?? "Система сама предложит темы, распределит их по датам и подготовит материалы."}</p></div>{nextItem ? <Link href={`/app/month/${nextItem.id}`} className="mt-4 inline-flex text-xs font-semibold text-violet-300 transition hover:text-violet-200">Открыть материал →</Link> : null}</article>
+        <article className={`${darkCardClass} overflow-hidden`}>
+          <div className="grid min-h-full sm:grid-cols-[minmax(0,1fr)_190px]">
+            <div className="p-5 sm:p-6"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-sm font-semibold text-white">Следующая публикация</p><p className="mt-1 text-[10px] text-white/30">{nextItem ? `${nextItem.plannedDate} · ${nextItem.platformName}` : "появится после подготовки месяца"}</p></div>{nextItem ? <span className="rounded-full bg-violet-500/10 px-3 py-1.5 text-[10px] font-semibold text-violet-200">{nextItem.contentDraft && nextVisual ? "готово" : "готовится"}</span> : null}</div><div className="mt-5 rounded-2xl border border-white/[0.06] bg-black/15 p-4"><p className="text-sm font-medium leading-6 text-white/78">{nextItem?.topic ?? "Система сама предложит темы, распределит их по датам и подготовит материалы."}</p></div>{nextItem ? <Link href={`/app/month/${nextItem.id}`} className="mt-4 inline-flex text-xs font-semibold text-violet-300 transition hover:text-violet-200">Открыть материал →</Link> : null}</div>
+            <div className="relative min-h-48 border-t border-white/[0.06] bg-black/20 sm:min-h-full sm:border-l sm:border-t-0">{nextVisual ? <><img src={nextVisual.src} alt="" className="absolute inset-0 h-full w-full object-cover opacity-80" /><div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />{nextVisual.slideCount > 0 ? <span className="absolute bottom-3 right-3 rounded-full bg-black/65 px-2.5 py-1 text-[9px] font-semibold text-white/75 backdrop-blur">Карусель · {nextVisual.slideCount}</span> : null}</> : <div className="grid h-full min-h-48 place-items-center bg-[radial-gradient(circle_at_50%_20%,rgba(124,92,255,.18),transparent_60%)] text-center"><div><span className="text-2xl text-violet-300/45">◇</span><p className="mt-2 text-[10px] text-white/25">визуал готовится</p></div></div>}</div>
+          </div>
+        </article>
         <article className={`${darkCardClass} p-5 sm:p-6`}><div className="flex items-center justify-between"><div><p className="text-sm font-semibold text-white">Площадки</p><p className="mt-1 text-[10px] text-white/30">Где система сможет публиковать</p></div><Link href="/app/channels" className="text-[10px] font-semibold text-violet-300">Настроить</Link></div><div className="mt-5 space-y-3">{["Telegram", "VK", "Дзен", "VC.ru"].map((platform) => { const connected = workspace.channels.some((channel) => channel.platform.toLowerCase().includes(platform === "Дзен" ? "dzen" : platform === "VC.ru" ? "vcru" : platform.toLowerCase())); return <div key={platform} className="flex items-center justify-between border-b border-white/[0.04] pb-3 text-xs last:border-0 last:pb-0"><span className="text-white/58">{platform}</span><span className={connected ? "text-emerald-300/80" : "text-white/22"}>{connected ? "подключено" : "не подключено"}</span></div>; })}</div></article>
       </section>
     </SelfServiceAppShell>

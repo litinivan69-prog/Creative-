@@ -64,6 +64,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ ite
     ? slides.flatMap((asset) => asset.generatedVariants)
     : item.generatedCreativeVariants.slice(0, 1);
   const requestedId = request.nextUrl.searchParams.get("variant");
+  const inline = request.nextUrl.searchParams.get("inline") === "1";
 
   if (requestedId) {
     const visual = visuals.find((candidate) => candidate.id === requestedId);
@@ -74,8 +75,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ ite
     return new Response(new Uint8Array(bytes), {
       headers: {
         "Content-Type": visual.mimeType,
-        "Content-Disposition": `attachment; filename="${slideFilename(index, visuals.length, visual.mimeType)}"`,
-        "Cache-Control": "private, no-store",
+        "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${slideFilename(index, visuals.length, visual.mimeType)}"`,
+        "Cache-Control": inline ? "private, max-age=300" : "private, no-store",
       },
     });
   }
