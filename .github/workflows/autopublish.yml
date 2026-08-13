@@ -1,0 +1,26 @@
+name: Scheduled autopublish
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: scheduled-autopublish
+  cancel-in-progress: false
+
+jobs:
+  publish-due:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Publish due materials
+        env:
+          AUTOPUBLISH_CRON_SECRET: ${{ secrets.AUTOPUBLISH_CRON_SECRET }}
+        run: |
+          test -n "$AUTOPUBLISH_CRON_SECRET"
+          curl --fail-with-body --silent --show-error \
+            --retry 2 \
+            --retry-delay 5 \
+            -H "Authorization: Bearer $AUTOPUBLISH_CRON_SECRET" \
+            https://creative-eight-psi.vercel.app/api/cron/autopublish
