@@ -4,7 +4,8 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { MaterialEditor } from "@/app/(self-service)/app/month/[itemId]/material-editor";
-import { SelfServiceAppShell } from "@/app/(self-service)/app/self-service-app-shell";
+import { darkCardClass, SelfServiceAppShell } from "@/app/(self-service)/app/self-service-app-shell";
+import { markSelfServiceMaterialReady } from "@/lib/self-service/material-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +62,11 @@ export default async function SelfServiceMaterialPage({
         orderBy: { createdAt: "asc" },
         include: { generatedVariants: { orderBy: { createdAt: "desc" }, take: 1 } },
       },
+      scheduledPublications: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { scheduledDate: true, scheduledTime: true, status: true, publishStatus: true },
+      },
     },
   });
   if (!item) notFound();
@@ -76,6 +82,9 @@ export default async function SelfServiceMaterialPage({
     : item.generatedCreativeVariants.slice(0, 1);
   const visuals = visualVariants.map((variant) => ({ id: variant.id, src: variantSource(variant) })).filter((visual): visual is { id: string; src: string } => Boolean(visual.src));
   const materialTitle = article?.title || item.contentDraft?.draftTitle || item.topic;
+  const publication = item.scheduledPublications[0] ?? null;
+  const isReady = item.contentDraft?.status === "ready_to_schedule" || item.contentDraft?.status === "approved" || publication?.status === "ready";
+  const visualReady = slides.length > 0 ? visuals.length === slides.length : visuals.length > 0;
 
   return (
     <SelfServiceAppShell
@@ -83,33 +92,43 @@ export default async function SelfServiceMaterialPage({
       active="materials"
       eyebrow={`${formatDate(item.plannedDate)} · ${platformLabel(item.platformName)}`}
       title={materialTitle}
-      description={item.goal}
+      description="Проверьте текст и изображение. Если всё устраивает — подтвердите материал одним действием."
       headerAction={<Link href="/app/month#materials" className="rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-xs font-semibold text-white/65 transition hover:bg-white/[0.07]">← Все материалы</Link>}
     >
-      <div className="ap-dark-surface">
-        <div className="mb-5 flex"><span className="rounded-full bg-violet-500/10 px-3 py-1.5 text-[10px] font-semibold text-violet-200">{body ? "Текст готов" : "Готовится"}</span></div>
-        {query.notice === "saved" ? <div className="mb-5 rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm font-semibold text-violet-800">Изменения сохранены.</div> : null}
-        {query.error ? <div className="mb-5 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-700">{query.error === "text_not_ready" ? "Текст пока не готов. Подождите завершения подготовки." : "Проверьте текст и попробуйте ещё раз."}</div> : null}
+      <div>
+        <div className="mb-5 flex flex-wrap items-center gap-2 text-[10px]">
+          <span className={`rounded-full px-3 py-1.5 font-semibold ${isReady ? "bg-violet-500/15 text-violet-200" : "bg-white/[0.05] text-white/45"}`}>{isReady ? "Готов к публикации" : body && visualReady ? "Можно подтвердить" : "Материал готовится"}</span>
+          <span className="rounded-full bg-white/[0.035] px-3 py-1.5 text-white/30">{publication?.scheduledDate ?? item.plannedDate}{publication?.scheduledTime ? ` · ${publication.scheduledTime}` : ""}</span>
+        </div>
 
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
-          <section className="rounded-[28px] border border-white bg-white p-5 shadow-[0_22px_70px_rgba(77,61,112,0.07)] sm:p-7">
-            <div className="mb-5"><p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-600">Текст публикации</p><h2 className="mt-2 text-lg font-semibold text-slate-950">Можно сразу отредактировать под себя</h2></div>
+        {query.notice === "saved" ? <div className="mb-5 rounded-2xl border border-violet-400/15 bg-violet-500/10 px-4 py-3 text-xs font-semibold text-violet-100">Изменения сохранены.</div> : null}
+        {query.notice === "ready" ? <div className="mb-5 rounded-2xl border border-violet-400/15 bg-violet-500/10 px-4 py-3 text-xs font-semibold text-violet-100">Готово. Материал подтверждён и подготовлен к публикации.</div> : null}
+        {query.error ? <div className="mb-5 rounded-2xl border border-rose-400/15 bg-rose-500/10 px-4 py-3 text-xs text-rose-100">{query.error === "text_not_ready" ? "Текст пока готовится." : query.error === "material_not_ready" ? "Сначала дождитесь текста и всех изображений." : "Проверьте текст и попробуйте ещё раз."}</div> : null}
+
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.12fr)_minmax(340px,.88fr)]">
+          <section className={`${darkCardClass} p-5 sm:p-6`}>
+            <div className="mb-4 flex items-center justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-violet-300">Текст</p><h2 className="mt-1.5 text-sm font-semibold text-white/80">Отредактируйте, если хотите</h2></div><span className="text-[10px] text-white/22">сохраняется вручную</span></div>
             <MaterialEditor itemId={item.id} initialBody={body} ready={Boolean(body)} />
           </section>
 
-          <aside className="space-y-5">
-            <section className="rounded-[28px] border border-white bg-white p-5 shadow-[0_22px_70px_rgba(77,61,112,0.07)]">
-              <div className="flex items-center justify-between gap-3"><div><p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-600">Визуал</p><h2 className="mt-2 text-base font-semibold text-slate-950">{slides.length > 0 ? `Карусель · ${visuals.length}/${slides.length}` : "Изображение материала"}</h2></div>{visuals[0] ? <a href={`/api/self-service/materials/${item.id}/visuals`} className="rounded-full border border-slate-200 px-3 py-2 text-[11px] font-semibold text-slate-600">{visuals.length > 1 ? "Скачать всё · ZIP" : "Скачать"}</a> : null}</div>
+          <aside className="space-y-4">
+            <section className={`${darkCardClass} overflow-hidden`}>
+              <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] px-5 py-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-violet-300">Визуал</p><p className="mt-1 text-xs font-medium text-white/55">{slides.length > 0 ? `Карусель · ${visuals.length}/${slides.length}` : "Изображение поста"}</p></div>{visuals[0] ? <a href={`/api/self-service/materials/${item.id}/visuals`} className="rounded-xl border border-white/[0.07] bg-white/[0.035] px-3 py-2 text-[10px] font-semibold text-white/55 transition hover:bg-white/[0.06] hover:text-white">Скачать{visuals.length > 1 ? " все" : ""}</a> : null}</div>
               {visuals.length > 0 ? (
-                <div className={`mt-5 grid gap-3 ${visuals.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
-                  {visuals.map((visual, index) => <div key={visual.id} className="group relative overflow-hidden rounded-[20px] border border-slate-100 bg-slate-50"><img src={visual.src} alt={`Визуал ${index + 1}`} className="aspect-square h-full w-full object-cover" />{visuals.length > 1 ? <><span className="absolute bottom-2 right-2 rounded-full bg-white/90 px-2 py-1 text-[10px] font-bold text-slate-600">{index + 1}</span><a href={`/api/self-service/materials/${item.id}/visuals?variant=${visual.id}`} aria-label={`Скачать слайд ${index + 1}`} className="absolute left-2 top-2 rounded-full bg-white/90 px-2.5 py-1.5 text-[10px] font-bold text-slate-700 opacity-0 shadow-sm transition group-hover:opacity-100 focus:opacity-100">Скачать</a></> : null}</div>)}
+                <div className="p-3">
+                  <div className="relative overflow-hidden rounded-[18px] bg-black/25"><img src={visuals[0].src} alt="Основной визуал" className="aspect-square h-full w-full object-cover" />{visuals.length > 1 ? <span className="absolute bottom-3 right-3 rounded-full bg-black/65 px-2.5 py-1 text-[9px] font-semibold text-white/75 backdrop-blur">1 / {visuals.length}</span> : null}</div>
+                  {visuals.length > 1 ? <div className="mt-3 grid grid-cols-4 gap-2">{visuals.slice(1, 5).map((visual, index) => <a key={visual.id} href={`/api/self-service/materials/${item.id}/visuals?variant=${visual.id}`} aria-label={`Скачать слайд ${index + 2}`} className="relative overflow-hidden rounded-xl border border-white/[0.06] bg-black/20"><img src={visual.src} alt={`Слайд ${index + 2}`} className="aspect-square h-full w-full object-cover opacity-75 transition hover:opacity-100" />{index === 3 && visuals.length > 5 ? <span className="absolute inset-0 grid place-items-center bg-black/65 text-xs font-semibold text-white">+{visuals.length - 5}</span> : null}</a>)}</div> : null}
                 </div>
               ) : (
-                <div className="mt-5 grid aspect-square place-items-center rounded-[22px] border border-dashed border-violet-200 bg-violet-50/45 p-6 text-center"><div><span className="mx-auto block h-2.5 w-2.5 animate-pulse rounded-full bg-violet-500" /><p className="mt-4 text-sm font-semibold text-slate-900">Визуал готовится</p><p className="mt-2 text-xs leading-5 text-slate-500">Он появится автоматически.</p></div></div>
+                <div className="grid aspect-square place-items-center p-6 text-center"><div><span className="mx-auto block h-2.5 w-2.5 animate-pulse rounded-full bg-violet-400" /><p className="mt-4 text-sm font-semibold text-white/70">Визуал готовится</p><p className="mt-2 text-xs text-white/25">Появится автоматически.</p></div></div>
               )}
             </section>
 
-            <section className="rounded-[24px] border border-white bg-white p-5 shadow-[0_18px_55px_rgba(77,61,112,0.05)]"><p className="text-xs font-semibold text-slate-900">Зачем этот материал</p><p className="mt-2 text-xs leading-5 text-slate-500">{item.sequenceReason || item.channelRole || "Материал поддерживает регулярное присутствие бренда и ведёт аудиторию к следующему полезному действию."}</p></section>
+            <section className={`${darkCardClass} p-5`}>
+              {isReady ? <div className="flex items-center justify-between gap-4"><div><p className="text-sm font-semibold text-white/78">Всё готово</p><p className="mt-1 text-[10px] text-white/28">Материал стоит в очереди на выбранную дату.</p></div><span className="text-lg text-violet-300">✓</span></div> : <form action={markSelfServiceMaterialReady}><input type="hidden" name="itemId" value={item.id} /><button disabled={!body || !visualReady} className="w-full rounded-xl bg-violet-500 px-5 py-3.5 text-xs font-semibold text-white shadow-[0_14px_35px_rgba(124,92,255,.2)] transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-white/[0.06] disabled:text-white/25 disabled:shadow-none">Готово к публикации</button><p className="mt-3 text-center text-[10px] leading-4 text-white/24">Подтвердите, когда текст и изображение вас устраивают.</p></form>}
+            </section>
+
+            <details className={`${darkCardClass} group p-5`}><summary className="cursor-pointer list-none text-xs font-semibold text-white/48">Зачем этот материал <span className="float-right text-white/20 transition group-open:rotate-45">+</span></summary><p className="mt-3 text-xs leading-5 text-white/30">{item.sequenceReason || item.channelRole || item.goal}</p></details>
           </aside>
         </div>
       </div>
