@@ -156,9 +156,12 @@ export function SelfServiceStart() {
               <p className="text-[11px] font-medium text-slate-400">by Creative Command</p>
             </div>
           </div>
-          <div className="hidden items-center gap-2 text-xs font-medium text-slate-500 sm:flex">
-            <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
-            Новый лёгкий продукт
+          <div className="flex items-center gap-2">
+            <a href="/demo" className="rounded-full border border-violet-100 bg-white px-3.5 py-2 text-xs font-semibold text-violet-700 transition hover:bg-violet-50">Посмотреть демо</a>
+            <div className="hidden items-center gap-2 text-xs font-medium text-slate-500 md:flex">
+              <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
+              Новый лёгкий продукт
+            </div>
           </div>
         </header>
 

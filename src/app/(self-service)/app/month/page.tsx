@@ -8,7 +8,7 @@ import {
 } from "@/app/(self-service)/app/month/self-service-month-progress";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { signOutSelfService } from "@/lib/self-service/auth-actions";
+import { SelfServiceAppShell } from "@/app/(self-service)/app/self-service-app-shell";
 
 export const dynamic = "force-dynamic";
 
@@ -51,7 +51,38 @@ type CalendarItem = {
   plannedDate: string;
   platformName: string;
   topic: string;
+  goal: string;
+  thumbnailVariantId: string | null;
+  slideCount: number;
 };
+
+function activeVisualInfo(item: {
+  creativeAssets: Array<{
+    assetType: string;
+    notes: string | null;
+    generatedVariants: Array<{ id: string }>;
+  }>;
+  generatedCreativeVariants: Array<{ id: string }>;
+}) {
+  const slides = item.creativeAssets.filter((asset) => asset.assetType === "carousel_slide");
+  const activeAssets = slides.length > 0
+    ? slides
+    : item.creativeAssets.filter((asset) => !asset.notes?.includes("legacyCombinedCarouselAsset=true"));
+  const firstVariant = activeAssets.flatMap((asset) => asset.generatedVariants)[0]
+    ?? (slides.length === 0 ? item.generatedCreativeVariants[0] : null)
+    ?? null;
+
+  return {
+    thumbnailVariantId: firstVariant?.id ?? null,
+    slideCount: slides.length,
+  };
+}
+
+function materialThumbnailUrl(item: Pick<CalendarItem, "id" | "thumbnailVariantId">) {
+  return item.thumbnailVariantId
+    ? `/api/self-service/materials/${item.id}/visuals?variant=${item.thumbnailVariantId}&inline=1`
+    : null;
+}
 
 function MonthCalendar({ month, items }: { month: string; items: CalendarItem[] }) {
   const [yearText, monthText] = month.split("-");
@@ -76,28 +107,32 @@ function MonthCalendar({ month, items }: { month: string; items: CalendarItem[] 
   }
 
   return (
-    <section id="calendar" className="mt-5 rounded-[28px] border border-white bg-white p-4 shadow-[0_22px_70px_rgba(77,61,112,0.07)] sm:p-6">
+    <section id="calendar" className="mt-5 rounded-[24px] border border-white/[0.07] bg-white/[0.03] p-4 shadow-[0_24px_80px_rgba(0,0,0,.16)] sm:p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div><h2 className="text-base font-semibold text-slate-950">Календарь публикаций</h2><p className="mt-1 text-xs text-slate-400">Нажмите на материал в нужный день, чтобы открыть текст и визуал.</p></div>
-        <span className="rounded-full bg-violet-50 px-3 py-1.5 text-[11px] font-semibold text-violet-700">{items.length} материалов</span>
+        <div><h2 className="text-base font-semibold text-white">Календарь публикаций</h2><p className="mt-1 text-xs text-white/30">Обложки показывают, что и когда выйдет. Нажмите, чтобы открыть материал.</p></div>
+        <span className="rounded-full border border-violet-400/15 bg-violet-500/10 px-3 py-1.5 text-[11px] font-semibold text-violet-200">{items.length} материалов</span>
       </div>
 
-      <div className="mt-5 grid grid-cols-7 gap-1.5 sm:gap-2">
-        {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((day) => <div key={day} className="pb-1 text-center text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">{day}</div>)}
+      <div className="mt-5 grid grid-cols-7 gap-1 sm:gap-2">
+        {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((day) => <div key={day} className="pb-1 text-center text-[9px] font-bold uppercase tracking-[0.08em] text-white/22 sm:text-[10px]">{day}</div>)}
         {cells.map((day, index) => {
           const dayItems = day ? byDay.get(day) ?? [] : [];
+          const primaryItem = dayItems[0] ?? null;
+          const thumbnail = primaryItem ? materialThumbnailUrl(primaryItem) : null;
           return (
-            <div key={`${day ?? "blank"}-${index}`} className={`min-h-16 min-w-0 rounded-2xl border p-1.5 sm:min-h-24 sm:p-2.5 ${day ? "border-slate-100 bg-slate-50/55" : "border-transparent bg-transparent"}`}>
-              {day ? <p className={`text-[11px] font-semibold ${dayItems.length ? "text-violet-700" : "text-slate-400"}`}>{day}</p> : null}
-              <div className="mt-1 grid min-w-0 gap-1">
-                {dayItems.slice(0, 2).map((item) => (
-                  <Link key={item.id} href={`/app/month/${item.id}`} title={item.topic} className="min-w-0 rounded-lg bg-white px-1.5 py-1 text-[9px] font-semibold leading-3 text-slate-600 shadow-sm transition hover:bg-violet-50 hover:text-violet-700 sm:px-2 sm:text-[10px]">
-                    <span className="block truncate">{platformLabel(item.platformName)}</span>
-                    <span className="hidden truncate font-normal text-slate-400 xl:block">{item.topic}</span>
-                  </Link>
-                ))}
-                {dayItems.length > 2 ? <span className="px-1 text-[9px] font-semibold text-violet-600">+{dayItems.length - 2}</span> : null}
-              </div>
+            <div key={`${day ?? "blank"}-${index}`} className={`relative min-h-[72px] min-w-0 overflow-hidden rounded-xl border sm:min-h-[128px] sm:rounded-2xl ${day ? "border-white/[0.055] bg-black/15" : "border-transparent bg-transparent"}`}>
+              {day ? <span className={`absolute left-1.5 top-1.5 z-10 grid h-5 min-w-5 place-items-center rounded-full px-1 text-[9px] font-semibold backdrop-blur-md sm:left-2 sm:top-2 ${dayItems.length ? "bg-violet-500 text-white" : "bg-black/45 text-white/45"}`}>{day}</span> : null}
+              {primaryItem ? (
+                <Link href={`/app/month/${primaryItem.id}`} title={primaryItem.topic} className="group absolute inset-0 block">
+                  {thumbnail ? <img src={thumbnail} alt="" className="h-full w-full object-cover opacity-75 transition duration-300 group-hover:scale-[1.03] group-hover:opacity-90" /> : <div className="h-full w-full bg-[radial-gradient(circle_at_50%_20%,rgba(124,92,255,.18),transparent_55%),linear-gradient(145deg,rgba(255,255,255,.035),rgba(255,255,255,.01))]" />}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/25 to-transparent" />
+                  <div className="absolute inset-x-0 bottom-0 p-1.5 sm:p-2.5">
+                    <div className="flex items-center gap-1"><span className="rounded-md bg-white/10 px-1.5 py-0.5 text-[7px] font-bold text-white/80 backdrop-blur sm:text-[8px]">{platformLabel(primaryItem.platformName)}</span>{primaryItem.slideCount > 0 ? <span className="hidden text-[8px] text-white/55 sm:inline">Карусель · {primaryItem.slideCount}</span> : null}</div>
+                    <p className="mt-1 hidden line-clamp-2 text-[9px] font-medium leading-3 text-white/75 sm:block xl:text-[10px]">{primaryItem.topic}</p>
+                  </div>
+                </Link>
+              ) : null}
+              {dayItems.length > 1 ? <span className="absolute right-1.5 top-1.5 z-10 rounded-full bg-black/65 px-1.5 py-0.5 text-[8px] font-bold text-white/70 backdrop-blur sm:right-2 sm:top-2">+{dayItems.length - 1}</span> : null}
             </div>
           );
         })}
@@ -132,6 +167,14 @@ export default async function SelfServiceMonthPage({
                 include: {
                   contentDraft: { select: { id: true } },
                   generatedCreativeVariants: { select: { id: true }, take: 1 },
+                  creativeAssets: {
+                    orderBy: { createdAt: "asc" },
+                    select: {
+                      assetType: true,
+                      notes: true,
+                      generatedVariants: { orderBy: { createdAt: "desc" }, select: { id: true }, take: 1 },
+                    },
+                  },
                 },
               },
             },
@@ -146,9 +189,13 @@ export default async function SelfServiceMonthPage({
   const workspace = membership.client;
   const plan = workspace.monthlyPlans[0] ?? null;
   const productionRun = plan?.productionRuns[0] ?? null;
-  const items = plan?.plannedContentItems ?? [];
-  const readyTexts = items.filter((item) => item.contentDraft).length;
-  const readyVisuals = items.filter((item) => item.generatedCreativeVariants.length > 0).length;
+  const rawItems = plan?.plannedContentItems ?? [];
+  const items: CalendarItem[] = rawItems.map((item) => ({
+    ...item,
+    ...activeVisualInfo(item),
+  }));
+  const readyTexts = rawItems.filter((item) => item.contentDraft).length;
+  const readyVisuals = items.filter((item) => item.thumbnailVariantId).length;
   const visualUsage = plan
     ? await prisma.generatedCreativeVariant.aggregate({
         where: { monthlyPlanId: plan.id },
@@ -160,28 +207,19 @@ export default async function SelfServiceMonthPage({
   const visualBudgetUsd = Number.isFinite(configuredBudget) && configuredBudget > 0 ? configuredBudget : 3;
 
   return (
-    <main className="relative min-h-screen overflow-hidden px-4 py-5 sm:px-7 sm:py-7">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-[440px] bg-[radial-gradient(circle_at_28%_0%,rgba(139,92,246,0.15),transparent_54%)]" />
-      <div className="relative mx-auto max-w-[1180px]">
-        <header className="flex flex-wrap items-center justify-between gap-4 rounded-[24px] border border-white/80 bg-white/80 px-4 py-3 shadow-[0_18px_55px_rgba(77,61,112,0.07)] backdrop-blur-xl sm:px-5">
-          <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-2xl bg-violet-600 text-xs font-extrabold lowercase text-white">cc.</div>
-            <div><p className="text-sm font-semibold text-slate-950">{workspace.name}</p><p className="text-[11px] text-slate-400">Adaptive Presence</p></div>
-          </div>
-          <nav className="flex items-center gap-1 rounded-full border border-slate-200/80 bg-white/90 p-1 text-xs font-semibold text-slate-500">
-            <Link href="/app" className="rounded-full px-3.5 py-2 transition hover:text-slate-900">Главная</Link>
-            <Link href="/app/month#calendar" className="rounded-full bg-violet-50 px-3.5 py-2 text-violet-700">Календарь</Link>
-            <Link href="/app/channels" className="rounded-full px-3.5 py-2 transition hover:text-slate-900">Площадки</Link>
-          </nav>
-          <form action={signOutSelfService}><button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600">Выйти</button></form>
-        </header>
-
+    <SelfServiceAppShell
+      brandName={workspace.name}
+      active="calendar"
+      eyebrow="Календарь"
+      title={plan ? formatMonth(plan.month) : "Соберём первый контент-месяц."}
+      description={plan ? "Материалы распределены по датам. Открывайте готовые тексты, проверяйте визуалы и двигайтесь по календарю." : "Здесь появятся темы, тексты и визуалы для VK, Telegram, Дзена и VC.ru."}
+      headerAction={plan ? <a href="#materials" className="rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-xs font-semibold text-white/70 transition hover:bg-white/[0.07]">Все материалы · {items.length}</a> : null}
+    >
+      <div className="ap-dark-surface">
         {!plan ? (
-          <section className="mx-auto grid min-h-[calc(100vh-120px)] max-w-2xl place-items-center py-12 text-center">
+          <section className="mx-auto grid max-w-2xl place-items-center py-12 text-center">
             <div>
               <span className="inline-flex rounded-full bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700">Бренд сохранён</span>
-              <h1 className="mt-5 font-heading text-5xl font-semibold tracking-[-0.05em] text-slate-950">Соберём первый контент-набор.</h1>
-              <p className="mx-auto mt-4 max-w-xl text-base leading-7 text-slate-600">Здесь появятся темы, тексты и визуалы для VK, Telegram, Дзена и VC.ru — без внутренних очередей и менеджерских статусов.</p>
               <p className="mx-auto mt-3 max-w-xl text-xs leading-5 text-slate-400">Перед генерацией действует защитный лимит визуалов до ${visualBudgetUsd.toFixed(2)} на месяц. Повторный запуск не создаёт уже готовые материалы заново.</p>
               {query.notice === "channels_saved" ? <p className="mx-auto mt-5 max-w-xl rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm font-medium text-violet-900">Площадки сохранены. Теперь можно собрать первый месяц — публикации сразу появятся в календаре.</p> : null}
               {query.error === "blueprint_failed" ? <p className="mx-auto mt-5 max-w-xl rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">Не удалось подготовить профиль с первого раза. Бриф сохранён — можно повторить безопасно.</p> : null}
@@ -196,17 +234,6 @@ export default async function SelfServiceMonthPage({
           </section>
         ) : (
           <>
-            <section className="pb-7 pt-10 sm:pt-12">
-              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-600">Контент месяца</p>
-              <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
-                <div>
-                  <h1 className="font-heading text-4xl font-semibold capitalize tracking-[-0.045em] text-slate-950 sm:text-5xl">{formatMonth(plan.month)}</h1>
-                  <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">Ваш компактный набор материалов. Открывайте готовые тексты, проверяйте визуалы и двигайтесь по календарю.</p>
-                </div>
-                <span className="rounded-full border border-violet-100 bg-violet-50 px-4 py-2 text-xs font-semibold text-violet-700">{items.length} материалов</span>
-              </div>
-            </section>
-
             <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <article className="rounded-[24px] border border-white bg-white p-5 shadow-[0_18px_55px_rgba(77,61,112,0.06)]"><p className="text-xs text-slate-400">План месяца</p><p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950">{items.length}</p><div className="mt-4 h-1.5 rounded-full bg-slate-100"><div className="h-full w-full rounded-full bg-violet-500" /></div></article>
               <article className="rounded-[24px] border border-white bg-white p-5 shadow-[0_18px_55px_rgba(77,61,112,0.06)]"><p className="text-xs text-slate-400">Тексты готовы</p><p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950">{readyTexts}</p><div className="mt-4 h-1.5 rounded-full bg-slate-100"><div className="h-full rounded-full bg-violet-500" style={{ width: `${items.length ? Math.round((readyTexts / items.length) * 100) : 0}%` }} /></div></article>
@@ -232,13 +259,16 @@ export default async function SelfServiceMonthPage({
 
             <MonthCalendar month={plan.month} items={items} />
 
-            <section className="mt-5 overflow-hidden rounded-[28px] border border-white bg-white shadow-[0_22px_70px_rgba(77,61,112,0.07)]">
+            <section id="materials" className="mt-5 scroll-mt-24 overflow-hidden rounded-[28px] border border-white bg-white shadow-[0_22px_70px_rgba(77,61,112,0.07)]">
               <div className="border-b border-slate-100 px-5 py-5 sm:px-7"><h2 className="text-base font-semibold text-slate-950">Материалы по порядку</h2><p className="mt-1 text-xs text-slate-400">Без производственных этапов — только дата, площадка и результат.</p></div>
               <div className="divide-y divide-slate-100">
                 {items.map((item, index) => {
-                  const state = materialState(item);
+                  const sourceItem = rawItems.find((candidate) => candidate.id === item.id)!;
+                  const state = materialState(sourceItem);
+                  const thumbnail = materialThumbnailUrl(item);
                   return (
-                    <Link href={`/app/month/${item.id}`} key={item.id} className="grid gap-4 px-5 py-5 transition hover:bg-violet-50/35 sm:grid-cols-[70px_120px_minmax(0,1fr)_110px] sm:items-center sm:px-7">
+                    <Link href={`/app/month/${item.id}`} key={item.id} className="grid gap-4 px-5 py-4 transition hover:bg-white/[0.025] sm:grid-cols-[56px_76px_105px_minmax(0,1fr)_100px] sm:items-center sm:px-7">
+                      <div className="relative h-14 w-14 overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.03]">{thumbnail ? <img src={thumbnail} alt="" className="h-full w-full object-cover" /> : <span className="grid h-full place-items-center text-lg text-violet-300/45">◇</span>}{item.slideCount > 0 ? <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 py-0.5 text-[7px] font-bold text-white">{item.slideCount}</span> : null}</div>
                       <div><p className="text-sm font-semibold text-slate-950">{formatDate(item.plannedDate)}</p><p className="mt-0.5 text-[11px] text-slate-400">#{String(index + 1).padStart(2, "0")}</p></div>
                       <span className="w-fit rounded-full bg-slate-100 px-3 py-1.5 text-[11px] font-semibold text-slate-600">{platformLabel(item.platformName)}</span>
                       <div className="min-w-0"><h3 className="truncate text-sm font-semibold text-slate-950 sm:whitespace-normal">{item.topic}</h3><p className="mt-1 line-clamp-1 text-xs text-slate-400">{item.goal}</p></div>
@@ -251,6 +281,6 @@ export default async function SelfServiceMonthPage({
           </>
         )}
       </div>
-    </main>
+    </SelfServiceAppShell>
   );
 }
