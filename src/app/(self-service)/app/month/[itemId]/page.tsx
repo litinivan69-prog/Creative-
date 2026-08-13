@@ -3,8 +3,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { signOutSelfService } from "@/lib/self-service/auth-actions";
 import { MaterialEditor } from "@/app/(self-service)/app/month/[itemId]/material-editor";
+import { SelfServiceAppShell } from "@/app/(self-service)/app/self-service-app-shell";
 
 export const dynamic = "force-dynamic";
 
@@ -75,23 +75,19 @@ export default async function SelfServiceMaterialPage({
     ? slides.flatMap((asset) => asset.generatedVariants)
     : item.generatedCreativeVariants.slice(0, 1);
   const visuals = visualVariants.map((variant) => ({ id: variant.id, src: variantSource(variant) })).filter((visual): visual is { id: string; src: string } => Boolean(visual.src));
+  const materialTitle = article?.title || item.contentDraft?.draftTitle || item.topic;
 
   return (
-    <main className="relative min-h-screen overflow-hidden px-4 py-5 sm:px-7 sm:py-7">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-[440px] bg-[radial-gradient(circle_at_30%_0%,rgba(139,92,246,0.14),transparent_55%)]" />
-      <div className="relative mx-auto max-w-[1180px]">
-        <header className="flex flex-wrap items-center justify-between gap-4 rounded-[24px] border border-white/80 bg-white/80 px-4 py-3 shadow-[0_18px_55px_rgba(77,61,112,0.07)] backdrop-blur-xl sm:px-5">
-          <Link href="/app" className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-2xl bg-violet-600 text-xs font-extrabold lowercase text-white">cc.</div><div><p className="text-sm font-semibold text-slate-950">{membership.client.name}</p><p className="text-[11px] text-slate-400">Adaptive Presence</p></div></Link>
-          <Link href="/app/month" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 transition hover:text-violet-700">← Все материалы</Link>
-          <form action={signOutSelfService}><button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600">Выйти</button></form>
-        </header>
-
-        <section className="pb-7 pt-9 sm:pt-11">
-          <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-400"><span>{formatDate(item.plannedDate)}</span><span>·</span><span>{platformLabel(item.platformName)}</span><span className="rounded-full bg-violet-50 px-3 py-1 text-violet-700">{body ? "Текст готов" : "Готовится"}</span></div>
-          <h1 className="mt-4 max-w-4xl font-heading text-4xl font-semibold tracking-[-0.045em] text-slate-950 sm:text-5xl">{article?.title || item.contentDraft?.draftTitle || item.topic}</h1>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-500">{item.goal}</p>
-        </section>
-
+    <SelfServiceAppShell
+      brandName={membership.client.name}
+      active="materials"
+      eyebrow={`${formatDate(item.plannedDate)} · ${platformLabel(item.platformName)}`}
+      title={materialTitle}
+      description={item.goal}
+      headerAction={<Link href="/app/month#materials" className="rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-xs font-semibold text-white/65 transition hover:bg-white/[0.07]">← Все материалы</Link>}
+    >
+      <div className="ap-dark-surface">
+        <div className="mb-5 flex"><span className="rounded-full bg-violet-500/10 px-3 py-1.5 text-[10px] font-semibold text-violet-200">{body ? "Текст готов" : "Готовится"}</span></div>
         {query.notice === "saved" ? <div className="mb-5 rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm font-semibold text-violet-800">Изменения сохранены.</div> : null}
         {query.error ? <div className="mb-5 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-700">{query.error === "text_not_ready" ? "Текст пока не готов. Подождите завершения подготовки." : "Проверьте текст и попробуйте ещё раз."}</div> : null}
 
@@ -117,6 +113,6 @@ export default async function SelfServiceMaterialPage({
           </aside>
         </div>
       </div>
-    </main>
+    </SelfServiceAppShell>
   );
 }

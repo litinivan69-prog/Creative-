@@ -8,7 +8,7 @@ import {
 } from "@/app/(self-service)/app/month/self-service-month-progress";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { signOutSelfService } from "@/lib/self-service/auth-actions";
+import { SelfServiceAppShell } from "@/app/(self-service)/app/self-service-app-shell";
 
 export const dynamic = "force-dynamic";
 
@@ -160,28 +160,19 @@ export default async function SelfServiceMonthPage({
   const visualBudgetUsd = Number.isFinite(configuredBudget) && configuredBudget > 0 ? configuredBudget : 3;
 
   return (
-    <main className="relative min-h-screen overflow-hidden px-4 py-5 sm:px-7 sm:py-7">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-[440px] bg-[radial-gradient(circle_at_28%_0%,rgba(139,92,246,0.15),transparent_54%)]" />
-      <div className="relative mx-auto max-w-[1180px]">
-        <header className="flex flex-wrap items-center justify-between gap-4 rounded-[24px] border border-white/80 bg-white/80 px-4 py-3 shadow-[0_18px_55px_rgba(77,61,112,0.07)] backdrop-blur-xl sm:px-5">
-          <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-2xl bg-violet-600 text-xs font-extrabold lowercase text-white">cc.</div>
-            <div><p className="text-sm font-semibold text-slate-950">{workspace.name}</p><p className="text-[11px] text-slate-400">Adaptive Presence</p></div>
-          </div>
-          <nav className="flex items-center gap-1 rounded-full border border-slate-200/80 bg-white/90 p-1 text-xs font-semibold text-slate-500">
-            <Link href="/app" className="rounded-full px-3.5 py-2 transition hover:text-slate-900">Главная</Link>
-            <Link href="/app/month#calendar" className="rounded-full bg-violet-50 px-3.5 py-2 text-violet-700">Календарь</Link>
-            <Link href="/app/channels" className="rounded-full px-3.5 py-2 transition hover:text-slate-900">Площадки</Link>
-          </nav>
-          <form action={signOutSelfService}><button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600">Выйти</button></form>
-        </header>
-
+    <SelfServiceAppShell
+      brandName={workspace.name}
+      active="calendar"
+      eyebrow="Календарь"
+      title={plan ? formatMonth(plan.month) : "Соберём первый контент-месяц."}
+      description={plan ? "Материалы распределены по датам. Открывайте готовые тексты, проверяйте визуалы и двигайтесь по календарю." : "Здесь появятся темы, тексты и визуалы для VK, Telegram, Дзена и VC.ru."}
+      headerAction={plan ? <a href="#materials" className="rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-xs font-semibold text-white/70 transition hover:bg-white/[0.07]">Все материалы · {items.length}</a> : null}
+    >
+      <div className="ap-dark-surface">
         {!plan ? (
-          <section className="mx-auto grid min-h-[calc(100vh-120px)] max-w-2xl place-items-center py-12 text-center">
+          <section className="mx-auto grid max-w-2xl place-items-center py-12 text-center">
             <div>
               <span className="inline-flex rounded-full bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700">Бренд сохранён</span>
-              <h1 className="mt-5 font-heading text-5xl font-semibold tracking-[-0.05em] text-slate-950">Соберём первый контент-набор.</h1>
-              <p className="mx-auto mt-4 max-w-xl text-base leading-7 text-slate-600">Здесь появятся темы, тексты и визуалы для VK, Telegram, Дзена и VC.ru — без внутренних очередей и менеджерских статусов.</p>
               <p className="mx-auto mt-3 max-w-xl text-xs leading-5 text-slate-400">Перед генерацией действует защитный лимит визуалов до ${visualBudgetUsd.toFixed(2)} на месяц. Повторный запуск не создаёт уже готовые материалы заново.</p>
               {query.notice === "channels_saved" ? <p className="mx-auto mt-5 max-w-xl rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm font-medium text-violet-900">Площадки сохранены. Теперь можно собрать первый месяц — публикации сразу появятся в календаре.</p> : null}
               {query.error === "blueprint_failed" ? <p className="mx-auto mt-5 max-w-xl rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">Не удалось подготовить профиль с первого раза. Бриф сохранён — можно повторить безопасно.</p> : null}
@@ -196,17 +187,6 @@ export default async function SelfServiceMonthPage({
           </section>
         ) : (
           <>
-            <section className="pb-7 pt-10 sm:pt-12">
-              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-600">Контент месяца</p>
-              <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
-                <div>
-                  <h1 className="font-heading text-4xl font-semibold capitalize tracking-[-0.045em] text-slate-950 sm:text-5xl">{formatMonth(plan.month)}</h1>
-                  <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">Ваш компактный набор материалов. Открывайте готовые тексты, проверяйте визуалы и двигайтесь по календарю.</p>
-                </div>
-                <span className="rounded-full border border-violet-100 bg-violet-50 px-4 py-2 text-xs font-semibold text-violet-700">{items.length} материалов</span>
-              </div>
-            </section>
-
             <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <article className="rounded-[24px] border border-white bg-white p-5 shadow-[0_18px_55px_rgba(77,61,112,0.06)]"><p className="text-xs text-slate-400">План месяца</p><p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950">{items.length}</p><div className="mt-4 h-1.5 rounded-full bg-slate-100"><div className="h-full w-full rounded-full bg-violet-500" /></div></article>
               <article className="rounded-[24px] border border-white bg-white p-5 shadow-[0_18px_55px_rgba(77,61,112,0.06)]"><p className="text-xs text-slate-400">Тексты готовы</p><p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950">{readyTexts}</p><div className="mt-4 h-1.5 rounded-full bg-slate-100"><div className="h-full rounded-full bg-violet-500" style={{ width: `${items.length ? Math.round((readyTexts / items.length) * 100) : 0}%` }} /></div></article>
@@ -232,7 +212,7 @@ export default async function SelfServiceMonthPage({
 
             <MonthCalendar month={plan.month} items={items} />
 
-            <section className="mt-5 overflow-hidden rounded-[28px] border border-white bg-white shadow-[0_22px_70px_rgba(77,61,112,0.07)]">
+            <section id="materials" className="mt-5 scroll-mt-24 overflow-hidden rounded-[28px] border border-white bg-white shadow-[0_22px_70px_rgba(77,61,112,0.07)]">
               <div className="border-b border-slate-100 px-5 py-5 sm:px-7"><h2 className="text-base font-semibold text-slate-950">Материалы по порядку</h2><p className="mt-1 text-xs text-slate-400">Без производственных этапов — только дата, площадка и результат.</p></div>
               <div className="divide-y divide-slate-100">
                 {items.map((item, index) => {
@@ -251,6 +231,6 @@ export default async function SelfServiceMonthPage({
           </>
         )}
       </div>
-    </main>
+    </SelfServiceAppShell>
   );
 }

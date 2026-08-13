@@ -122,3 +122,60 @@ button {
   background-size: 200% 100%;
   animation: ap-shimmer 1.6s ease-in-out infinite;
 }
+
+/* Authenticated self-service dark surface. Scoped so the legacy manager UI and
+   the light onboarding remain unchanged during the product transition. */
+.ap-dark-surface [class*="bg-white"] {
+  background-color: rgba(255, 255, 255, 0.035) !important;
+}
+
+.ap-dark-surface [class*="bg-slate-50"],
+.ap-dark-surface [class*="bg-slate-100"] {
+  background-color: rgba(255, 255, 255, 0.045) !important;
+}
+
+.ap-dark-surface [class*="bg-violet-50"] {
+  background-color: rgba(124, 92, 255, 0.1) !important;
+}
+
+.ap-dark-surface [class*="border-white"],
+.ap-dark-surface [class*="border-slate"],
+.ap-dark-surface [class*="border-violet-100"],
+.ap-dark-surface [class*="border-violet-200"] {
+  border-color: rgba(255, 255, 255, 0.07) !important;
+}
+
+.ap-dark-surface [class*="text-slate-950"],
+.ap-dark-surface [class*="text-slate-900"] {
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+.ap-dark-surface [class*="text-slate-800"],
+.ap-dark-surface [class*="text-slate-700"],
+.ap-dark-surface [class*="text-slate-600"] {
+  color: rgba(255, 255, 255, 0.64) !important;
+}
+
+.ap-dark-surface [class*="text-slate-500"],
+.ap-dark-surface [class*="text-slate-400"] {
+  color: rgba(255, 255, 255, 0.34) !important;
+}
+
+.ap-dark-surface [class*="text-violet-700"],
+.ap-dark-surface [class*="text-violet-800"],
+.ap-dark-surface [class*="text-violet-900"],
+.ap-dark-surface [class*="text-violet-950"] {
+  color: #c4b5fd !important;
+}
+
+.ap-dark-surface input,
+.ap-dark-surface textarea,
+.ap-dark-surface select {
+  color: rgba(255, 255, 255, 0.88) !important;
+  color-scheme: dark;
+}
+
+.ap-dark-surface input::placeholder,
+.ap-dark-surface textarea::placeholder {
+  color: rgba(255, 255, 255, 0.24) !important;
+}

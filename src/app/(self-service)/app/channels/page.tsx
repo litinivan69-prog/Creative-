@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ChannelSetupForm } from "@/app/(self-service)/app/channels/channel-setup-form";
+import { SelfServiceAppShell } from "@/app/(self-service)/app/self-service-app-shell";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { signOutSelfService } from "@/lib/self-service/auth-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -43,21 +42,16 @@ export default async function SelfServiceChannelsPage() {
   });
 
   return (
-    <main className="relative min-h-screen overflow-hidden px-4 py-5 sm:px-7 sm:py-7">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-[480px] bg-[radial-gradient(circle_at_24%_0%,rgba(139,92,246,0.16),transparent_48%)]" />
-      <div className="relative mx-auto max-w-[960px]">
-        <header className="flex flex-wrap items-center justify-between gap-4 rounded-[24px] border border-white/80 bg-white/80 px-4 py-3 shadow-[0_18px_55px_rgba(77,61,112,0.07)] backdrop-blur-xl sm:px-5">
-          <Link href="/app" className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-2xl bg-violet-600 text-xs font-extrabold lowercase text-white">cc.</div><div><p className="text-sm font-semibold text-slate-950">{membership.client.name}</p><p className="text-[11px] text-slate-400">Adaptive Presence</p></div></Link>
-          <form action={signOutSelfService}><button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600">Выйти</button></form>
-        </header>
-
-        <section className="pb-12 pt-10 sm:pt-12">
-          <span className="inline-flex rounded-full bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700">Следующий шаг после брифа</span>
-          <h1 className="mt-4 max-w-3xl font-heading text-4xl font-semibold tracking-[-0.045em] text-slate-950 sm:text-5xl">Где бренд уже есть, а что нужно оформить?</h1>
-          <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-600">Для каждой площадки выберите один понятный вариант. Мы сохраним это в профиле и не будем заставлять вас повторно вводить данные.</p>
+    <SelfServiceAppShell
+      brandName={membership.client.name}
+      active="channels"
+      eyebrow="Бренд и площадки"
+      title="Где бренд уже есть, а что нужно оформить?"
+      description="Для каждой площадки выберите один понятный вариант. Мы сохраним это в профиле и не будем заставлять вас повторно вводить данные."
+    >
+      <div className="ap-dark-surface max-w-[960px]">
           <ChannelSetupForm initialChannels={initialChannels} />
-        </section>
       </div>
-    </main>
+    </SelfServiceAppShell>
   );
 }
