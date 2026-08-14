@@ -119,7 +119,7 @@ function workspaceLocation(
   if (options.brandField) searchParams.set("brandField", options.brandField);
   if (options.geoAuditId) searchParams.set("audit", options.geoAuditId);
 
-  return `/?${searchParams.toString()}`;
+  return `/manager?${searchParams.toString()}`;
 }
 
 function jsonInput(value: Prisma.JsonValue): Prisma.InputJsonValue {

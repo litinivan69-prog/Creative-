@@ -502,6 +502,7 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - Vercel requires `DATABASE_URL` to point to a real cloud PostgreSQL database, not `localhost`.
 - Vercel build runs `prisma migrate deploy` before `next build`.
 - `NEXT_PUBLIC_APP_URL` should point to the public production app domain so client portal links do not use protected preview or deployment URLs.
+- The public root redirects to the self-service start. The legacy agency console is available at `/manager` only to authenticated emails listed in `MANAGER_EMAILS`.
 - `OPENAI_API_KEY` must be set in Vercel environment variables for real Blueprint generation.
 - `TEXT_MODEL_DEFAULT`, `TEXT_MODEL_PREMIUM`, `TEXT_MODEL_FAST`, `TEXT_MODEL_STRATEGY`, `TEXT_MODEL_MONTHLY_PLAN`, `TEXT_MODEL_CONTENT`, and `TEXT_MODEL_CREATIVE_BRIEF` can be set in Vercel environment variables to tune the text intelligence layer.
 - `AUTOPILOT_TEXT_BATCH_LIMIT` controls how many missing publication texts Prepare Month Autopilot creates per run; the default is `5`.

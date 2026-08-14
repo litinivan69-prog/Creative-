@@ -1,0 +1,98 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { SelfServiceAppShell, darkCardClass } from "@/app/(self-service)/app/self-service-app-shell";
+import { auth } from "@/auth";
+import { ARTICLE_STAGE_LABELS, articleHeroUrl, type ArticleStage } from "@/lib/article-engine";
+import { prisma } from "@/lib/prisma";
+
+export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Статьи · Adaptive Presence",
+  robots: { index: false, follow: false },
+};
+
+function platformLabel(value: string | null) {
+  if (!value) return "Статья";
+  if (/vc\.ru|виси/i.test(value)) return "VC.ru";
+  if (/дзен|dzen|zen/i.test(value)) return "Дзен";
+  return value;
+}
+
+function stageLabel(stage: string, status: string) {
+  if (status === "failed") return "Нужно повторить";
+  if (stage === "done") return "Готова";
+  return ARTICLE_STAGE_LABELS[stage as ArticleStage] ?? "Готовится";
+}
+
+function formatDate(value: Date) {
+  return new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", year: "numeric" }).format(value);
+}
+
+export default async function SelfServiceArticlesPage() {
+  const session = await auth();
+  const email = session?.user?.email?.trim().toLowerCase();
+  if (!email) redirect("/sign-in?callbackUrl=/app/articles");
+
+  const membership = await prisma.workspaceMembership.findFirst({
+    where: { user: { email } },
+    include: { client: { select: { id: true, name: true } } },
+  });
+  if (!membership) redirect("/start");
+
+  const articles = await prisma.article.findMany({
+    where: { clientId: membership.clientId, status: { not: "archived" } },
+    orderBy: { createdAt: "desc" },
+    take: 40,
+  });
+  const ready = articles.filter((article) => article.stage === "done" && article.status !== "failed").length;
+  const preparing = articles.filter((article) => article.stage !== "done" && article.status !== "failed").length;
+  const platforms = new Set(articles.map((article) => platformLabel(article.platformTarget))).size;
+
+  return (
+    <SelfServiceAppShell
+      brandName={membership.client.name}
+      active="articles"
+      eyebrow="Редакционные материалы"
+      title="Статьи Дзен и VC.ru."
+      description="Отдельное пространство для длинных материалов: структура, редактура, обложка и готовый документ без менеджерской сложности."
+      headerAction={<Link href="/app/month#materials" className="rounded-2xl border border-white/[0.08] bg-white/[0.04] px-5 py-3 text-xs font-semibold text-white/65 transition hover:bg-white/[0.07]">Открыть календарь</Link>}
+    >
+      <section className="grid gap-3 sm:grid-cols-3">
+        {[
+          ["Всего статей", String(articles.length), "в кабинете"],
+          ["Готово", String(ready), preparing ? `${preparing} готовятся` : "можно размещать"],
+          ["Площадки", String(platforms || 0), "Дзен и VC.ru"],
+        ].map(([label, value, detail]) => <article key={label} className={`${darkCardClass} p-5`}><p className="text-[10px] font-bold uppercase tracking-[0.13em] text-white/28">{label}</p><div className="mt-3 flex items-end justify-between gap-3"><p className="text-3xl font-semibold tracking-[-0.04em]">{value}</p><span className="text-[9px] text-white/24">{detail}</span></div></article>)}
+      </section>
+
+      {articles.length ? (
+        <section className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {articles.map((article) => {
+            const cover = articleHeroUrl(article.images);
+            const done = article.stage === "done" && article.status !== "failed";
+            const editorHref = article.plannedContentItemId ? `/app/month/${article.plannedContentItemId}` : null;
+            return <article key={article.id} className={`${darkCardClass} overflow-hidden`}>
+              <div className="relative aspect-[16/8.5] overflow-hidden bg-[radial-gradient(circle_at_30%_10%,rgba(124,92,255,.25),transparent_45%),#111016]">
+                {cover ? <img src={cover} alt="" className="h-full w-full object-cover opacity-80" /> : <div className="grid h-full place-items-center"><span className="text-4xl font-light text-violet-300/45">Aa</span></div>}
+                <span className="absolute left-3 top-3 rounded-full border border-white/10 bg-black/55 px-2.5 py-1 text-[9px] font-semibold text-white/70 backdrop-blur">{platformLabel(article.platformTarget)}</span>
+              </div>
+              <div className="p-5">
+                <div className="flex items-center justify-between gap-3 text-[9px]"><span className={done ? "text-violet-300" : article.status === "failed" ? "text-rose-300" : "text-white/30"}>{stageLabel(article.stage, article.status)}</span><span className="text-white/20">{formatDate(article.createdAt)}</span></div>
+                <h2 className="mt-3 line-clamp-3 min-h-[3.75rem] text-lg font-semibold leading-5 tracking-[-0.025em] text-white/82">{article.title}</h2>
+                <div className="mt-4 flex items-center gap-3 text-[9px] text-white/25"><span>{article.wordCount ? `${article.wordCount.toLocaleString("ru-RU")} слов` : "объём уточняется"}</span><span>·</span><span>{article.provider ? `${article.provider} · ${article.model}` : "редакционный движок"}</span></div>
+                <div className="mt-5 grid grid-cols-2 gap-2">
+                  {editorHref ? <Link href={editorHref} className="rounded-xl bg-violet-500 px-3 py-2.5 text-center text-[10px] font-semibold text-white transition hover:bg-violet-400">Открыть</Link> : <span className="rounded-xl bg-white/[0.04] px-3 py-2.5 text-center text-[10px] text-white/25">Архивная статья</span>}
+                  {done ? <a href={`/api/self-service/articles/${article.id}/docx`} className="rounded-xl border border-white/[0.07] bg-white/[0.035] px-3 py-2.5 text-center text-[10px] font-semibold text-white/55 transition hover:bg-white/[0.06]">DOCX ↓</a> : <span className="rounded-xl border border-white/[0.05] px-3 py-2.5 text-center text-[10px] text-white/20">Документ готовится</span>}
+                </div>
+              </div>
+            </article>;
+          })}
+        </section>
+      ) : (
+        <section className={`${darkCardClass} mt-4 grid min-h-80 place-items-center p-8 text-center`}><div><span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-violet-500/10 text-lg text-violet-200">≡</span><h2 className="mt-5 text-xl font-semibold">Статьи появятся здесь</h2><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-white/32">Выберите Дзен или VC.ru при настройке контент-месяца. Система подготовит структуру, полный текст и обложку автоматически.</p><Link href="/app/month" className="mt-6 inline-flex rounded-2xl bg-violet-500 px-5 py-3 text-xs font-semibold text-white">Открыть месяц</Link></div></section>
+      )}
+    </SelfServiceAppShell>
+  );
+}
