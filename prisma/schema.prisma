@@ -83,6 +83,7 @@ model Client {
   geoAudits GeoAudit[]
   memberships WorkspaceMembership[]
   subscription Subscription?
+  billingPayments BillingPayment[]
 }
 
 model WorkspaceMembership {
@@ -116,6 +117,26 @@ model Subscription {
 
   @@index([status])
   @@index([planCode])
+}
+
+model BillingPayment {
+  id                String    @id @default(cuid())
+  clientId          String
+  provider          String    @default("yookassa")
+  providerPaymentId String?   @unique
+  idempotencyKey    String    @unique
+  status            String    @default("creating")
+  amountMinor       Int
+  currency          String    @default("RUB")
+  confirmationUrl   String?
+  paidAt            DateTime?
+  rawPayload        Json?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  client            Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, createdAt])
+  @@index([status])
 }
 
 model SelfServiceOnboardingDraft {
