@@ -115,6 +115,7 @@ export default async function SelfServiceHomePage() {
   }
 
   const latestPlan = workspace.monthlyPlans[0] ?? null;
+  if (!latestPlan && !workspace.onboardingCompletedAt) redirect("/app/channels?from=brief");
   const items = latestPlan?.plannedContentItems ?? [];
   const readyItems = items.filter((item) => item.contentDraft && overviewVisual(item)).length;
   const nextItem = items.find((item) => item.plannedDate >= new Date().toISOString().slice(0, 10)) ?? items[0] ?? null;
