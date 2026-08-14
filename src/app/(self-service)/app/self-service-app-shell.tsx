@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { signOutSelfService } from "@/lib/self-service/auth-actions";
 
-export type SelfServiceAppView = "overview" | "calendar" | "materials" | "autoposting" | "results" | "channels";
+export type SelfServiceAppView = "overview" | "calendar" | "materials" | "articles" | "autoposting" | "results" | "channels";
 
 const navItems: Array<{ id: SelfServiceAppView; label: string; href: string; icon: string }> = [
   { id: "overview", label: "Обзор", href: "/app", icon: "⌁" },
   { id: "calendar", label: "Календарь", href: "/app/month#calendar", icon: "□" },
   { id: "materials", label: "Материалы", href: "/app/month#materials", icon: "◇" },
+  { id: "articles", label: "Статьи", href: "/app/articles", icon: "≡" },
   { id: "autoposting", label: "Автопостинг", href: "/app/autoposting", icon: "↗" },
   { id: "results", label: "Результаты", href: "/app/results", icon: "⌇" },
 ];
