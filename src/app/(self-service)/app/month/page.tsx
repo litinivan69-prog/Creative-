@@ -188,6 +188,7 @@ export default async function SelfServiceMonthPage({
 
   const workspace = membership.client;
   const plan = workspace.monthlyPlans[0] ?? null;
+  if (!plan && !workspace.onboardingCompletedAt) redirect("/app/channels?from=brief");
   const productionRun = plan?.productionRuns[0] ?? null;
   const rawItems = plan?.plannedContentItems ?? [];
   const items: CalendarItem[] = rawItems.map((item) => ({

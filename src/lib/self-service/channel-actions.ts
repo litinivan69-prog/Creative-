@@ -28,10 +28,11 @@ function cleanUrl(value: FormDataEntryValue | null) {
   return /^https?:\/\//i.test(url) ? url : "";
 }
 
-function settingsRedirect(params: { notice?: string; error?: string }): never {
+function settingsRedirect(params: { notice?: string; error?: string; fromBrief?: boolean }): never {
   const query = new URLSearchParams();
   if (params.notice) query.set("notice", params.notice);
   if (params.error) query.set("error", params.error);
+  if (params.fromBrief) query.set("from", "brief");
   redirect(`/app/channels?${query.toString()}`);
 }
 
@@ -53,7 +54,11 @@ export async function connectSelfServiceSocialChannel(formData: FormData) {
   const reference = String(formData.get("reference") ?? "").trim();
   const suppliedToken = String(formData.get("token") ?? "").trim();
   const autopublishEnabled = formData.get("autopublishEnabled") === "on";
-  if (!reference) settingsRedirect({ error: platform === "vk" ? "Укажите ссылку на сообщество VK." : "Укажите адрес Telegram-канала." });
+  const fromBrief = formData.get("onboarding") === "1";
+  function connectRedirect(params: { notice?: string; error?: string }): never {
+    return settingsRedirect({ ...params, fromBrief });
+  }
+  if (!reference) connectRedirect({ error: platform === "vk" ? "Укажите ссылку на сообщество VK." : "Укажите адрес Telegram-канала." });
 
   const existing = await prisma.clientChannel.findFirst({
     where: { clientId: membership.clientId, platform },
@@ -67,29 +72,29 @@ export async function connectSelfServiceSocialChannel(formData: FormData) {
 
   if (platform === "telegram") {
     const token = suppliedToken || decryptChannelCredential(existing?.credentialEncrypted) || await getTelegramBotToken();
-    if (!token) settingsRedirect({ error: "Нужен токен Telegram-бота. Получите его у @BotFather и вставьте один раз." });
+    if (!token) connectRedirect({ error: "Нужен токен Telegram-бота. Получите его у @BotFather и вставьте один раз." });
     if (suppliedToken) {
       const bot = await verifyTelegramBotToken(token);
-      if (!bot.ok) settingsRedirect({ error: bot.error ?? "Telegram не принял токен бота." });
+      if (!bot.ok) connectRedirect({ error: bot.error ?? "Telegram не принял токен бота." });
       credentialHint = bot.username ? `@${bot.username}` : "Telegram-бот";
       credentialEncrypted = encryptChannelCredential(token);
     }
     const channel = await verifyTelegramChannel(token, reference);
     const chat = channel.chat;
-    if (!channel.ok || !chat) settingsRedirect({ error: channel.error ?? "Бот не видит Telegram-канал." });
+    if (!channel.ok || !chat) connectRedirect({ error: channel.error ?? "Бот не видит Telegram-канал." });
     channelId = chat.username ? `@${chat.username}` : String(chat.id);
     title = chat.title || "Telegram";
   } else {
     const token = suppliedToken || decryptChannelCredential(existing?.credentialEncrypted) || await getIntegrationSetting(VK_ACCESS_TOKEN_KEY);
-    if (!token) settingsRedirect({ error: "Нужен токен VK с доступом к сообществу." });
+    if (!token) connectRedirect({ error: "Нужен токен VK с доступом к сообществу." });
     if (suppliedToken) {
       const account = await verifyVkToken(token);
-      if (!account.ok) settingsRedirect({ error: account.error ?? "VK не принял токен." });
+      if (!account.ok) connectRedirect({ error: account.error ?? "VK не принял токен." });
       credentialHint = account.label || "VK";
       credentialEncrypted = encryptChannelCredential(token);
     }
     const group = await verifyVkGroup(token, reference);
-    if (!group.ok || !group.groupId) settingsRedirect({ error: group.error ?? "Сообщество VK не найдено." });
+    if (!group.ok || !group.groupId) connectRedirect({ error: group.error ?? "Сообщество VK не найдено." });
     channelId = String(group.groupId);
     title = group.title || "VK";
   }
@@ -112,14 +117,15 @@ export async function connectSelfServiceSocialChannel(formData: FormData) {
   revalidatePath("/app");
   revalidatePath("/app/channels");
   revalidatePath("/app/autoposting");
-  settingsRedirect({ notice: `${title} подключён. Соединение проверено.` });
+  connectRedirect({ notice: `${title} подключён. Соединение проверено.` });
 }
 
 export async function disconnectSelfServiceSocialChannel(formData: FormData) {
   const membership = await currentMembership();
   if (!membership) redirect("/sign-in?callbackUrl=/app/channels");
   const channelId = String(formData.get("channelRecordId") ?? "").trim();
-  if (!channelId) settingsRedirect({ error: "Подключение не найдено." });
+  const fromBrief = formData.get("onboarding") === "1";
+  if (!channelId) settingsRedirect({ error: "Подключение не найдено.", fromBrief });
 
   await prisma.clientChannel.updateMany({
     where: { id: channelId, clientId: membership.clientId },
@@ -134,7 +140,21 @@ export async function disconnectSelfServiceSocialChannel(formData: FormData) {
   revalidatePath("/app");
   revalidatePath("/app/channels");
   revalidatePath("/app/autoposting");
-  settingsRedirect({ notice: "Площадка отключена." });
+  settingsRedirect({ notice: "Площадка отключена.", fromBrief });
+}
+
+export async function completeSelfServiceChannelOnboarding() {
+  const membership = await currentMembership();
+  if (!membership) redirect("/sign-in?callbackUrl=/app/channels?from=brief");
+
+  await prisma.client.update({
+    where: { id: membership.clientId },
+    data: { onboardingCompletedAt: new Date() },
+  });
+
+  revalidatePath("/app");
+  revalidatePath("/app/channels");
+  redirect("/app/month?notice=channels_saved");
 }
 
 export async function publishSelfServiceMaterialNow(formData: FormData) {
