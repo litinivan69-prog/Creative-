@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { hasSelfServicePaidAccess } from "@/lib/self-service/subscription";
 import { darkCardClass, SelfServiceAppShell } from "@/app/(self-service)/app/self-service-app-shell";
+import { PlatformBrandIcon, platformBrandFromFormatId } from "@/app/(self-service)/platform-brand-icon";
 
 export const dynamic = "force-dynamic";
 
@@ -89,7 +90,7 @@ export default async function SelfServicePreviewPage() {
   const rawBrief = brief.rawBrief;
   const formats = briefValue(rawBrief, "Выбранные форматы")
     .split(",")
-    .map((format) => formatLabels[format.trim()] ?? format.trim())
+    .map((format) => ({ id: format.trim(), label: formatLabels[format.trim()] ?? format.trim() }))
     .filter(Boolean);
   const topics = previewTopics(rawBrief, workspace.name);
   const profile = workspace.brandProfile;
@@ -120,7 +121,10 @@ export default async function SelfServicePreviewPage() {
           <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-violet-300">Ваш набор</p>
           <h2 className="mt-3 text-2xl font-semibold tracking-[-0.035em] text-white">Лёгкий месяц без перегруза</h2>
           <p className="mt-2 text-sm leading-6 text-white/38">Только выбранные площадки и понятный ритм публикаций.</p>
-          <div className="mt-6 flex flex-wrap gap-2">{formats.map((format) => <span key={format} className="rounded-xl border border-white/[0.07] bg-white/[0.04] px-3 py-2 text-xs text-white/65">{format}</span>)}</div>
+          <div className="mt-6 grid gap-2 sm:grid-cols-2">{formats.map((format) => {
+            const platform = platformBrandFromFormatId(format.id);
+            return <div key={format.id} className="flex min-w-0 items-center gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.04] p-3">{platform ? <PlatformBrandIcon platform={platform} className="[&>span]:h-9 [&>span]:w-9 [&>span]:rounded-[11px]" /> : null}<span className="truncate text-xs font-medium text-white/68">{format.label}</span></div>;
+          })}</div>
           <div className="mt-6 grid grid-cols-3 gap-2 text-center">
             <div className="rounded-2xl bg-violet-500/10 p-3"><p className="text-xl font-semibold text-white">8</p><p className="mt-1 text-[9px] text-white/30">публикаций</p></div>
             <div className="rounded-2xl bg-white/[0.035] p-3"><p className="text-xl font-semibold text-white">4</p><p className="mt-1 text-[9px] text-white/30">недели</p></div>

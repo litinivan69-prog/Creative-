@@ -10,6 +10,7 @@ import {
   selfServiceBriefHref,
   type SelfServiceFormatId,
 } from "@/lib/self-service/product";
+import { PlatformBrandIcon, platformBrandFromFormatId, type PlatformBrand } from "@/app/(self-service)/platform-brand-icon";
 
 const coreFormats = SELF_SERVICE_FORMATS.filter((format) => format.core);
 const helperFormats = SELF_SERVICE_FORMATS.filter((format) => !format.core);
@@ -33,11 +34,13 @@ function SelectCard({
   active,
   title,
   description,
+  platform,
   onClick,
 }: {
   active: boolean;
   title: string;
   description: string;
+  platform?: PlatformBrand | null;
   onClick: () => void;
 }) {
   return (
@@ -45,16 +48,19 @@ function SelectCard({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`min-w-0 rounded-[22px] border p-4 text-left transition duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-violet-200 ${
+      className={`group min-w-0 rounded-[22px] border p-4 text-left transition duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-violet-200 ${
         active
-          ? "border-violet-300 bg-violet-50/80 shadow-[0_14px_45px_rgba(109,82,171,0.10)]"
-          : "border-slate-200/80 bg-white/80 hover:border-violet-200 hover:bg-white"
+          ? "border-violet-400 bg-violet-50/90 shadow-[0_14px_45px_rgba(109,82,171,0.12)]"
+          : "border-slate-200/80 bg-white/80 hover:-translate-y-0.5 hover:border-violet-200 hover:bg-white hover:shadow-[0_12px_30px_rgba(77,61,112,.07)]"
       }`}
     >
       <span className="flex items-start justify-between gap-3">
-        <span className="min-w-0">
+        <span className="flex min-w-0 items-start gap-3.5">
+          {platform ? <PlatformBrandIcon platform={platform} /> : null}
+          <span className="min-w-0 pt-0.5">
           <span className="block text-sm font-semibold text-slate-950">{title}</span>
           <span className="mt-1 block text-xs leading-5 text-slate-500">{description}</span>
+          </span>
         </span>
         <span
           className={`grid h-6 w-6 shrink-0 place-items-center rounded-full border ${
@@ -217,6 +223,7 @@ export function SelfServiceStart() {
                     active={selectedFormats.includes(format.id)}
                     title={format.label}
                     description={format.description}
+                    platform={platformBrandFromFormatId(format.id)}
                     onClick={() => toggleFormat(format.id)}
                   />
                 ))}
