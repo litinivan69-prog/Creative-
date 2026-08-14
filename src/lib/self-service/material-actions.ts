@@ -137,6 +137,68 @@ export async function markSelfServiceMaterialReady(formData: FormData) {
   redirect(`/app/month/${item.id}?notice=ready`);
 }
 
+export async function markSelfServiceMaterialPublishedManually(formData: FormData) {
+  const itemId = String(formData.get("itemId") ?? "").trim();
+  const externalUrlRaw = String(formData.get("externalUrl") ?? "").trim();
+  const clientId = await currentClientId();
+
+  if (!clientId) redirect(`/sign-in?callbackUrl=/app/month/${encodeURIComponent(itemId)}`);
+  if (!itemId) redirect("/app/month?error=material_missing");
+
+  let externalUrl: string | null = null;
+  if (externalUrlRaw) {
+    try {
+      const parsed = new URL(externalUrlRaw);
+      if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error("invalid protocol");
+      externalUrl = parsed.toString();
+    } catch {
+      redirect(`/app/month/${encodeURIComponent(itemId)}?error=publication_url_invalid`);
+    }
+  }
+
+  const item = await prisma.plannedContentItem.findFirst({
+    where: { id: itemId, monthlyPlan: { clientId } },
+    include: {
+      contentDraft: { select: { id: true, status: true } },
+      scheduledPublications: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true, publishStatus: true } },
+    },
+  });
+  if (!item?.contentDraft) redirect(`/app/month/${encodeURIComponent(itemId)}?error=material_not_ready`);
+
+  const publication = item.scheduledPublications[0];
+  if (!publication) redirect(`/app/month/${encodeURIComponent(itemId)}?error=publication_missing`);
+  if (publication.publishStatus === "published") redirect(`/app/month/${encodeURIComponent(itemId)}?notice=already_published`);
+  if (!["ready_to_schedule", "approved"].includes(item.contentDraft.status)) {
+    redirect(`/app/month/${encodeURIComponent(itemId)}?error=confirm_first`);
+  }
+
+  await prisma.scheduledPublication.update({
+    where: { id: publication.id },
+    data: {
+      status: "published",
+      publishStatus: "published",
+      publishedAt: new Date(),
+      externalUrl,
+      publishErrorMessage: null,
+    },
+  });
+
+  await prisma.contentDraftReviewEvent.create({
+    data: {
+      contentDraftId: item.contentDraft.id,
+      actorType: "client",
+      action: "marked_published_manually",
+      comment: externalUrl ? "Публикация отмечена вручную со ссылкой." : "Публикация отмечена вручную.",
+    },
+  });
+
+  revalidatePath("/app");
+  revalidatePath("/app/month");
+  revalidatePath("/app/results");
+  revalidatePath(`/app/month/${itemId}`);
+  redirect(`/app/month/${itemId}?notice=published`);
+}
+
 export async function saveSelfServicePublicationSchedule(formData: FormData) {
   const itemId = String(formData.get("itemId") ?? "").trim();
   const scheduledDate = String(formData.get("scheduledDate") ?? "").trim();
