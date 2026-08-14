@@ -63,6 +63,7 @@ import { storeGeoReportFile } from "@/lib/geo-storage";
 import { extractGeoAudit, type GeoAuditExtraction } from "@/lib/geo-pptx-extract";
 import { getClientBrandContext } from "@/lib/brand-context";
 import { runArticlePipeline, runArticleForPlannedItem } from "@/lib/article-engine";
+import { hasSelfServicePaidAccess } from "@/lib/self-service/subscription";
 
 function formText(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -2048,6 +2049,7 @@ async function currentSelfServiceWorkspace() {
     include: {
       client: {
         include: {
+          subscription: true,
           briefs: { orderBy: { createdAt: "desc" }, take: 1, include: { blueprint: true } },
           monthlyPlans: {
             where: { month: currentMonth(), status: { notIn: ["archived", "replaced"] } },
@@ -2064,6 +2066,9 @@ export async function startSelfServiceMonth() {
   const membership = await currentSelfServiceWorkspace();
   if (!membership) redirect("/sign-in?callbackUrl=/app/month");
   if (membership.client.monthlyPlans[0]) redirect("/app/month?notice=month_exists");
+  if (!hasSelfServicePaidAccess(membership.client.subscription)) {
+    redirect("/app/subscribe");
+  }
 
   const brief = membership.client.briefs[0];
   if (!brief) redirect("/start?error=onboarding_missing");
@@ -2087,6 +2092,10 @@ export async function continueSelfServiceMonth() {
   if (existingPlan) {
     const run = await createMonthProductionRun(existingPlan.id);
     return { ok: true as const, monthlyPlanId: existingPlan.id, productionRunId: run.id };
+  }
+
+  if (!hasSelfServicePaidAccess(membership.client.subscription)) {
+    return { ok: false as const, message: "Для подготовки полного месяца сначала активируйте подписку." };
   }
 
   const brief = membership.client.briefs[0];

@@ -8,6 +8,7 @@ import {
 } from "@/app/(self-service)/app/month/self-service-month-progress";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { hasSelfServicePaidAccess } from "@/lib/self-service/subscription";
 import { SelfServiceAppShell } from "@/app/(self-service)/app/self-service-app-shell";
 
 export const dynamic = "force-dynamic";
@@ -156,6 +157,7 @@ export default async function SelfServiceMonthPage({
     include: {
       client: {
         include: {
+          subscription: true,
           monthlyPlans: {
             where: { status: { notIn: ["archived", "replaced"] } },
             orderBy: { createdAt: "desc" },
@@ -188,7 +190,7 @@ export default async function SelfServiceMonthPage({
 
   const workspace = membership.client;
   const plan = workspace.monthlyPlans[0] ?? null;
-  if (!plan && !workspace.onboardingCompletedAt) redirect("/app/channels?from=brief");
+  if (!plan && !hasSelfServicePaidAccess(workspace.subscription)) redirect("/app/preview");
   const productionRun = plan?.productionRuns[0] ?? null;
   const rawItems = plan?.plannedContentItems ?? [];
   const items: CalendarItem[] = rawItems.map((item) => ({

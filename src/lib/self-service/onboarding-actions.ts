@@ -117,7 +117,7 @@ export async function stageSelfServiceOnboarding(formData: FormData) {
     const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
     if (user) {
       await createWorkspaceForUser(user.id, input);
-      redirect("/app/channels?from=brief");
+      redirect("/app/preview");
     }
   }
 
@@ -245,5 +245,5 @@ export async function claimSelfServiceOnboarding() {
   });
 
   if (rawToken) cookieStore.delete(SELF_SERVICE_ONBOARDING_COOKIE);
-  redirect("/app/channels?from=brief");
+  redirect("/app/preview");
 }
