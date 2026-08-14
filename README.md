@@ -508,12 +508,19 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - `VISUAL_PROVIDER`, `OPENAI_IMAGE_MODEL`, `OPENAI_IMAGE_QUALITY`, `OPENAI_IMAGE_SIZE`, and `VISUAL_TEXT_MODE` can be set in Vercel environment variables for visual generation.
 - `BLOB_READ_WRITE_TOKEN` is required for Vercel Blob uploads. Without it, generated visuals temporarily fall back to database base64 storage.
 - The premium defaults are `openai`, `gpt-image-2`, `high`, `auto`, and `image_text`.
+- Self-service checkout uses YooKassa when `YOOKASSA_SHOP_ID` and `YOOKASSA_SECRET_KEY` are set.
+- Configure YooKassa notifications for `payment.succeeded` and `payment.canceled` at `https://<production-domain>/api/billing/yookassa/webhook`.
+- Payment notifications are never trusted on their own: the app fetches the payment from YooKassa and verifies the amount, currency, client metadata, and local payment id before activating access.
+- `YOOKASSA_VAT_CODE` is optional and should be set only when receipt items must be sent by the application according to the shop's YooKassa/online-cash-register configuration.
 
 ## Data Model
 
 The Prisma schema includes:
 
 - `Client`
+- `WorkspaceMembership`
+- `Subscription`
+- `BillingPayment`
 - `ClientBrandProfile`
 - `ClientBrandAsset`
 - `ClientBrief`

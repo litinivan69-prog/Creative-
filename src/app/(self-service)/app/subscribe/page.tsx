@@ -63,10 +63,12 @@ export default async function SelfServiceSubscribePage({ searchParams }: { searc
     >
       <section className="mx-auto grid max-w-4xl gap-4 lg:grid-cols-[1fr_.82fr]">
         <article className={`${darkCardClass} border-violet-400/20 bg-[linear-gradient(145deg,rgba(111,75,255,.16),rgba(255,255,255,.025))] p-7 sm:p-9`}>
-          <div className="flex flex-wrap items-center justify-between gap-3"><span className="rounded-full bg-violet-500/15 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-violet-200">Основной тариф</span><span className="text-[10px] text-white/28">Отмена в любой момент</span></div>
+          <div className="flex flex-wrap items-center justify-between gap-3"><span className="rounded-full bg-violet-500/15 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-violet-200">Основной тариф</span><span className="text-[10px] text-white/28">Без автосписаний на старте</span></div>
           <div className="mt-8 flex items-end gap-2"><span className="text-5xl font-semibold tracking-[-0.055em] text-white">19 900 ₽</span><span className="pb-1.5 text-sm text-white/30">/ месяц</span></div>
           <p className="mt-3 max-w-lg text-sm leading-6 text-white/45">Полный рабочий кабинет для самостоятельного присутствия бренда — от идеи до готовой публикации.</p>
           {query.error === "checkout_unavailable" ? <p className="mt-5 rounded-2xl border border-amber-300/15 bg-amber-300/[0.06] px-4 py-3 text-xs leading-5 text-amber-100/80">Платёжный модуль ещё подключается. Ваш бриф и персональное превью сохранены — ничего заполнять заново не придётся.</p> : null}
+          {query.error === "payment_failed" ? <p className="mt-5 rounded-2xl border border-rose-300/15 bg-rose-300/[0.06] px-4 py-3 text-xs leading-5 text-rose-100/80">Не удалось открыть защищённую оплату. Деньги не списаны — попробуйте ещё раз чуть позже.</p> : null}
+          {query.error === "payment_canceled" ? <p className="mt-5 rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-xs leading-5 text-white/60">Оплата отменена. Можно вернуться к ней, когда будете готовы.</p> : null}
           <form action={beginSelfServiceCheckout} className="mt-7"><button className="w-full rounded-2xl bg-white px-6 py-4 text-sm font-semibold text-slate-950 shadow-[0_18px_50px_rgba(0,0,0,.2)] transition hover:bg-violet-50">Перейти к оплате</button></form>
           <p className="mt-3 text-center text-[10px] text-white/24">Полные тексты и визуалы начнут создаваться только после успешной оплаты.</p>
         </article>
