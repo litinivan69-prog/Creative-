@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { signOutSelfService } from "@/lib/self-service/auth-actions";
+import { hasSelfServicePaidAccess } from "@/lib/self-service/subscription";
 import { darkCardClass, SelfServiceAppShell } from "@/app/(self-service)/app/self-service-app-shell";
 
 export const dynamic = "force-dynamic";
@@ -115,7 +116,9 @@ export default async function SelfServiceHomePage() {
   }
 
   const latestPlan = workspace.monthlyPlans[0] ?? null;
-  if (!latestPlan && !workspace.onboardingCompletedAt) redirect("/app/channels?from=brief");
+  if (!latestPlan) {
+    redirect(hasSelfServicePaidAccess(workspace.subscription) ? "/app/month" : "/app/preview");
+  }
   const items = latestPlan?.plannedContentItems ?? [];
   const readyItems = items.filter((item) => item.contentDraft && overviewVisual(item)).length;
   const nextItem = items.find((item) => item.plannedDate >= new Date().toISOString().slice(0, 10)) ?? items[0] ?? null;
