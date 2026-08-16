@@ -5,6 +5,7 @@ import { SelfServiceAppShell, darkCardClass } from "@/app/(self-service)/app/sel
 import { auth } from "@/auth";
 import { ARTICLE_STAGE_LABELS, articleHeroUrl, type ArticleStage } from "@/lib/article-engine";
 import { prisma } from "@/lib/prisma";
+import { PlatformBrandIcon, platformBrandFromName } from "@/app/(self-service)/platform-brand-icon";
 
 export const dynamic = "force-dynamic";
 
@@ -73,10 +74,11 @@ export default async function SelfServiceArticlesPage() {
             const cover = articleHeroUrl(article.images);
             const done = article.stage === "done" && article.status !== "failed";
             const editorHref = article.plannedContentItemId ? `/app/month/${article.plannedContentItemId}` : null;
+            const platform = platformBrandFromName(article.platformTarget);
             return <article key={article.id} className={`${darkCardClass} overflow-hidden`}>
               <div className="relative aspect-[16/8.5] overflow-hidden bg-[radial-gradient(circle_at_30%_10%,rgba(124,92,255,.25),transparent_45%),#111016]">
                 {cover ? <img src={cover} alt="" className="h-full w-full object-cover opacity-80" /> : <div className="grid h-full place-items-center"><span className="text-4xl font-light text-violet-300/45">Aa</span></div>}
-                <span className="absolute left-3 top-3 rounded-full border border-white/10 bg-black/55 px-2.5 py-1 text-[9px] font-semibold text-white/70 backdrop-blur">{platformLabel(article.platformTarget)}</span>
+                <span className="absolute left-3 top-3 flex items-center gap-2 rounded-full border border-white/10 bg-black/60 py-1 pl-1 pr-3 text-[9px] font-semibold text-white/80 backdrop-blur">{platform ? <PlatformBrandIcon platform={platform} size="xs" /> : null}{platformLabel(article.platformTarget)}</span>
               </div>
               <div className="p-5">
                 <div className="flex items-center justify-between gap-3 text-[9px]"><span className={done ? "text-violet-300" : article.status === "failed" ? "text-rose-300" : "text-white/30"}>{stageLabel(article.stage, article.status)}</span><span className="text-white/20">{formatDate(article.createdAt)}</span></div>

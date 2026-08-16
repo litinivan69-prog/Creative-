@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { SelfServiceAppShell, darkCardClass } from "@/app/(self-service)/app/self-service-app-shell";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { PlatformBrandIcon, platformBrandFromName } from "@/app/(self-service)/platform-brand-icon";
 
 export const dynamic = "force-dynamic";
 
@@ -128,7 +129,7 @@ export default async function SelfServiceResultsPage() {
             <article className={`${darkCardClass} p-6 sm:p-7`}>
               <div className="flex items-end justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-violet-300">По площадкам</p><h2 className="mt-2 text-xl font-semibold tracking-[-0.03em]">Ритм присутствия</h2></div><span className="text-[9px] text-white/24">опубликовано / план</span></div>
               <div className="mt-6 space-y-3">
-                {platformRows.map((row) => <div key={row.name} className="rounded-2xl border border-white/[0.06] bg-black/15 p-4"><div className="flex items-center justify-between gap-4"><div><p className="text-sm font-semibold text-white/72">{row.name}</p><p className="mt-1 text-[10px] text-white/26">{row.views ? `${row.views.toLocaleString("ru-RU")} просмотров · ${row.reactions.toLocaleString("ru-RU")} реакций` : "метрики площадки пока не получены"}</p></div><span className="text-sm font-semibold text-violet-200">{row.published} / {row.planned}</span></div><div className="mt-3 h-1 overflow-hidden rounded-full bg-white/[0.05]"><div className="h-full rounded-full bg-violet-500" style={{ width: `${row.planned ? Math.round((row.published / row.planned) * 100) : 0}%` }} /></div></div>)}
+                {platformRows.map((row) => { const platform = platformBrandFromName(row.name); return <div key={row.name} className="rounded-2xl border border-white/[0.06] bg-black/15 p-4"><div className="flex items-center justify-between gap-4"><div className="flex min-w-0 items-center gap-3">{platform ? <PlatformBrandIcon platform={platform} size="sm" /> : null}<div className="min-w-0"><p className="text-sm font-semibold text-white/72">{row.name}</p><p className="mt-1 truncate text-[10px] text-white/26">{row.views ? `${row.views.toLocaleString("ru-RU")} просмотров · ${row.reactions.toLocaleString("ru-RU")} реакций` : "метрики площадки пока не получены"}</p></div></div><span className="shrink-0 text-sm font-semibold text-violet-200">{row.published} / {row.planned}</span></div><div className="mt-3 h-1 overflow-hidden rounded-full bg-white/[0.05]"><div className="h-full rounded-full bg-violet-500" style={{ width: `${row.planned ? Math.round((row.published / row.planned) * 100) : 0}%` }} /></div></div>; })}
               </div>
             </article>
 
