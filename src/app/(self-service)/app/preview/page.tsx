@@ -94,6 +94,15 @@ export default async function SelfServicePreviewPage() {
     .filter(Boolean);
   const topics = previewTopics(rawBrief, workspace.name);
   const profile = workspace.brandProfile;
+  const postTopics = briefValue(rawBrief, "Ритм постов") === "calm" ? 4 : 8;
+  const articleRhythm = briefValue(rawBrief, "Ритм статей");
+  const articleCount = articleRhythm === "two" ? 2 : articleRhythm === "one" ? 1 : 0;
+  const platformFormats = formats.map((format) => ({ ...format, platform: platformBrandFromFormatId(format.id) })).filter((format) => format.platform);
+  const calendarPreview = topics.slice(0, 6).map((topic, index) => ({
+    topic,
+    day: [3, 6, 10, 13, 17, 20][index],
+    format: platformFormats[index % Math.max(platformFormats.length, 1)] ?? null,
+  }));
 
   return (
     <SelfServiceAppShell
@@ -126,10 +135,24 @@ export default async function SelfServicePreviewPage() {
             return <div key={format.id} className="flex min-w-0 items-center gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.04] p-3">{platform ? <PlatformBrandIcon platform={platform} size="sm" /> : null}<span className="truncate text-xs font-medium text-white/68">{format.label}</span></div>;
           })}</div>
           <div className="mt-6 grid grid-cols-3 gap-2 text-center">
-            <div className="rounded-2xl bg-violet-500/10 p-3"><p className="text-xl font-semibold text-white">8</p><p className="mt-1 text-[9px] text-white/30">публикаций</p></div>
+            <div className="rounded-2xl bg-violet-500/10 p-3"><p className="text-xl font-semibold text-white">до {postTopics}</p><p className="mt-1 text-[9px] text-white/30">тем для постов</p></div>
             <div className="rounded-2xl bg-white/[0.035] p-3"><p className="text-xl font-semibold text-white">4</p><p className="mt-1 text-[9px] text-white/30">недели</p></div>
-            <div className="rounded-2xl bg-white/[0.035] p-3"><p className="text-xl font-semibold text-white">1</p><p className="mt-1 text-[9px] text-white/30">система</p></div>
+            <div className="rounded-2xl bg-white/[0.035] p-3"><p className="text-xl font-semibold text-white">{articleCount || "—"}</p><p className="mt-1 text-[9px] text-white/30">{articleCount === 0 ? "без статей" : articleCount === 1 ? "статья" : "статьи"}</p></div>
           </div>
+        </article>
+      </section>
+
+      <section className="mt-4 grid gap-4 lg:grid-cols-[1.08fr_.92fr]">
+        <article className={`${darkCardClass} p-6 sm:p-7`}>
+          <div className="flex items-end justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-violet-300">Календарь месяца</p><h2 className="mt-2 text-xl font-semibold tracking-[-0.03em] text-white">Так выглядит будущий ритм</h2></div><span className="text-[9px] text-white/24">предварительно</span></div>
+          <div className="mt-6 grid gap-2 sm:grid-cols-2">
+            {calendarPreview.map((item) => <div key={`${item.day}-${item.topic}`} className="flex min-w-0 items-center gap-3 rounded-2xl border border-white/[0.06] bg-black/15 p-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-violet-500/10 text-xs font-semibold text-violet-200">{item.day}</span>{item.format?.platform ? <PlatformBrandIcon platform={item.format.platform} size="xs" /> : null}<div className="min-w-0"><p className="text-[9px] text-white/25">{item.format?.label ?? "Материал"}</p><p className="mt-1 line-clamp-1 text-[11px] font-medium text-white/62">{item.topic}</p></div></div>)}
+          </div>
+        </article>
+
+        <article className={`${darkCardClass} overflow-hidden`}>
+          <div className="relative h-44 bg-[radial-gradient(circle_at_30%_20%,rgba(124,92,255,.38),transparent_36%),radial-gradient(circle_at_78%_68%,rgba(72,190,165,.16),transparent_34%),linear-gradient(145deg,#191523,#0d0c11)]"><div className="absolute inset-0 opacity-35 [background-image:linear-gradient(rgba(255,255,255,.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.04)_1px,transparent_1px)] [background-size:28px_28px]" /><div className="absolute inset-x-6 bottom-6"><p className="text-[9px] font-bold uppercase tracking-[0.13em] text-violet-200/80">Визуальная концепция</p><p className="mt-2 max-w-xs text-lg font-semibold leading-5 text-white/85">Материал в стиле вашего бренда</p></div></div>
+          <div className="relative p-6"><div className="space-y-2 opacity-30 blur-[2px]"><div className="h-2.5 w-full rounded bg-white/40" /><div className="h-2.5 w-11/12 rounded bg-white/35" /><div className="h-2.5 w-4/5 rounded bg-white/30" /><div className="h-2.5 w-2/3 rounded bg-white/25" /></div><div className="absolute inset-0 grid place-items-center bg-[#111016]/28 backdrop-blur-[1px]"><div className="rounded-2xl border border-violet-400/20 bg-[#171421]/95 px-4 py-3 text-center shadow-2xl"><span className="mx-auto grid h-7 w-7 place-items-center rounded-xl bg-violet-500/15 text-xs text-violet-200">⌁</span><p className="mt-2 text-[11px] font-semibold text-white">Полный материал защищён</p><p className="mt-1 text-[9px] text-white/32">откроется после активации</p></div></div></div>
         </article>
       </section>
 
