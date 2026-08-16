@@ -10,6 +10,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { hasSelfServicePaidAccess } from "@/lib/self-service/subscription";
 import { SelfServiceAppShell } from "@/app/(self-service)/app/self-service-app-shell";
+import { PlatformBrandIcon, platformBrandFromName } from "@/app/(self-service)/platform-brand-icon";
 
 export const dynamic = "force-dynamic";
 
@@ -120,6 +121,7 @@ function MonthCalendar({ month, items }: { month: string; items: CalendarItem[] 
           const dayItems = day ? byDay.get(day) ?? [] : [];
           const primaryItem = dayItems[0] ?? null;
           const thumbnail = primaryItem ? materialThumbnailUrl(primaryItem) : null;
+          const primaryPlatform = primaryItem ? platformBrandFromName(primaryItem.platformName) : null;
           return (
             <div key={`${day ?? "blank"}-${index}`} className={`relative min-h-[72px] min-w-0 overflow-hidden rounded-xl border sm:min-h-[128px] sm:rounded-2xl ${day ? "border-white/[0.055] bg-black/15" : "border-transparent bg-transparent"}`}>
               {day ? <span className={`absolute left-1.5 top-1.5 z-10 grid h-5 min-w-5 place-items-center rounded-full px-1 text-[9px] font-semibold backdrop-blur-md sm:left-2 sm:top-2 ${dayItems.length ? "bg-violet-500 text-white" : "bg-black/45 text-white/45"}`}>{day}</span> : null}
@@ -128,7 +130,7 @@ function MonthCalendar({ month, items }: { month: string; items: CalendarItem[] 
                   {thumbnail ? <img src={thumbnail} alt="" className="h-full w-full object-cover opacity-75 transition duration-300 group-hover:scale-[1.03] group-hover:opacity-90" /> : <div className="h-full w-full bg-[radial-gradient(circle_at_50%_20%,rgba(124,92,255,.18),transparent_55%),linear-gradient(145deg,rgba(255,255,255,.035),rgba(255,255,255,.01))]" />}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/25 to-transparent" />
                   <div className="absolute inset-x-0 bottom-0 p-1.5 sm:p-2.5">
-                    <div className="flex items-center gap-1"><span className="rounded-md bg-white/10 px-1.5 py-0.5 text-[7px] font-bold text-white/80 backdrop-blur sm:text-[8px]">{platformLabel(primaryItem.platformName)}</span>{primaryItem.slideCount > 0 ? <span className="hidden text-[8px] text-white/55 sm:inline">Карусель · {primaryItem.slideCount}</span> : null}</div>
+                    <div className="flex items-center gap-1.5">{primaryPlatform ? <PlatformBrandIcon platform={primaryPlatform} size="xs" className="hidden sm:block" /> : null}<span className="rounded-md bg-black/45 px-1.5 py-0.5 text-[7px] font-bold text-white/85 backdrop-blur sm:text-[8px]">{platformLabel(primaryItem.platformName)}</span>{primaryItem.slideCount > 0 ? <span className="hidden text-[8px] text-white/55 lg:inline">Карусель · {primaryItem.slideCount}</span> : null}</div>
                     <p className="mt-1 hidden line-clamp-2 text-[9px] font-medium leading-3 text-white/75 sm:block xl:text-[10px]">{primaryItem.topic}</p>
                   </div>
                 </Link>
@@ -269,11 +271,12 @@ export default async function SelfServiceMonthPage({
                   const sourceItem = rawItems.find((candidate) => candidate.id === item.id)!;
                   const state = materialState(sourceItem);
                   const thumbnail = materialThumbnailUrl(item);
+                  const platform = platformBrandFromName(item.platformName);
                   return (
                     <Link href={`/app/month/${item.id}`} key={item.id} className="grid gap-4 px-5 py-4 transition hover:bg-white/[0.025] sm:grid-cols-[56px_76px_105px_minmax(0,1fr)_100px] sm:items-center sm:px-7">
                       <div className="relative h-14 w-14 overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.03]">{thumbnail ? <img src={thumbnail} alt="" className="h-full w-full object-cover" /> : <span className="grid h-full place-items-center text-lg text-violet-300/45">◇</span>}{item.slideCount > 0 ? <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 py-0.5 text-[7px] font-bold text-white">{item.slideCount}</span> : null}</div>
                       <div><p className="text-sm font-semibold text-slate-950">{formatDate(item.plannedDate)}</p><p className="mt-0.5 text-[11px] text-slate-400">#{String(index + 1).padStart(2, "0")}</p></div>
-                      <span className="w-fit rounded-full bg-slate-100 px-3 py-1.5 text-[11px] font-semibold text-slate-600">{platformLabel(item.platformName)}</span>
+                      <span className="flex w-fit items-center gap-2 rounded-full bg-slate-100 py-1 pl-1 pr-3 text-[11px] font-semibold text-slate-600">{platform ? <PlatformBrandIcon platform={platform} size="xs" /> : null}{platformLabel(item.platformName)}</span>
                       <div className="min-w-0"><h3 className="truncate text-sm font-semibold text-slate-950 sm:whitespace-normal">{item.topic}</h3><p className="mt-1 line-clamp-1 text-xs text-slate-400">{item.goal}</p></div>
                       <span className={`w-fit rounded-full px-3 py-1.5 text-[11px] font-semibold ${state === "Готов" ? "bg-violet-50 text-violet-700" : "bg-slate-100 text-slate-500"}`}>{state}</span>
                     </Link>
