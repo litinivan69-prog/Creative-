@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { hasSelfServicePaidAccess } from "@/lib/self-service/subscription";
 import { SelfServiceAppShell } from "@/app/(self-service)/app/self-service-app-shell";
 import { PlatformBrandIcon, platformBrandFromName } from "@/app/(self-service)/platform-brand-icon";
+import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -155,7 +156,7 @@ export default async function SelfServiceMonthPage({
   if (!email) redirect("/sign-in?callbackUrl=/app/month");
 
   const membership = await prisma.workspaceMembership.findFirst({
-    where: { user: { email } },
+    where: await selfServiceMembershipWhere(email),
     include: {
       client: {
         include: {

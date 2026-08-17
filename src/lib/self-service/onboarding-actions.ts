@@ -13,6 +13,7 @@ import {
   selfServiceOnboardingFromFormData,
   type SelfServiceOnboarding,
 } from "@/lib/self-service/onboarding";
+import { rememberActiveSelfServiceClient } from "@/lib/self-service/workspace";
 
 function tokenHash(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -48,11 +49,13 @@ function onboardingBrandAssets(input: SelfServiceOnboarding) {
   ].filter((asset): asset is NonNullable<typeof asset> => Boolean(asset));
 }
 
-async function createWorkspaceForUser(userId: string, input: SelfServiceOnboarding) {
-  const existingMembership = await prisma.workspaceMembership.findFirst({
-    where: { userId, role: "owner" },
-    select: { clientId: true },
-  });
+async function createWorkspaceForUser(userId: string, input: SelfServiceOnboarding, options: { forceNew?: boolean } = {}) {
+  const existingMembership = options.forceNew
+    ? null
+    : await prisma.workspaceMembership.findFirst({
+        where: { userId, role: "owner" },
+        select: { clientId: true },
+      });
 
   if (existingMembership) {
     await grantTrialCredits(existingMembership.clientId);
@@ -106,6 +109,22 @@ async function createWorkspaceForUser(userId: string, input: SelfServiceOnboardi
   return client.id;
 }
 
+async function findPendingOnboardingDraft(email: string) {
+  const cookieStore = await cookies();
+  const rawToken = cookieStore.get(SELF_SERVICE_ONBOARDING_COOKIE)?.value;
+  const byToken = rawToken
+    ? await prisma.selfServiceOnboardingDraft.findUnique({ where: { tokenHash: tokenHash(rawToken) } })
+    : null;
+
+  if (byToken && !byToken.claimedAt && byToken.expiresAt > new Date()) return { draft: byToken, rawToken };
+
+  const byEmail = await prisma.selfServiceOnboardingDraft.findFirst({
+    where: { email, claimedAt: null, expiresAt: { gt: new Date() } },
+    orderBy: { updatedAt: "desc" },
+  });
+  return { draft: byEmail, rawToken };
+}
+
 export async function stageSelfServiceOnboarding(formData: FormData) {
   let input: SelfServiceOnboarding;
 
@@ -117,14 +136,6 @@ export async function stageSelfServiceOnboarding(formData: FormData) {
 
   const session = await auth();
   const email = session?.user?.email?.trim().toLowerCase();
-
-  if (email) {
-    const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
-    if (user) {
-      await createWorkspaceForUser(user.id, input);
-      redirect("/app/preview");
-    }
-  }
 
   const cookieStore = await cookies();
   const existingRawToken = cookieStore.get(SELF_SERVICE_ONBOARDING_COOKIE)?.value;
@@ -140,7 +151,7 @@ export async function stageSelfServiceOnboarding(formData: FormData) {
     if (existingDraft && !existingDraft.claimedAt && existingDraft.expiresAt > new Date()) {
       await prisma.selfServiceOnboardingDraft.update({
         where: { id: existingDraft.id },
-        data: { payload: input, expiresAt },
+        data: { payload: input, expiresAt, ...(email ? { email } : {}) },
       });
     } else {
       rawToken = undefined;
@@ -152,6 +163,7 @@ export async function stageSelfServiceOnboarding(formData: FormData) {
     await prisma.selfServiceOnboardingDraft.create({
       data: {
         tokenHash: tokenHash(rawToken),
+        email: email || null,
         payload: input,
         expiresAt,
       },
@@ -166,6 +178,14 @@ export async function stageSelfServiceOnboarding(formData: FormData) {
     maxAge: 24 * 60 * 60,
   });
 
+  if (email) {
+    const existingMembership = await prisma.workspaceMembership.findFirst({
+      where: { user: { email }, role: "owner" },
+      select: { id: true },
+    });
+    redirect(existingMembership ? "/app/brand-choice" : "/app/setup");
+  }
+
   redirect("/sign-in?callbackUrl=/app/setup");
 }
 
@@ -177,24 +197,14 @@ export async function claimSelfServiceOnboarding() {
   const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
   if (!user) redirect("/sign-in?error=account_missing&callbackUrl=/app/setup");
 
-  const cookieStore = await cookies();
-  const rawToken = cookieStore.get(SELF_SERVICE_ONBOARDING_COOKIE)?.value;
-  let draft = rawToken
-    ? await prisma.selfServiceOnboardingDraft.findUnique({
-        where: { tokenHash: tokenHash(rawToken) },
-      })
-    : null;
+  const existingMembership = await prisma.workspaceMembership.findFirst({
+    where: { userId: user.id, role: "owner" },
+    select: { id: true },
+  });
+  if (existingMembership) redirect("/app/brand-choice");
 
-  if (!draft || draft.claimedAt || draft.expiresAt < new Date()) {
-    draft = await prisma.selfServiceOnboardingDraft.findFirst({
-      where: {
-        email,
-        claimedAt: null,
-        expiresAt: { gt: new Date() },
-      },
-      orderBy: { updatedAt: "desc" },
-    });
-  }
+  const cookieStore = await cookies();
+  const { draft, rawToken } = await findPendingOnboardingDraft(email);
 
   if (!draft || draft.claimedAt || draft.expiresAt < new Date()) {
     if (rawToken) cookieStore.delete(SELF_SERVICE_ONBOARDING_COOKIE);
@@ -257,7 +267,66 @@ export async function claimSelfServiceOnboarding() {
   });
 
   await grantTrialCredits(clientId);
+  await rememberActiveSelfServiceClient(email, clientId);
 
   if (rawToken) cookieStore.delete(SELF_SERVICE_ONBOARDING_COOKIE);
   redirect("/app/preview");
+}
+
+export async function continueWithExistingBrand(formData: FormData) {
+  const session = await auth();
+  const email = session?.user?.email?.trim().toLowerCase();
+  if (!email) redirect("/sign-in?callbackUrl=/app/brand-choice");
+
+  const clientId = String(formData.get("clientId") || "");
+  if (!clientId) redirect("/app/brand-choice?error=brand_missing");
+
+  const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  if (!user) redirect("/sign-in?error=account_missing&callbackUrl=/app/brand-choice");
+
+  await rememberActiveSelfServiceClient(email, clientId);
+  const cookieStore = await cookies();
+  const { draft, rawToken } = await findPendingOnboardingDraft(email);
+  if (draft) {
+    await prisma.selfServiceOnboardingDraft.update({
+      where: { id: draft.id },
+      data: { claimedAt: new Date(), claimedByUserId: user.id, email },
+    });
+  }
+  if (rawToken) cookieStore.delete(SELF_SERVICE_ONBOARDING_COOKIE);
+  redirect("/app");
+}
+
+export async function createNewBrandFromOnboarding() {
+  const session = await auth();
+  const email = session?.user?.email?.trim().toLowerCase();
+  if (!email) redirect("/sign-in?callbackUrl=/app/brand-choice");
+
+  const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  if (!user) redirect("/sign-in?error=account_missing&callbackUrl=/app/brand-choice");
+
+  const cookieStore = await cookies();
+  const { draft, rawToken } = await findPendingOnboardingDraft(email);
+  if (!draft) redirect("/start?error=onboarding_expired");
+
+  const input = SelfServiceOnboardingSchema.parse(draft.payload);
+  const clientId = await createWorkspaceForUser(user.id, input, { forceNew: true });
+  await prisma.selfServiceOnboardingDraft.update({
+    where: { id: draft.id },
+    data: { claimedAt: new Date(), claimedByUserId: user.id, email },
+  });
+  await rememberActiveSelfServiceClient(email, clientId);
+  if (rawToken) cookieStore.delete(SELF_SERVICE_ONBOARDING_COOKIE);
+  redirect("/app/preview");
+}
+
+export async function selectSelfServiceBrand(formData: FormData) {
+  const session = await auth();
+  const email = session?.user?.email?.trim().toLowerCase();
+  if (!email) redirect("/sign-in?callbackUrl=/app/brands");
+
+  const clientId = String(formData.get("clientId") || "");
+  if (!clientId) redirect("/app/brands?error=brand_missing");
+  await rememberActiveSelfServiceClient(email, clientId);
+  redirect("/app");
 }

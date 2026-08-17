@@ -6,6 +6,7 @@ import { auth } from "@/auth";
 import { ARTICLE_STAGE_LABELS, articleHeroUrl, type ArticleStage } from "@/lib/article-engine";
 import { prisma } from "@/lib/prisma";
 import { PlatformBrandIcon, platformBrandFromName } from "@/app/(self-service)/platform-brand-icon";
+import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +38,7 @@ export default async function SelfServiceArticlesPage() {
   if (!email) redirect("/sign-in?callbackUrl=/app/articles");
 
   const membership = await prisma.workspaceMembership.findFirst({
-    where: { user: { email } },
+    where: await selfServiceMembershipWhere(email),
     include: { client: { select: { id: true, name: true } } },
   });
   if (!membership) redirect("/start");

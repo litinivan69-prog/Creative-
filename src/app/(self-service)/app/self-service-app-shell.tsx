@@ -57,6 +57,7 @@ export function SelfServiceAppShell({
           </nav>
 
           <div className="mt-auto space-y-1 border-t border-white/[0.06] pt-4">
+            <Link href="/app/brands" className="flex items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-xs font-medium text-white/38 transition hover:bg-white/[0.035] hover:text-white/75"><span className="w-4 text-center text-violet-300/80">◫</span>Мои бренды</Link>
             <Link href="/app/channels" className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-xs font-medium transition ${active === "channels" ? "border-violet-400/25 bg-violet-500/12 text-white" : "border-transparent text-white/38 hover:bg-white/[0.035] hover:text-white/75"}`}><span className="w-4 text-center text-violet-300/80">◎</span>Бренд и площадки</Link>
             <Link href="/demo" className="flex items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-xs font-medium text-white/38 transition hover:bg-white/[0.035] hover:text-white/75"><span className="w-4 text-center text-violet-300/80">◉</span>Публичное демо</Link>
             <form action={signOutSelfService}><button className="flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-left text-xs font-medium text-white/28 transition hover:bg-white/[0.035] hover:text-white/65"><span className="w-4 text-center">←</span>Выйти</button></form>

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { decryptChannelCredential, encryptChannelCredential } from "@/lib/channel-credentials";
 import { prisma } from "@/lib/prisma";
+import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 import {
   getIntegrationSetting,
   getTelegramBotToken,
@@ -41,7 +42,7 @@ async function currentMembership() {
   const email = session?.user?.email?.trim().toLowerCase();
   if (!email) return null;
   return prisma.workspaceMembership.findFirst({
-    where: { user: { email } },
+    where: await selfServiceMembershipWhere(email),
     select: { clientId: true },
   });
 }
@@ -198,7 +199,7 @@ export async function saveSelfServiceChannels(formData: FormData) {
   if (!email) redirect("/sign-in?callbackUrl=/app/channels");
 
   const membership = await prisma.workspaceMembership.findFirst({
-    where: { user: { email } },
+    where: await selfServiceMembershipWhere(email),
     select: { clientId: true },
   });
   if (!membership) redirect("/start");

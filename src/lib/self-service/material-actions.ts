@@ -5,13 +5,14 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { scheduledAutopublishDefaults } from "@/lib/scheduled-autopublish";
+import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 
 async function currentClientId() {
   const session = await auth();
   const email = session?.user?.email?.trim().toLowerCase();
   if (!email) return null;
   const membership = await prisma.workspaceMembership.findFirst({
-    where: { user: { email } },
+    where: await selfServiceMembershipWhere(email),
     select: { clientId: true },
   });
   return membership?.clientId ?? null;

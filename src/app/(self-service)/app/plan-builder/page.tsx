@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { grantTrialCredits } from "@/lib/self-service/credits";
+import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 import { SelfServiceAppShell } from "@/app/(self-service)/app/self-service-app-shell";
 import { ContentMixBuilder } from "@/app/(self-service)/app/plan-builder/content-mix-builder";
 
@@ -16,7 +17,7 @@ export default async function SelfServicePlanBuilderPage({ searchParams }: { sea
   const session = await auth();
   const email = session?.user?.email?.trim().toLowerCase();
   if (!email) redirect("/sign-in?callbackUrl=/app/plan-builder");
-  const membership = await prisma.workspaceMembership.findFirst({ where: { user: { email } }, include: { client: { select: { id: true, name: true } } } });
+  const membership = await prisma.workspaceMembership.findFirst({ where: await selfServiceMembershipWhere(email), include: { client: { select: { id: true, name: true } } } });
   if (!membership) redirect("/start");
 
   await grantTrialCredits(membership.client.id);
