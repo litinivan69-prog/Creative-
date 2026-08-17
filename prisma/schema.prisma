@@ -84,11 +84,14 @@ model Client {
   memberships WorkspaceMembership[]
   subscription Subscription?
   billingPayments BillingPayment[]
+  creditWallet CreditWallet?
+  creditTransactions CreditTransaction[]
+  contentOrders SelfServiceContentOrder[]
 }
 
 model WorkspaceMembership {
   id        String   @id @default(cuid())
-  userId    String   @unique
+  userId    String
   clientId  String
   role      String   @default("owner")
   createdAt DateTime @default(now())
@@ -98,6 +101,7 @@ model WorkspaceMembership {
 
   @@index([clientId])
   @@index([role])
+  @@unique([userId, clientId])
 }
 
 model Subscription {
@@ -111,6 +115,8 @@ model Subscription {
   currentPeriodStart     DateTime?
   currentPeriodEnd       DateTime?
   cancelAtPeriodEnd      Boolean   @default(false)
+  billingCycleMonths     Int       @default(1)
+  creditsPerCycle        Int       @default(0)
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
   client                 Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -128,6 +134,10 @@ model BillingPayment {
   status            String    @default("creating")
   amountMinor       Int
   currency          String    @default("RUB")
+  purchaseKind      String    @default("subscription")
+  planCode           String?
+  durationMonths     Int?
+  creditsGranted     Int       @default(0)
   confirmationUrl   String?
   paidAt            DateTime?
   rawPayload        Json?
@@ -136,6 +146,60 @@ model BillingPayment {
   client            Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@index([clientId, createdAt])
+  @@index([status])
+}
+
+model CreditWallet {
+  id              String              @id @default(cuid())
+  clientId        String              @unique
+  balance         Int                 @default(0)
+  lifetimeGranted Int                 @default(0)
+  lifetimeSpent   Int                 @default(0)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  client          Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  transactions    CreditTransaction[]
+
+  @@index([balance])
+}
+
+model CreditTransaction {
+  id             String       @id @default(cuid())
+  clientId       String
+  walletId       String
+  amount         Int
+  balanceAfter   Int
+  kind           String
+  description    String
+  referenceType  String?
+  referenceId    String?
+  idempotencyKey String       @unique
+  expiresAt      DateTime?
+  createdAt      DateTime     @default(now())
+  client         Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  wallet         CreditWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, createdAt])
+  @@index([walletId, createdAt])
+  @@index([kind])
+  @@index([referenceType, referenceId])
+}
+
+model SelfServiceContentOrder {
+  id                  String    @id @default(cuid())
+  clientId            String
+  month               String?
+  status              String    @default("draft")
+  configuration       Json
+  estimatedCredits    Int       @default(0)
+  chargedCredits      Int       @default(0)
+  ledgerTransactionId String?   @unique
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  client              Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, createdAt])
+  @@index([clientId, month])
   @@index([status])
 }
 
