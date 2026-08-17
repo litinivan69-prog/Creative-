@@ -139,7 +139,7 @@ export default async function SelfServiceHomePage() {
         {[
           ["Материалов", String(items.length), latestPlan ? "план месяца" : "ещё не собран"],
           ["Полностью готово", String(readyItems), items.length ? `${Math.round((readyItems / items.length) * 100)}% месяца` : "после запуска"],
-          ["Площадки", String(workspace.channels.length), workspace.channels.length ? "подключены" : "нужна настройка"],
+          ["Автопостинг", String(workspace.channels.length), workspace.channels.length ? "VK и Telegram" : "можно настроить позже"],
         ].map(([label, value, detail]) => (
           <article key={label} className={`${darkCardClass} p-5`}><p className="text-[10px] font-bold uppercase tracking-[0.13em] text-white/28">{label}</p><div className="mt-3 flex items-end justify-between gap-3"><p className="text-3xl font-semibold tracking-[-0.04em] text-white">{value}</p><span className="text-[10px] text-violet-300/75">{detail}</span></div><div className="mt-4 h-1 overflow-hidden rounded-full bg-white/[0.06]"><div className="h-full w-4/5 rounded-full bg-violet-500" /></div></article>
         ))}
@@ -152,7 +152,29 @@ export default async function SelfServiceHomePage() {
             <div className="relative min-h-48 border-t border-white/[0.06] bg-black/20 sm:min-h-full sm:border-l sm:border-t-0">{nextVisual ? <><img src={nextVisual.src} alt="" className="absolute inset-0 h-full w-full object-cover opacity-80" /><div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />{nextVisual.slideCount > 0 ? <span className="absolute bottom-3 right-3 rounded-full bg-black/65 px-2.5 py-1 text-[9px] font-semibold text-white/75 backdrop-blur">Карусель · {nextVisual.slideCount}</span> : null}</> : <div className="grid h-full min-h-48 place-items-center bg-[radial-gradient(circle_at_50%_20%,rgba(124,92,255,.18),transparent_60%)] text-center"><div><span className="text-2xl text-violet-300/45">◇</span><p className="mt-2 text-[10px] text-white/25">визуал готовится</p></div></div>}</div>
           </div>
         </article>
-        <article className={`${darkCardClass} p-5 sm:p-6`}><div className="flex items-center justify-between"><div><p className="text-sm font-semibold text-white">Площадки</p><p className="mt-1 text-[10px] text-white/30">Где система сможет публиковать</p></div><Link href="/app/channels" className="text-[10px] font-semibold text-violet-300">Настроить</Link></div><div className="mt-5 space-y-3">{(["Telegram", "VK", "Дзен", "VC.ru"] as PlatformBrand[]).map((platform) => { const connected = workspace.channels.some((channel) => channel.platform.toLowerCase().includes(platform === "Дзен" ? "dzen" : platform === "VC.ru" ? "vcru" : platform.toLowerCase())); return <div key={platform} className="flex items-center justify-between border-b border-white/[0.04] pb-3 text-xs last:border-0 last:pb-0"><span className="flex items-center gap-2.5 text-white/58"><PlatformBrandIcon platform={platform} size="xs" />{platform}</span><span className={connected ? "text-violet-300" : "text-white/22"}>{connected ? "подключено" : "не подключено"}</span></div>; })}</div></article>
+        <article className={`${darkCardClass} p-5 sm:p-6`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-white">Площадки и статьи</p>
+              <p className="mt-1 text-[10px] text-white/30">Автопостинг отдельно, статьи — без API</p>
+            </div>
+            <Link href="/app/channels" className="text-[10px] font-semibold text-violet-300">Открыть</Link>
+          </div>
+          <div className="mt-5 space-y-3">
+            {(["Telegram", "VK", "Дзен", "VC.ru"] as PlatformBrand[]).map((platform) => {
+              const isArticlePlatform = platform === "Дзен" || platform === "VC.ru";
+              const connected = !isArticlePlatform && workspace.channels.some((channel) => channel.platform.toLowerCase().includes(platform.toLowerCase()));
+              const status = isArticlePlatform ? "экспорт без API" : connected ? "подключено" : "настроить позже";
+
+              return (
+                <div key={platform} className="flex items-center justify-between gap-4 border-b border-white/[0.04] pb-3 text-xs last:border-0 last:pb-0">
+                  <span className="flex items-center gap-2.5 text-white/58"><PlatformBrandIcon platform={platform} size="xs" />{platform}</span>
+                  <span className={isArticlePlatform || connected ? "text-violet-300" : "text-white/22"}>{status}</span>
+                </div>
+              );
+            })}
+          </div>
+        </article>
       </section>
     </SelfServiceAppShell>
   );
