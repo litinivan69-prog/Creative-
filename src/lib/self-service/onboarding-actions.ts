@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { grantTrialCredits } from "@/lib/self-service/credits";
 import {
   onboardingRawBrief,
   SELF_SERVICE_ONBOARDING_COOKIE,
@@ -53,7 +54,10 @@ async function createWorkspaceForUser(userId: string, input: SelfServiceOnboardi
     select: { clientId: true },
   });
 
-  if (existingMembership) return existingMembership.clientId;
+  if (existingMembership) {
+    await grantTrialCredits(existingMembership.clientId);
+    return existingMembership.clientId;
+  }
 
   const client = await prisma.client.create({
     data: {
@@ -98,6 +102,7 @@ async function createWorkspaceForUser(userId: string, input: SelfServiceOnboardi
     select: { id: true },
   });
 
+  await grantTrialCredits(client.id);
   return client.id;
 }
 
@@ -198,14 +203,16 @@ export async function claimSelfServiceOnboarding() {
 
   const input = SelfServiceOnboardingSchema.parse(draft.payload);
 
-  await prisma.$transaction(async (tx) => {
+  const clientId = await prisma.$transaction(async (tx) => {
     const existingMembership = await tx.workspaceMembership.findFirst({
       where: { userId: user.id, role: "owner" },
       select: { clientId: true },
     });
 
-    if (!existingMembership) {
-      await tx.client.create({
+    let claimedClientId = existingMembership?.clientId ?? null;
+
+    if (!claimedClientId) {
+      const client = await tx.client.create({
         data: {
           name: input.brief.brandName,
           website: input.brief.website || null,
@@ -231,7 +238,9 @@ export async function claimSelfServiceOnboarding() {
           memberships: { create: { userId: user.id, role: "owner" } },
           subscription: { create: { planCode: "trial", status: "pending" } },
         },
+        select: { id: true },
       });
+      claimedClientId = client.id;
     }
 
     await tx.selfServiceOnboardingDraft.update({
@@ -242,7 +251,12 @@ export async function claimSelfServiceOnboarding() {
         email,
       },
     });
+
+    if (!claimedClientId) throw new Error("ONBOARDING_CLIENT_MISSING");
+    return claimedClientId;
   });
+
+  await grantTrialCredits(clientId);
 
   if (rawToken) cookieStore.delete(SELF_SERVICE_ONBOARDING_COOKIE);
   redirect("/app/preview");
