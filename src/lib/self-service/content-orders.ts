@@ -4,6 +4,7 @@ import { CREDIT_PRODUCTS } from "@/lib/self-service/credit-catalog";
 export const SELF_SERVICE_CONTENT_ORDER_FIELDS = [
   "vkPosts",
   "telegramPosts",
+  "okPosts",
   "dzenArticles",
   "vcruArticles",
   "carousels",
@@ -14,6 +15,7 @@ export const SELF_SERVICE_CONTENT_ORDER_FIELDS = [
 export const SelfServiceContentOrderConfigurationSchema = z.object({
   vkPosts: z.number().int().min(0).max(100),
   telegramPosts: z.number().int().min(0).max(100),
+  okPosts: z.number().int().min(0).max(100).default(0),
   dzenArticles: z.number().int().min(0).max(20),
   vcruArticles: z.number().int().min(0).max(20),
   carousels: z.number().int().min(0).max(30),
@@ -36,6 +38,7 @@ export function parseSelfServiceContentOrderConfiguration(value: unknown) {
 export function estimateContentOrderCredits(configuration: SelfServiceContentOrderConfiguration) {
   return configuration.vkPosts * CREDIT_PRODUCTS.visual_post.credits
     + configuration.telegramPosts * CREDIT_PRODUCTS.visual_post.credits
+    + configuration.okPosts * CREDIT_PRODUCTS.visual_post.credits
     + configuration.dzenArticles * CREDIT_PRODUCTS.article_with_cover.credits
     + configuration.vcruArticles * CREDIT_PRODUCTS.article_with_cover.credits
     + configuration.carousels * CREDIT_PRODUCTS.carousel.credits
@@ -47,6 +50,7 @@ export function contentOrderFormatIds(configuration: SelfServiceContentOrderConf
   return [
     configuration.vkPosts > 0 || configuration.carousels > 0 ? "vk_post" : null,
     configuration.telegramPosts > 0 || configuration.quickAnnouncements > 0 || configuration.reviewReplies > 0 ? "telegram_post" : null,
+    configuration.okPosts > 0 ? "ok_post" : null,
     configuration.dzenArticles > 0 ? "dzen_article" : null,
     configuration.vcruArticles > 0 ? "vcru_article" : null,
     configuration.quickAnnouncements > 0 ? "quick_announcement" : null,

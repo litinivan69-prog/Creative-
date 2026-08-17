@@ -22,6 +22,7 @@ function tokenHash(token: string) {
 const socialChannelFields = [
   ["telegram", "telegramUrl", "Telegram"],
   ["vk", "vkUrl", "VK"],
+  ["ok", "okUrl", "Одноклассники"],
   ["instagram", "instagramUrl", "Instagram"],
   ["dzen", "dzenUrl", "Дзен"],
   ["vcru", "vcruUrl", "VC.ru"],

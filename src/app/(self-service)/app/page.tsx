@@ -157,15 +157,16 @@ export default async function SelfServiceHomePage() {
             <Link href="/app/channels" className="text-[10px] font-semibold text-violet-300">Открыть</Link>
           </div>
           <div className="mt-5 space-y-3">
-            {(["Telegram", "VK", "Дзен", "VC.ru"] as PlatformBrand[]).map((platform) => {
+            {(["Telegram", "VK", "Одноклассники", "Дзен", "VC.ru"] as PlatformBrand[]).map((platform) => {
               const isArticlePlatform = platform === "Дзен" || platform === "VC.ru";
-              const connected = !isArticlePlatform && workspace.channels.some((channel) => channel.platform.toLowerCase().includes(platform.toLowerCase()));
-              const status = isArticlePlatform ? "экспорт без API" : connected ? "подключено" : "настроить позже";
+              const isManualSocial = platform === "Одноклассники";
+              const connected = !isArticlePlatform && !isManualSocial && workspace.channels.some((channel) => channel.platform.toLowerCase().includes(platform.toLowerCase()));
+              const status = isArticlePlatform ? "экспорт без API" : isManualSocial ? "готово для копирования" : connected ? "подключено" : "настроить позже";
 
               return (
                 <div key={platform} className="flex items-center justify-between gap-4 border-b border-white/[0.04] pb-3 text-xs last:border-0 last:pb-0">
                   <span className="flex items-center gap-2.5 text-white/58"><PlatformBrandIcon platform={platform} size="xs" />{platform}</span>
-                  <span className={isArticlePlatform || connected ? "text-violet-300" : "text-white/22"}>{status}</span>
+                  <span className={isArticlePlatform || isManualSocial || connected ? "text-violet-300" : "text-white/22"}>{status}</span>
                 </div>
               );
             })}

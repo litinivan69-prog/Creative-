@@ -22,6 +22,7 @@ type BriefValues = {
   monthTopics: string;
   telegramUrl: string;
   vkUrl: string;
+  okUrl: string;
   instagramUrl: string;
   dzenUrl: string;
   vcruUrl: string;
@@ -49,6 +50,7 @@ const EMPTY_BRIEF: BriefValues = {
   monthTopics: "",
   telegramUrl: "",
   vkUrl: "",
+  okUrl: "",
   instagramUrl: "",
   dzenUrl: "",
   vcruUrl: "",
@@ -75,6 +77,7 @@ const toneOptions = [
 const socialFields = [
   ["telegramUrl", "Telegram", "https://t.me/..."],
   ["vkUrl", "VK", "https://vk.com/..."],
+  ["okUrl", "Одноклассники", "https://ok.ru/..."],
   ["instagramUrl", "Instagram", "https://instagram.com/..."],
   ["dzenUrl", "Дзен", "https://dzen.ru/..."],
   ["vcruUrl", "VC.ru", "https://vc.ru/..."],
@@ -83,6 +86,7 @@ const socialFields = [
 const starterKitPlatforms = [
   ["telegram", "Telegram"],
   ["vk", "VK"],
+  ["ok", "Одноклассники"],
   ["instagram", "Instagram"],
   ["dzen", "Дзен"],
   ["vcru", "VC.ru"],

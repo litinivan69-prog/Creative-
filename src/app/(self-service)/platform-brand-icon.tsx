@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
 
-export type PlatformBrand = "VK" | "Telegram" | "Дзен" | "VC.ru";
+export type PlatformBrand = "VK" | "Telegram" | "Одноклассники" | "Дзен" | "VC.ru";
 export type PlatformBrandIconSize = "xs" | "sm" | "md";
 
 const brandNames: Record<PlatformBrand, string> = {
   VK: "VK",
   Telegram: "Telegram",
+  "Одноклассники": "Одноклассники",
   "Дзен": "Дзен",
   "VC.ru": "VC.ru",
 };
@@ -37,6 +38,12 @@ export function PlatformBrandIcon({ platform, className = "", size = "md" }: { p
         <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" />
       </svg>
     </BrandTile>
+  ) : platform === "Одноклассники" ? (
+    <BrandTile className="bg-[#ee8208] p-[18%]" size={size}>
+      <svg viewBox="0 0 24 24" role="img" aria-label="Одноклассники" className="h-full w-full" fill="white">
+        <path d="M12 2.2a4.55 4.55 0 1 0 0 9.1 4.55 4.55 0 0 0 0-9.1Zm0 2.65a1.9 1.9 0 1 1 0 3.8 1.9 1.9 0 0 1 0-3.8Zm5.03 7.17a1.32 1.32 0 0 0-1.83.37c-.7 1.04-1.9 1.66-3.2 1.66s-2.5-.62-3.2-1.66a1.32 1.32 0 1 0-2.2 1.46 6.5 6.5 0 0 0 2.52 2.2l-2.17 2.18a1.32 1.32 0 0 0 1.87 1.87L12 16.92l3.18 3.18a1.32 1.32 0 0 0 1.87-1.87l-2.17-2.18a6.5 6.5 0 0 0 2.52-2.2 1.32 1.32 0 0 0-.37-1.83Z" />
+      </svg>
+    </BrandTile>
   ) : platform === "Дзен" ? (
     <BrandTile className="bg-[#202022]" size={size}>
       <svg viewBox="0 0 168 168" role="img" aria-label="Дзен" className="h-full w-full">
@@ -55,6 +62,7 @@ export function PlatformBrandIcon({ platform, className = "", size = "md" }: { p
 export function platformBrandFromFormatId(formatId: string): PlatformBrand | null {
   if (formatId === "vk_post") return "VK";
   if (formatId === "telegram_post") return "Telegram";
+  if (formatId === "ok_post") return "Одноклассники";
   if (formatId === "dzen_article") return "Дзен";
   if (formatId === "vcru_article") return "VC.ru";
   return null;
@@ -64,6 +72,7 @@ export function platformBrandFromName(value: string | null | undefined): Platfor
   if (!value) return null;
   if (/telegram|телег/i.test(value)) return "Telegram";
   if (/(^|\s)(vk|вк)(\s|$)|vkontakte|вконтакте/i.test(value)) return "VK";
+  if (/однокласс|ok\.ru|(^|\s)ок(\s|$)/i.test(value)) return "Одноклассники";
   if (/vc\.ru|vcru|виси/i.test(value)) return "VC.ru";
   if (/дзен|dzen|zen/i.test(value)) return "Дзен";
   return null;
