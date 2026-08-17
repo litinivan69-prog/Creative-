@@ -64,6 +64,12 @@ import { extractGeoAudit, type GeoAuditExtraction } from "@/lib/geo-pptx-extract
 import { getClientBrandContext } from "@/lib/brand-context";
 import { runArticlePipeline, runArticleForPlannedItem } from "@/lib/article-engine";
 import { hasSelfServicePaidAccess } from "@/lib/self-service/subscription";
+import {
+  contentOrderFormatIds,
+  parseSelfServiceContentOrderConfiguration,
+  type SelfServiceContentOrderConfiguration,
+} from "@/lib/self-service/content-orders";
+import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 
 function formText(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -1521,6 +1527,63 @@ function pairVkTgPlanItems<T extends PairablePlanItem>(
   return result;
 }
 
+function exactSelfServiceContentMix<T extends PairablePlanItem>(
+  sourceItems: T[],
+  configuration: SelfServiceContentOrderConfiguration,
+  allowedPlatformNames: string[],
+  month: string,
+  strategicThemes: string[],
+): Array<T & { pairGroupId: string | null }> {
+  const vk = allowedPlatformNames.find(isVkPlatformName);
+  const telegram = allowedPlatformNames.find(isTelegramPlatformName);
+  const dzen = allowedPlatformNames.find((name) => /дзен|dzen/i.test(name));
+  const vcru = allowedPlatformNames.find((name) => /vc\.ru|виси/i.test(name));
+  const targets = [
+    { count: configuration.vkPosts, platform: vk, format: "пост VK с визуалом", label: "Пост VK", goal: "Регулярное присутствие и вовлечение аудитории" },
+    { count: configuration.telegramPosts, platform: telegram, format: "пост Telegram с визуалом", label: "Пост Telegram", goal: "Нативное общение с аудиторией канала" },
+    { count: configuration.dzenArticles, platform: dzen, format: "экспертная статья Дзен с обложкой", label: "Статья Дзен", goal: "Экспертность и органический охват" },
+    { count: configuration.vcruArticles, platform: vcru, format: "деловая статья VC.ru с обложкой", label: "Статья VC.ru", goal: "Экспертность и доверие деловой аудитории" },
+    { count: configuration.carousels, platform: vk ?? telegram, format: "карусель из 4 отдельных слайдов", label: "Карусель", goal: "Наглядно раскрыть тему в четырёх карточках" },
+    { count: configuration.quickAnnouncements, platform: telegram ?? vk, format: "короткий анонс", label: "Анонс", goal: "Быстро сообщить важную новость или предложение" },
+    { count: configuration.reviewReplies, platform: telegram ?? vk, format: "ответ на отзыв", label: "Ответ на отзыв", goal: "Подготовить корректный ответ в тоне бренда" },
+  ].filter((target) => target.count > 0 && target.platform);
+
+  const requestedTotal = targets.reduce((sum, target) => sum + target.count, 0);
+  if (requestedTotal === 0) return [];
+  const monthMatch = month.match(/^(\d{4})-(\d{2})$/);
+  const daysInMonth = monthMatch
+    ? new Date(Number(monthMatch[1]), Number(monthMatch[2]), 0).getDate()
+    : 28;
+  let globalIndex = 0;
+
+  return targets.flatMap((target) => {
+    const samePlatform = sourceItems.filter((item) => item.platformName === target.platform);
+    return Array.from({ length: target.count }, (_, index) => {
+      const base = samePlatform[index % Math.max(1, samePlatform.length)] ?? sourceItems[globalIndex % sourceItems.length];
+      if (!base) throw new Error("Не удалось подготовить темы для выбранного набора.");
+      globalIndex += 1;
+      const day = Math.min(daysInMonth, Math.max(1, Math.round((daysInMonth * globalIndex) / (requestedTotal + 1))));
+      const theme = strategicThemes[index % Math.max(1, strategicThemes.length)];
+      const useSourceTopic = index < samePlatform.length;
+      return {
+        ...base,
+        moduleType: /статья/i.test(target.format) ? "expert_articles" : "content_production",
+        platformName: target.platform!,
+        format: target.format,
+        topic: useSourceTopic ? base.topic : `${target.label} №${index + 1}${theme ? `: ${theme}` : ""}`,
+        goal: target.goal,
+        plannedDate: `${month}-${String(day).padStart(2, "0")}`,
+        week: `Неделя ${Math.min(4, Math.floor((day - 1) / 7) + 1)}`,
+        sequenceReason: `Материал входит в подтверждённый пользователем набор: ${target.label}.`,
+        approvalRequired: true,
+        autopublishEligible: !/статья|отзыв/i.test(target.format),
+        pairGroupId: null,
+        status: "planned",
+      };
+    });
+  });
+}
+
 /**
  * Detects article deliverables the plan model produced on its own (Дзен/blog
  * items with an article format). They must go through the full article engine,
@@ -1657,6 +1720,7 @@ async function createMonthlyPlanForBlueprint(
     prepareTextsAfterCreate?: boolean;
     productionScopeOverride?: MonthlyProductionScope;
     throwOnError?: boolean;
+    exactContentMix?: SelfServiceContentOrderConfiguration;
   } = {},
 ) {
   const blueprint = await prisma.clientPresenceBlueprint.findUnique({
@@ -1801,9 +1865,13 @@ async function createMonthlyPlanForBlueprint(
     });
     const scopeGuardrails = enforceProductionScope(plan, productionScope);
     normalizeMonthlyPlanDates(plan.plannedContentItems, plan.month);
-    const pairedContentItems = pairVkTgPlanItems(plan.plannedContentItems, allowedPlatformNames);
+    const pairedContentItems = options.exactContentMix
+      ? exactSelfServiceContentMix(plan.plannedContentItems, options.exactContentMix, allowedPlatformNames, plan.month, productionScope.strategicThemes)
+      : pairVkTgPlanItems(plan.plannedContentItems, allowedPlatformNames);
     const cadenceLimits = parseCadenceLimits(productionScope.cadenceRules);
-    const cadenceResult = enforceCadenceOnPlannedItems(pairedContentItems, cadenceLimits);
+    const cadenceResult = options.exactContentMix
+      ? { kept: pairedContentItems, removedCount: 0 }
+      : enforceCadenceOnPlannedItems(pairedContentItems, cadenceLimits);
     const finalContentItems = cadenceResult.kept;
     if (finalContentItems.length === 0) {
       throw new Error("Правила частоты из scope не оставили ни одного материала. Ослабьте «Частоту» и попробуйте снова.");
@@ -1886,7 +1954,9 @@ async function createMonthlyPlanForBlueprint(
     });
 
     createdId = created.id;
-    await ensureArticleItemsForPlan(created.id, resolveArticlesPerMonth(formData));
+    if (!options.exactContentMix) {
+      await ensureArticleItemsForPlan(created.id, resolveArticlesPerMonth(formData));
+    }
     // Channels the client decided to create from scratch get their Launch Kit tasks.
     await ensureLaunchKitTasksForPlan(created.id, blueprint.clientId).catch((error) => {
       console.error("Failed to ensure Launch Kit tasks", error);
@@ -2045,11 +2115,16 @@ async function currentSelfServiceWorkspace() {
   if (!email) return null;
 
   return prisma.workspaceMembership.findFirst({
-    where: { user: { email } },
+    where: await selfServiceMembershipWhere(email),
     include: {
       client: {
         include: {
           subscription: true,
+          contentOrders: {
+            where: { month: currentMonth(), status: { in: ["confirmed", "processing"] } },
+            orderBy: { updatedAt: "desc" },
+            take: 1,
+          },
           briefs: { orderBy: { createdAt: "desc" }, take: 1, include: { blueprint: true } },
           monthlyPlans: {
             where: { month: currentMonth(), status: { notIn: ["archived", "replaced"] } },
@@ -2066,8 +2141,8 @@ export async function startSelfServiceMonth() {
   const membership = await currentSelfServiceWorkspace();
   if (!membership) redirect("/sign-in?callbackUrl=/app/month");
   if (membership.client.monthlyPlans[0]) redirect("/app/month?notice=month_exists");
-  if (!hasSelfServicePaidAccess(membership.client.subscription)) {
-    redirect("/app/subscribe");
+  if (!hasSelfServicePaidAccess(membership.client.subscription) && !membership.client.contentOrders[0]) {
+    redirect("/app/plan-builder");
   }
 
   const brief = membership.client.briefs[0];
@@ -2089,21 +2164,34 @@ export async function continueSelfServiceMonth() {
   if (!membership) return { ok: false as const, message: "Сессия завершилась. Войдите ещё раз." };
 
   const existingPlan = membership.client.monthlyPlans[0];
+  const contentOrder = membership.client.contentOrders[0] ?? null;
   if (existingPlan) {
     const run = await createMonthProductionRun(existingPlan.id);
+    if (contentOrder) {
+      await prisma.selfServiceContentOrder.update({ where: { id: contentOrder.id }, data: { status: "processing" } });
+    }
     return { ok: true as const, monthlyPlanId: existingPlan.id, productionRunId: run.id };
   }
 
-  if (!hasSelfServicePaidAccess(membership.client.subscription)) {
-    return { ok: false as const, message: "Для подготовки полного месяца сначала активируйте подписку." };
+  if (!hasSelfServicePaidAccess(membership.client.subscription) && !contentOrder) {
+    return { ok: false as const, message: "Сначала соберите набор и подтвердите его кредитами." };
   }
 
   const brief = membership.client.briefs[0];
-  const blueprintId = brief?.blueprint?.id;
-  if (!brief || !blueprintId) return { ok: false as const, message: "Не удалось найти профиль бренда. Вернитесь к короткому брифу." };
+  if (!brief) return { ok: false as const, message: "Не удалось найти бриф бренда. Вернитесь к короткой настройке." };
+  let blueprintId = brief.blueprint?.id;
+  if (!blueprintId) {
+    try {
+      blueprintId = (await ensureBlueprintForBrief(brief.id)).blueprintId;
+    } catch (error) {
+      console.error("Self-service blueprint generation failed", error);
+      return { ok: false as const, message: "Не удалось подготовить профиль бренда с первого раза. Кредиты сохранены за заказом — можно повторить безопасно." };
+    }
+  }
 
   try {
-    const formatIds = selfServiceFormatIds(brief.rawBrief);
+    const configuration = contentOrder ? parseSelfServiceContentOrderConfiguration(contentOrder.configuration) : null;
+    const formatIds = configuration ? contentOrderFormatIds(configuration) : selfServiceFormatIds(brief.rawBrief);
     const allowedPlatforms = await ensureSelfServicePlatformRecommendations(blueprintId, formatIds);
     const postsPerWeek = selfServicePostFrequency(brief.rawBrief);
     const articlesPerMonth = selfServiceArticleFrequency(brief.rawBrief);
@@ -2113,22 +2201,36 @@ export async function continueSelfServiceMonth() {
     ].filter(Boolean);
     const scope = buildProductionScope({
       allowedPlatforms,
-      allowedDeliverables: ["пост", "статья", "article", "post", "визуал"],
-      cadenceRules: [
-        `VK: ${postsPerWeek} поста в неделю`,
-        `Telegram: ${postsPerWeek} поста в неделю`,
-        `Статьи: ${articlesPerMonth} в месяц`,
-      ],
+      allowedDeliverables: configuration
+        ? ["пост", "статья", "article", "post", "визуал", "карусель", "анонс", "ответ на отзыв"]
+        : ["пост", "статья", "article", "post", "визуал"],
+      cadenceRules: configuration ? [
+        `Создать ровно ${configuration.vkPosts} постов VK за месяц`,
+        `Создать ровно ${configuration.telegramPosts} постов Telegram за месяц`,
+        `Создать ровно ${configuration.dzenArticles} статей Дзен за месяц`,
+        `Создать ровно ${configuration.vcruArticles} статей VC.ru за месяц`,
+        `Создать ровно ${configuration.carousels} каруселей по 4 слайда`,
+        `Создать ровно ${configuration.quickAnnouncements} коротких анонсов`,
+        `Создать ровно ${configuration.reviewReplies} ответов на отзывы`,
+      ] : [
+          `VK: ${postsPerWeek} поста в неделю`,
+          `Telegram: ${postsPerWeek} поста в неделю`,
+          `Статьи: ${articlesPerMonth} в месяц`,
+        ],
       strategicThemes,
     });
     const generationForm = new FormData();
-    generationForm.set("articlesPerMonth", String(articlesPerMonth));
+    generationForm.set("articlesPerMonth", String(configuration ? configuration.dzenArticles + configuration.vcruArticles : articlesPerMonth));
     const result = await createMonthlyPlanForBlueprint(blueprintId, generationForm, {
       prepareTextsAfterCreate: false,
       productionScopeOverride: scope,
       throwOnError: true,
+      exactContentMix: configuration ?? undefined,
     });
     const run = await createMonthProductionRun(result.monthlyPlanId);
+    if (contentOrder) {
+      await prisma.selfServiceContentOrder.update({ where: { id: contentOrder.id }, data: { status: "processing" } });
+    }
     revalidatePath("/app");
     revalidatePath("/app/month");
     return { ok: true as const, monthlyPlanId: result.monthlyPlanId, productionRunId: run.id };
@@ -4192,7 +4294,8 @@ async function ensureMissingMonthProductionTasks(monthlyPlanId: string, producti
       });
     }
 
-    if (item.creativeAssets.length === 0 && !hasTask("generate_brief", item.id)) {
+    const requiresVisual = !/короткий анонс|ответ на отзыв/i.test(item.format);
+    if (requiresVisual && item.creativeAssets.length === 0 && !hasTask("generate_brief", item.id)) {
       tasks.push({
         productionRunId,
         clientId: plan.clientId,
@@ -4210,7 +4313,7 @@ async function ensureMissingMonthProductionTasks(monthlyPlanId: string, producti
       ? carouselSlideAssets
       : item.creativeAssets.filter((asset) => !isLegacyCombinedCarouselAsset(asset));
 
-    for (const asset of assetsForVisualTasks) {
+    for (const asset of requiresVisual ? assetsForVisualTasks : []) {
       if (asset.generatedVariants.length === 0 && !hasTask("generate_visual", item.id, asset.id)) {
         tasks.push({
           productionRunId,
@@ -4771,13 +4874,19 @@ export async function processNextSelfServiceProductionBatch(productionRunId: str
 
   const run = await prisma.monthProductionRun.findUnique({
     where: { id: productionRunId },
-    select: { clientId: true },
+    select: { clientId: true, monthlyPlan: { select: { month: true } } },
   });
   if (!run || run.clientId !== membership.clientId) {
     return { ok: false as const, message: "Подготовка этого месяца недоступна." };
   }
 
   const snapshot = await processNextMonthProductionBatchInternal(productionRunId);
+  if (snapshot.status === "completed" || snapshot.status === "completed_with_errors") {
+    await prisma.selfServiceContentOrder.updateMany({
+      where: { clientId: run.clientId, month: run.monthlyPlan.month, status: "processing" },
+      data: { status: snapshot.status === "completed" ? "completed" : "completed_with_errors" },
+    });
+  }
   revalidatePath("/app");
   revalidatePath("/app/month");
   return snapshot;
