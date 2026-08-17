@@ -161,6 +161,12 @@ export default async function SelfServiceMonthPage({
       client: {
         include: {
           subscription: true,
+          contentOrders: {
+            where: { status: { in: ["confirmed", "processing"] } },
+            orderBy: { updatedAt: "desc" },
+            take: 1,
+            select: { id: true },
+          },
           monthlyPlans: {
             where: { status: { notIn: ["archived", "replaced"] } },
             orderBy: { createdAt: "desc" },
@@ -193,7 +199,7 @@ export default async function SelfServiceMonthPage({
 
   const workspace = membership.client;
   const plan = workspace.monthlyPlans[0] ?? null;
-  if (!plan && !hasSelfServicePaidAccess(workspace.subscription)) redirect("/app/preview");
+  if (!plan && !hasSelfServicePaidAccess(workspace.subscription) && !workspace.contentOrders[0]) redirect("/app/plan-builder");
   const productionRun = plan?.productionRuns[0] ?? null;
   const rawItems = plan?.plannedContentItems ?? [];
   const items: CalendarItem[] = rawItems.map((item) => ({
@@ -228,6 +234,7 @@ export default async function SelfServiceMonthPage({
               <span className="inline-flex rounded-full bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700">Бренд сохранён</span>
               <p className="mx-auto mt-3 max-w-xl text-xs leading-5 text-slate-400">Перед генерацией действует защитный лимит визуалов до ${visualBudgetUsd.toFixed(2)} на месяц. Повторный запуск не создаёт уже готовые материалы заново.</p>
               {query.notice === "channels_saved" ? <p className="mx-auto mt-5 max-w-xl rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm font-medium text-violet-900">Площадки сохранены. Теперь можно собрать первый месяц — публикации сразу появятся в календаре.</p> : null}
+              {query.notice === "order_confirmed" ? <p className="mx-auto mt-5 max-w-xl rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm font-medium text-violet-900">Набор подтверждён, кредиты списаны. Собираем темы, даты и материалы автоматически.</p> : null}
               {query.error === "blueprint_failed" ? <p className="mx-auto mt-5 max-w-xl rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">Не удалось подготовить профиль с первого раза. Бриф сохранён — можно повторить безопасно.</p> : null}
               {query.autostart === "1" ? (
                 <SelfServiceMonthStarter active />
