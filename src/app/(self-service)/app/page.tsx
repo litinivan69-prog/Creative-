@@ -7,6 +7,7 @@ import { signOutSelfService } from "@/lib/self-service/auth-actions";
 import { hasSelfServicePaidAccess } from "@/lib/self-service/subscription";
 import { darkCardClass, SelfServiceAppShell } from "@/app/(self-service)/app/self-service-app-shell";
 import { PlatformBrandIcon, platformBrandFromName, type PlatformBrand } from "@/app/(self-service)/platform-brand-icon";
+import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -46,14 +47,11 @@ export default async function SelfServiceHomePage() {
 
   if (!email) redirect("/sign-in?callbackUrl=/app");
 
-  const user = await prisma.user.findUnique({
-    where: { email },
+  const membership = await prisma.workspaceMembership.findFirst({
+    where: await selfServiceMembershipWhere(email),
     include: {
-      memberships: {
-        orderBy: { createdAt: "asc" },
+      client: {
         include: {
-          client: {
-            include: {
               subscription: true,
               brandProfile: true,
               channels: { where: { status: "active" }, select: { id: true, platform: true } },
@@ -83,13 +81,11 @@ export default async function SelfServiceHomePage() {
                 },
               },
             },
-          },
-        },
       },
     },
   });
 
-  const workspace = user?.memberships[0]?.client ?? null;
+  const workspace = membership?.client ?? null;
 
   if (!workspace) {
     return (

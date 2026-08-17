@@ -7,6 +7,7 @@ import { MaterialEditor } from "@/app/(self-service)/app/month/[itemId]/material
 import { darkCardClass, SelfServiceAppShell } from "@/app/(self-service)/app/self-service-app-shell";
 import { markSelfServiceMaterialPublishedManually, markSelfServiceMaterialReady, saveSelfServicePublicationSchedule } from "@/lib/self-service/material-actions";
 import { publishSelfServiceMaterialNow } from "@/lib/self-service/channel-actions";
+import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +49,7 @@ export default async function SelfServiceMaterialPage({
   if (!email) redirect(`/sign-in?callbackUrl=/app/month/${encodeURIComponent(itemId)}`);
 
   const membership = await prisma.workspaceMembership.findFirst({
-    where: { user: { email } },
+    where: await selfServiceMembershipWhere(email),
     select: {
       clientId: true,
       client: {

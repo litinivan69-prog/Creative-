@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { hasSelfServicePaidAccess } from "@/lib/self-service/subscription";
+import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 import { darkCardClass, SelfServiceAppShell } from "@/app/(self-service)/app/self-service-app-shell";
 import { PlatformBrandIcon, platformBrandFromFormatId } from "@/app/(self-service)/platform-brand-icon";
 
@@ -61,7 +62,7 @@ export default async function SelfServicePreviewPage() {
   if (!email) redirect("/sign-in?callbackUrl=/app/preview");
 
   const membership = await prisma.workspaceMembership.findFirst({
-    where: { user: { email } },
+    where: await selfServiceMembershipWhere(email),
     include: {
       client: {
         include: {

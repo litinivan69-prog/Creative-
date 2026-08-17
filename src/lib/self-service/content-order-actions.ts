@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { CREDIT_PRODUCTS } from "@/lib/self-service/credit-catalog";
+import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 
 const fields = ["vkPosts", "telegramPosts", "dzenArticles", "vcruArticles", "carousels", "quickAnnouncements", "reviewReplies"] as const;
 type OrderField = (typeof fields)[number];
@@ -30,7 +31,7 @@ export async function saveSelfServiceContentOrder(formData: FormData) {
   if (!email) redirect("/sign-in?callbackUrl=/app/plan-builder");
 
   const membership = await prisma.workspaceMembership.findFirst({
-    where: { user: { email } },
+    where: await selfServiceMembershipWhere(email),
     select: { clientId: true },
   });
   if (!membership) redirect("/start");

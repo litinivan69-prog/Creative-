@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { getIntegrationSetting, getTelegramBotToken, TELEGRAM_BOT_USERNAME_KEY } from "@/lib/telegram";
 import { VK_ACCESS_TOKEN_KEY, VK_ACCOUNT_LABEL_KEY } from "@/lib/vk";
 import { completeSelfServiceChannelOnboarding } from "@/lib/self-service/channel-actions";
+import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export default async function SelfServiceChannelsPage({ searchParams }: { search
   if (!email) redirect("/sign-in?callbackUrl=/app/channels");
 
   const membership = await prisma.workspaceMembership.findFirst({
-    where: { user: { email } },
+    where: await selfServiceMembershipWhere(email),
     include: { client: { include: { channels: true, monthlyPlans: { select: { id: true }, take: 1 } } } },
   });
   if (!membership) redirect("/start");

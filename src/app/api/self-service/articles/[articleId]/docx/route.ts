@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { buildArticleDocx, loadArticleDocxInput } from "@/lib/article-docx";
 import { prisma } from "@/lib/prisma";
+import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ art
 
   const { articleId } = await params;
   const membership = await prisma.workspaceMembership.findFirst({
-    where: { user: { email } },
+    where: await selfServiceMembershipWhere(email),
     select: { clientId: true },
   });
   if (!membership) return new Response("Статья не найдена.", { status: 404 });

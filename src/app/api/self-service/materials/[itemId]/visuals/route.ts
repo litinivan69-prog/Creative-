@@ -2,6 +2,7 @@ import JSZip from "jszip";
 import { NextRequest } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +43,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ ite
 
   const { itemId } = await context.params;
   const membership = await prisma.workspaceMembership.findFirst({
-    where: { user: { email } },
+    where: await selfServiceMembershipWhere(email),
     select: { clientId: true },
   });
   if (!membership) return new Response("Рабочее пространство не найдено", { status: 404 });

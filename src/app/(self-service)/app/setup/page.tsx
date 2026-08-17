@@ -18,15 +18,6 @@ export default async function SelfServiceSetupPage() {
   const email = session?.user?.email?.trim().toLowerCase();
   if (!email) redirect("/sign-in?callbackUrl=/app/setup");
 
-  const user = await prisma.user.findUnique({
-    where: { email },
-    select: {
-      memberships: { where: { role: "owner" }, take: 1, select: { id: true } },
-    },
-  });
-
-  if (user?.memberships.length) redirect("/app");
-
   const cookieStore = await cookies();
   const hasDraftCookie = Boolean(cookieStore.get(SELF_SERVICE_ONBOARDING_COOKIE)?.value);
   const hasDraft = hasDraftCookie
@@ -41,6 +32,16 @@ export default async function SelfServiceSetupPage() {
           select: { id: true },
         }),
       );
+
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: {
+      memberships: { where: { role: "owner" }, take: 1, select: { id: true } },
+    },
+  });
+
+  if (user?.memberships.length && hasDraft) redirect("/app/brand-choice");
+  if (user?.memberships.length) redirect("/app");
 
   return (
     <main className="grid min-h-screen place-items-center px-4 py-10">

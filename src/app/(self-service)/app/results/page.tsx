@@ -5,6 +5,7 @@ import { SelfServiceAppShell, darkCardClass } from "@/app/(self-service)/app/sel
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { PlatformBrandIcon, platformBrandFromName } from "@/app/(self-service)/platform-brand-icon";
+import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,7 @@ export default async function SelfServiceResultsPage() {
   if (!email) redirect("/sign-in?callbackUrl=/app/results");
 
   const membership = await prisma.workspaceMembership.findFirst({
-    where: { user: { email } },
+    where: await selfServiceMembershipWhere(email),
     include: {
       client: {
         include: {

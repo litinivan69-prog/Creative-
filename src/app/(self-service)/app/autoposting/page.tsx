@@ -5,6 +5,7 @@ import { NextPublicationCountdown } from "@/app/(self-service)/app/autoposting/n
 import { SelfServiceAppShell, darkCardClass } from "@/app/(self-service)/app/self-service-app-shell";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -92,7 +93,7 @@ export default async function SelfServiceAutopostingPage() {
   if (!email) redirect("/sign-in?callbackUrl=/app/autoposting");
 
   const membership = await prisma.workspaceMembership.findFirst({
-    where: { user: { email } },
+    where: await selfServiceMembershipWhere(email),
     include: { client: { include: { channels: { orderBy: { createdAt: "asc" } } } } },
   });
   if (!membership) redirect("/start");

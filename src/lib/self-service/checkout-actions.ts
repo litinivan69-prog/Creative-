@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { hasSelfServicePaidAccess } from "@/lib/self-service/subscription";
+import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 import {
   createYooKassaPayment,
   isYooKassaConfigured,
@@ -17,7 +18,7 @@ export async function beginSelfServiceCheckout() {
   if (!email) redirect("/sign-in?callbackUrl=/app/subscribe");
 
   const membership = await prisma.workspaceMembership.findFirst({
-    where: { user: { email } },
+    where: await selfServiceMembershipWhere(email),
     include: { client: { select: { subscription: true } } },
   });
   if (!membership) redirect("/start");
