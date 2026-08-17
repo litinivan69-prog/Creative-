@@ -1536,11 +1536,13 @@ function exactSelfServiceContentMix<T extends PairablePlanItem>(
 ): Array<T & { pairGroupId: string | null }> {
   const vk = allowedPlatformNames.find(isVkPlatformName);
   const telegram = allowedPlatformNames.find(isTelegramPlatformName);
+  const ok = allowedPlatformNames.find((name) => /однокласс|ok\.ru|(^|\s)ок(\s|$)/i.test(name));
   const dzen = allowedPlatformNames.find((name) => /дзен|dzen/i.test(name));
   const vcru = allowedPlatformNames.find((name) => /vc\.ru|виси/i.test(name));
   const targets = [
     { count: configuration.vkPosts, platform: vk, format: "пост VK с визуалом", label: "Пост VK", goal: "Регулярное присутствие и вовлечение аудитории" },
     { count: configuration.telegramPosts, platform: telegram, format: "пост Telegram с визуалом", label: "Пост Telegram", goal: "Нативное общение с аудиторией канала" },
+    { count: configuration.okPosts, platform: ok, format: "пост Одноклассники с визуалом", label: "Пост Одноклассники", goal: "Понятное и доверительное общение с аудиторией Одноклассников" },
     { count: configuration.dzenArticles, platform: dzen, format: "экспертная статья Дзен с обложкой", label: "Статья Дзен", goal: "Экспертность и органический охват" },
     { count: configuration.vcruArticles, platform: vcru, format: "деловая статья VC.ru с обложкой", label: "Статья VC.ru", goal: "Экспертность и доверие деловой аудитории" },
     { count: configuration.carousels, platform: vk ?? telegram, format: "карусель из 4 отдельных слайдов", label: "Карусель", goal: "Наглядно раскрыть тему в четырёх карточках" },
@@ -2033,6 +2035,7 @@ export async function generateMonthlyPlan(formData: FormData) {
 const SELF_SERVICE_PLATFORM_SPECS = [
   { id: "vk_post", name: "VK", match: /(\bvk\b|vkontakte|вконтакте|(^|\s)вк(\s|$))/i, type: "social", formats: ["пост VK"] },
   { id: "telegram_post", name: "Telegram", match: /telegram|телег/i, type: "messenger", formats: ["пост Telegram"] },
+  { id: "ok_post", name: "Одноклассники", match: /однокласс|ok\.ru|(^|\s)ок(\s|$)/i, type: "social", formats: ["пост Одноклассники"] },
   { id: "dzen_article", name: "Дзен", match: /дзен|dzen/i, type: "publishing", formats: ["статья Дзен"] },
   { id: "vcru_article", name: "VC.ru", match: /vc\.ru|виси/i, type: "publishing", formats: ["статья VC.ru"] },
 ] as const;
@@ -2207,6 +2210,7 @@ export async function continueSelfServiceMonth() {
       cadenceRules: configuration ? [
         `Создать ровно ${configuration.vkPosts} постов VK за месяц`,
         `Создать ровно ${configuration.telegramPosts} постов Telegram за месяц`,
+        `Создать ровно ${configuration.okPosts} постов Одноклассники за месяц`,
         `Создать ровно ${configuration.dzenArticles} статей Дзен за месяц`,
         `Создать ровно ${configuration.vcruArticles} статей VC.ru за месяц`,
         `Создать ровно ${configuration.carousels} каруселей по 4 слайда`,

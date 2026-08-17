@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
+import { z } from "zod";
 import {
   ClientPresenceBlueprintSchema,
   validateBlueprintForPersistence,
@@ -356,7 +357,7 @@ export async function generateContentDraft(input: {
       {
         role: "system",
         content:
-          "Generate exactly one safe content draft for one planned content item. Respect the requested platform, format, topic, and goal. Adapt the text to the platform like a native content adapter: for VK write a longer, structured post and finish with 2-5 relevant Russian hashtags; for Telegram write a shorter, punchier post with light Telegram-style formatting and no hashtags. The result is a manager-review draft only: do not publish anything. Do not make medical, legal, financial, safety, or guaranteed claims. Do not invent factual claims, prices, doctors, licenses, cases, certifications, or guarantees. For healthcare, clinic, safety, reputation-sensitive, regulated, medical, legal, or financial content, set approvalRequired=true, autopublishEligible=false, and status=needs_review. If unsure, set approvalRequired=true, autopublishEligible=false, and status=needs_review. The draft must be useful, safe, and ready for manager review. Additionally produce telegramBody: a standalone Telegram-ready version of the same post in the same language and tone, strictly under 900 characters, ending on a complete thought (it will be used as a photo caption; the long draftBody goes to VK). Return only schema-valid structured data.",
+          "Generate exactly one safe content draft for one planned content item. Respect the requested platform, format, topic, and goal. Adapt the text to the platform like a native content adapter: for VK write a longer, structured post and finish with 2-5 relevant Russian hashtags; for Telegram write a shorter, punchier post with light Telegram-style formatting and no hashtags; for Одноклассники write clearly, warmly, without youth slang, with a soft call to action and 1-3 relevant hashtags only when useful. The result is a manager-review draft only: do not publish anything. Do not make medical, legal, financial, safety, or guaranteed claims. Do not invent factual claims, prices, doctors, licenses, cases, certifications, or guarantees. For healthcare, clinic, safety, reputation-sensitive, regulated, medical, legal, or financial content, set approvalRequired=true, autopublishEligible=false, and status=needs_review. If unsure, set approvalRequired=true, autopublishEligible=false, and status=needs_review. The draft must be useful, safe, and ready for manager review. Additionally produce telegramBody: a standalone Telegram-ready version of the same post in the same language and tone, strictly under 900 characters, ending on a complete thought (it will be used as a photo caption; the long draftBody goes to VK). Return only schema-valid structured data.",
       },
       {
         role: "user",
@@ -387,6 +388,50 @@ export async function generateContentDraft(input: {
   }
 
   return response.output_parsed;
+}
+
+const InstantContentResultSchema = z.object({
+  text: z.string().min(1).max(6000),
+});
+
+export async function generateInstantSelfServiceText(input: {
+  kind: "quick_post" | "yandex_review_reply";
+  clientName: string;
+  platform?: string | null;
+  sourceText: string;
+  rating?: number | null;
+  brandContext?: string;
+}) {
+  if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured.");
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const isReview = input.kind === "yandex_review_reply";
+  const response = await openai.responses.parse({
+    model: getTextModelForTask("fast"),
+    ...getTextReasoningForTask("fast"),
+    input: [
+      {
+        role: "system",
+        content: isReview
+          ? "Напиши один персональный официальный ответ компании на отзыв в Яндекс Картах на русском языке. Сохрани спокойный человеческий тон бренда. Поблагодари за обратную связь. Для негатива признай переживание клиента, не признавая непроверенную вину, не спорь и предложи безопасный следующий шаг или связь с компанией. Не выдумывай факты, имена, заказы, цены, причины, компенсации или контакты. Не раскрывай персональные данные. Не используй шаблонные канцелярские фразы и не повторяй отзыв дословно. Ответ должен быть короче 1200 знаков и готов для ручной публикации после проверки владельцем. Верни только структурированный результат."
+          : "Создай один готовый быстрый пост на русском языке из фактов пользователя. Ничего не выдумывай. Адаптируй под выбранную площадку: VK — структурированный пост с 2–4 уместными хэштегами; Telegram — коротко, живо, без хэштегов; Одноклассники — понятно, дружелюбно, без молодёжного жаргона и с мягким призывом к действию. Сохрани тон бренда. Не добавляй неподтверждённые цены, гарантии, сертификаты или результаты. Верни только структурированный результат.",
+      },
+      {
+        role: "user",
+        content: [
+          `Компания: ${input.clientName}`,
+          input.platform ? `Площадка: ${input.platform}` : "",
+          input.rating ? `Оценка: ${input.rating} из 5` : "",
+          isReview ? "Текст отзыва:" : "Факты для быстрого поста:",
+          input.sourceText,
+          "Контекст бренда:",
+          input.brandContext || "Не указан",
+        ].filter(Boolean).join("\n"),
+      },
+    ],
+    text: { format: zodTextFormat(InstantContentResultSchema, "instant_content") },
+  });
+  if (!response.output_parsed) throw new Error("The model did not return instant content.");
+  return response.output_parsed.text.trim();
 }
 
 export async function generateCreativeAssetBrief(input: {

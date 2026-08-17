@@ -7,6 +7,7 @@ import { CREDIT_PRODUCTS } from "@/lib/self-service/credit-catalog";
 type Configuration = {
   vkPosts: number;
   telegramPosts: number;
+  okPosts: number;
   dzenArticles: number;
   vcruArticles: number;
   carousels: number;
@@ -17,11 +18,10 @@ type Configuration = {
 const items: Array<{ key: keyof Configuration; title: string; detail: string; credits: number; icon: string }> = [
   { key: "vkPosts", title: "Посты VK", detail: "Готовый текст и визуал", credits: CREDIT_PRODUCTS.visual_post.credits, icon: "VK" },
   { key: "telegramPosts", title: "Посты Telegram", detail: "Нативная версия темы и визуал", credits: CREDIT_PRODUCTS.visual_post.credits, icon: "TG" },
+  { key: "okPosts", title: "Посты Одноклассники", detail: "Понятный текст и визуал", credits: CREDIT_PRODUCTS.visual_post.credits, icon: "ОК" },
   { key: "dzenArticles", title: "Статьи Дзен", detail: "Полный текст и обложка", credits: CREDIT_PRODUCTS.article_with_cover.credits, icon: "Д" },
   { key: "vcruArticles", title: "Статьи VC.ru", detail: "Деловая статья и обложка", credits: CREDIT_PRODUCTS.article_with_cover.credits, icon: "VC" },
   { key: "carousels", title: "Карусели", detail: "Четыре отдельных слайда", credits: CREDIT_PRODUCTS.carousel.credits, icon: "▦" },
-  { key: "quickAnnouncements", title: "Быстрые анонсы", detail: "Короткий материал вне плана", credits: CREDIT_PRODUCTS.quick_announcement.credits, icon: "+" },
-  { key: "reviewReplies", title: "Ответы на отзывы", detail: "В тоне вашего бренда", credits: CREDIT_PRODUCTS.review_reply.credits, icon: "↳" },
 ];
 
 function Counter({ value, onChange }: { value: number; onChange: (value: number) => void }) {

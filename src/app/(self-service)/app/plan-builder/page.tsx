@@ -10,7 +10,7 @@ import { ContentMixBuilder } from "@/app/(self-service)/app/plan-builder/content
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Собрать месяц · Adaptive Presence", robots: { index: false, follow: false } };
 
-const defaultConfiguration = { vkPosts: 2, telegramPosts: 2, dzenArticles: 1, vcruArticles: 0, carousels: 0, quickAnnouncements: 0, reviewReplies: 0 };
+const defaultConfiguration = { vkPosts: 2, telegramPosts: 2, okPosts: 0, dzenArticles: 1, vcruArticles: 0, carousels: 0, quickAnnouncements: 0, reviewReplies: 0 };
 
 export default async function SelfServicePlanBuilderPage({ searchParams }: { searchParams: Promise<{ notice?: string; error?: string }> }) {
   const query = await searchParams;

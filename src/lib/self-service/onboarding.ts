@@ -4,11 +4,11 @@ export const SELF_SERVICE_ONBOARDING_COOKIE = "ap_onboarding";
 export const SELF_SERVICE_AUTH_REDIRECT_COOKIE = "ap_auth_redirect";
 
 const trimmed = (max: number) => z.string().trim().max(max);
-const socialPlatforms = ["telegram", "vk", "instagram", "dzen", "vcru"] as const;
+const socialPlatforms = ["telegram", "vk", "ok", "instagram", "dzen", "vcru"] as const;
 
 export const SelfServiceOnboardingSchema = z.object({
   selection: z.object({
-    formatIds: z.array(z.enum(["vk_post", "telegram_post", "dzen_article", "vcru_article", "quick_announcement", "review_reply"])).min(1),
+    formatIds: z.array(z.enum(["vk_post", "telegram_post", "ok_post", "dzen_article", "vcru_article", "quick_announcement", "review_reply"])).min(1),
     postRhythmId: z.enum(["calm", "regular"]),
     articleRhythmId: z.enum(["none", "one", "two"]),
   }),
@@ -25,6 +25,7 @@ export const SelfServiceOnboardingSchema = z.object({
     monthTopics: trimmed(3000),
     telegramUrl: trimmed(500).optional().default(""),
     vkUrl: trimmed(500).optional().default(""),
+    okUrl: trimmed(500).optional().default(""),
     instagramUrl: trimmed(500).optional().default(""),
     dzenUrl: trimmed(500).optional().default(""),
     vcruUrl: trimmed(500).optional().default(""),
@@ -64,6 +65,7 @@ export function selfServiceOnboardingFromFormData(formData: FormData) {
       monthTopics: text("monthTopics"),
       telegramUrl: text("telegramUrl"),
       vkUrl: text("vkUrl"),
+      okUrl: text("okUrl"),
       instagramUrl: text("instagramUrl"),
       dzenUrl: text("dzenUrl"),
       vcruUrl: text("vcruUrl"),
@@ -96,6 +98,7 @@ export function onboardingRawBrief(input: SelfServiceOnboarding) {
     brief.monthTopics ? `Обязательные темы ближайшего месяца: ${brief.monthTopics}` : "",
     brief.telegramUrl ? `Telegram: ${brief.telegramUrl}` : "",
     brief.vkUrl ? `VK: ${brief.vkUrl}` : "",
+    brief.okUrl ? `Одноклассники: ${brief.okUrl}` : "",
     brief.instagramUrl ? `Instagram: ${brief.instagramUrl}` : "",
     brief.dzenUrl ? `Дзен: ${brief.dzenUrl}` : "",
     brief.vcruUrl ? `VC.ru: ${brief.vcruUrl}` : "",

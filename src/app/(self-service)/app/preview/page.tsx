@@ -18,6 +18,7 @@ export const metadata: Metadata = {
 const formatLabels: Record<string, string> = {
   vk_post: "Посты VK",
   telegram_post: "Посты Telegram",
+  ok_post: "Посты Одноклассники",
   dzen_article: "Статьи Дзен",
   vcru_article: "Статьи VC.ru",
   quick_announcement: "Короткие анонсы",

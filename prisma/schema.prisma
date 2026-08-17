@@ -87,6 +87,7 @@ model Client {
   creditWallet CreditWallet?
   creditTransactions CreditTransaction[]
   contentOrders SelfServiceContentOrder[]
+  instantContents SelfServiceInstantContent[]
 }
 
 model WorkspaceMembership {
@@ -200,6 +201,27 @@ model SelfServiceContentOrder {
 
   @@index([clientId, createdAt])
   @@index([clientId, month])
+  @@index([status])
+}
+
+model SelfServiceInstantContent {
+  id                  String    @id @default(cuid())
+  clientId            String
+  kind                String
+  platform            String?
+  sourceText          String
+  rating              Int?
+  generatedText       String?
+  status              String    @default("draft")
+  errorMessage        String?
+  chargedCredits      Int       @default(0)
+  ledgerTransactionId String?   @unique
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  client              Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, createdAt])
+  @@index([clientId, kind, createdAt])
   @@index([status])
 }
 

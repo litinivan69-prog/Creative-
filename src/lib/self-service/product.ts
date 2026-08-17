@@ -18,6 +18,15 @@ export const SELF_SERVICE_FORMATS = [
     core: true,
   },
   {
+    id: "ok_post",
+    label: "Посты Одноклассники",
+    shortLabel: "ОК",
+    description: "Понятные и дружелюбные публикации для аудитории Одноклассников — с текстом и визуалом.",
+    kind: "post",
+    platform: "Одноклассники",
+    core: true,
+  },
+  {
     id: "dzen_article",
     label: "Статьи Дзен",
     shortLabel: "Дзен",
