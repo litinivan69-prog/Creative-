@@ -12,6 +12,7 @@ import { hasSelfServicePaidAccess } from "@/lib/self-service/subscription";
 import { SelfServiceAppShell } from "@/app/(self-service)/app/self-service-app-shell";
 import { PlatformBrandIcon, platformBrandFromName } from "@/app/(self-service)/platform-brand-icon";
 import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
+import { articleHeroUrl } from "@/lib/article-engine";
 
 export const dynamic = "force-dynamic";
 
@@ -43,8 +44,8 @@ function platformLabel(value: string) {
   return value;
 }
 
-function materialState(item: { contentDraft: { id: string } | null; generatedCreativeVariants: Array<{ id: string }> }) {
-  if (item.contentDraft && item.generatedCreativeVariants.length > 0) return "Готов";
+function materialState(item: { contentDraft: { id: string } | null }, visualReady: boolean) {
+  if (item.contentDraft && visualReady) return "Готов";
   if (item.contentDraft) return "Текст готов";
   return "Готовится";
 }
@@ -56,6 +57,7 @@ type CalendarItem = {
   topic: string;
   goal: string;
   thumbnailVariantId: string | null;
+  thumbnailUrl: string | null;
   slideCount: number;
 };
 
@@ -81,10 +83,10 @@ function activeVisualInfo(item: {
   };
 }
 
-function materialThumbnailUrl(item: Pick<CalendarItem, "id" | "thumbnailVariantId">) {
-  return item.thumbnailVariantId
+function materialThumbnailUrl(item: Pick<CalendarItem, "id" | "thumbnailVariantId" | "thumbnailUrl">) {
+  return item.thumbnailUrl ?? (item.thumbnailVariantId
     ? `/api/self-service/materials/${item.id}/visuals?variant=${item.thumbnailVariantId}&inline=1`
-    : null;
+    : null);
 }
 
 function MonthCalendar({ month, items }: { month: string; items: CalendarItem[] }) {
@@ -202,21 +204,28 @@ export default async function SelfServiceMonthPage({
   if (!plan && !hasSelfServicePaidAccess(workspace.subscription) && !workspace.contentOrders[0]) redirect("/app/plan-builder");
   const productionRun = plan?.productionRuns[0] ?? null;
   const rawItems = plan?.plannedContentItems ?? [];
+  const articleCovers = rawItems.length
+    ? await prisma.article.findMany({
+        where: { plannedContentItemId: { in: rawItems.map((item) => item.id) }, status: { not: "archived" } },
+        select: { plannedContentItemId: true, images: true },
+      })
+    : [];
+  const articleCoverByItemId = new Map(
+    articleCovers.flatMap((article) => {
+      const cover = articleHeroUrl(article.images);
+      return article.plannedContentItemId && cover ? [[article.plannedContentItemId, cover] as const] : [];
+    }),
+  );
   const items: CalendarItem[] = rawItems.map((item) => ({
     ...item,
     ...activeVisualInfo(item),
+    thumbnailUrl: articleCoverByItemId.get(item.id) ?? null,
   }));
   const readyTexts = rawItems.filter((item) => item.contentDraft).length;
-  const readyVisuals = items.filter((item) => item.thumbnailVariantId).length;
-  const visualUsage = plan
-    ? await prisma.generatedCreativeVariant.aggregate({
-        where: { monthlyPlanId: plan.id },
-        _sum: { estimatedCostUsd: true },
-      })
-    : null;
-  const visualCostUsd = visualUsage?._sum.estimatedCostUsd ?? 0;
-  const configuredBudget = Number(process.env.SELF_SERVICE_MONTH_VISUAL_BUDGET_USD ?? "3");
-  const visualBudgetUsd = Number.isFinite(configuredBudget) && configuredBudget > 0 ? configuredBudget : 3;
+  const readyVisuals = items.filter((item) => item.thumbnailUrl || item.thumbnailVariantId).length;
+  const readinessPercent = items.length
+    ? Math.round(((readyTexts + readyVisuals) / (items.length * 2)) * 100)
+    : 0;
 
   return (
     <SelfServiceAppShell
@@ -232,7 +241,7 @@ export default async function SelfServiceMonthPage({
           <section className="mx-auto grid max-w-2xl place-items-center py-12 text-center">
             <div>
               <span className="inline-flex rounded-full bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700">Бренд сохранён</span>
-              <p className="mx-auto mt-3 max-w-xl text-xs leading-5 text-slate-400">Перед генерацией действует защитный лимит визуалов до ${visualBudgetUsd.toFixed(2)} на месяц. Повторный запуск не создаёт уже готовые материалы заново.</p>
+              <p className="mx-auto mt-3 max-w-xl text-xs leading-5 text-slate-400">Система сама подготовит темы, тексты и визуалы. Повторный запуск не создаёт уже готовые материалы заново.</p>
               {query.notice === "channels_saved" ? <p className="mx-auto mt-5 max-w-xl rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm font-medium text-violet-900">Площадки сохранены. Теперь можно собрать первый месяц — публикации сразу появятся в календаре.</p> : null}
               {query.notice === "order_confirmed" ? <p className="mx-auto mt-5 max-w-xl rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm font-medium text-violet-900">Набор подтверждён, кредиты списаны. Собираем темы, даты и материалы автоматически.</p> : null}
               {query.error === "blueprint_failed" ? <p className="mx-auto mt-5 max-w-xl rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">Не удалось подготовить профиль с первого раза. Бриф сохранён — можно повторить безопасно.</p> : null}
@@ -251,7 +260,7 @@ export default async function SelfServiceMonthPage({
               <article className="rounded-[24px] border border-white bg-white p-5 shadow-[0_18px_55px_rgba(77,61,112,0.06)]"><p className="text-xs text-slate-400">План месяца</p><p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950">{items.length}</p><div className="mt-4 h-1.5 rounded-full bg-slate-100"><div className="h-full w-full rounded-full bg-violet-500" /></div></article>
               <article className="rounded-[24px] border border-white bg-white p-5 shadow-[0_18px_55px_rgba(77,61,112,0.06)]"><p className="text-xs text-slate-400">Тексты готовы</p><p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950">{readyTexts}</p><div className="mt-4 h-1.5 rounded-full bg-slate-100"><div className="h-full rounded-full bg-violet-500" style={{ width: `${items.length ? Math.round((readyTexts / items.length) * 100) : 0}%` }} /></div></article>
               <article className="rounded-[24px] border border-white bg-white p-5 shadow-[0_18px_55px_rgba(77,61,112,0.06)]"><p className="text-xs text-slate-400">Визуалы готовы</p><p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950">{readyVisuals}</p><div className="mt-4 h-1.5 rounded-full bg-slate-100"><div className="h-full rounded-full bg-violet-400" style={{ width: `${items.length ? Math.round((readyVisuals / items.length) * 100) : 0}%` }} /></div></article>
-              <article className="rounded-[24px] border border-white bg-white p-5 shadow-[0_18px_55px_rgba(77,61,112,0.06)]"><p className="text-xs text-slate-400">Визуалы API</p><p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950">${visualCostUsd.toFixed(2)}</p><p className="mt-3 text-[11px] text-slate-400">лимит ${visualBudgetUsd.toFixed(2)} / месяц</p></article>
+              <article className="rounded-[24px] border border-white bg-white p-5 shadow-[0_18px_55px_rgba(77,61,112,0.06)]"><p className="text-xs text-slate-400">Готовность месяца</p><p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950">{readinessPercent}%</p><div className="mt-4 h-1.5 rounded-full bg-slate-100"><div className="h-full rounded-full bg-violet-400" style={{ width: `${readinessPercent}%` }} /></div></article>
             </section>
 
             {productionRun ? (
@@ -277,7 +286,7 @@ export default async function SelfServiceMonthPage({
               <div className="divide-y divide-slate-100">
                 {items.map((item, index) => {
                   const sourceItem = rawItems.find((candidate) => candidate.id === item.id)!;
-                  const state = materialState(sourceItem);
+                  const state = materialState(sourceItem, Boolean(item.thumbnailUrl || item.thumbnailVariantId));
                   const thumbnail = materialThumbnailUrl(item);
                   const platform = platformBrandFromName(item.platformName);
                   return (

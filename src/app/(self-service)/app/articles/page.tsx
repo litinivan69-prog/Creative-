@@ -7,6 +7,7 @@ import { ARTICLE_STAGE_LABELS, articleHeroUrl, type ArticleStage } from "@/lib/a
 import { prisma } from "@/lib/prisma";
 import { PlatformBrandIcon, platformBrandFromName } from "@/app/(self-service)/platform-brand-icon";
 import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
+import type { ArticleImage } from "@/lib/article-schema";
 
 export const dynamic = "force-dynamic";
 
@@ -73,6 +74,7 @@ export default async function SelfServiceArticlesPage() {
         <section className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {articles.map((article) => {
             const cover = articleHeroUrl(article.images);
+            const imageCount = ((article.images as ArticleImage[] | null) ?? []).filter((image) => image.url).length;
             const done = article.stage === "done" && article.status !== "failed";
             const editorHref = article.plannedContentItemId ? `/app/month/${article.plannedContentItemId}` : null;
             const platform = platformBrandFromName(article.platformTarget);
@@ -84,7 +86,7 @@ export default async function SelfServiceArticlesPage() {
               <div className="p-5">
                 <div className="flex items-center justify-between gap-3 text-[9px]"><span className={done ? "text-violet-300" : article.status === "failed" ? "text-rose-300" : "text-white/30"}>{stageLabel(article.stage, article.status)}</span><span className="text-white/20">{formatDate(article.createdAt)}</span></div>
                 <h2 className="mt-3 line-clamp-3 min-h-[3.75rem] text-lg font-semibold leading-5 tracking-[-0.025em] text-white/82">{article.title}</h2>
-                <div className="mt-4 flex items-center gap-3 text-[9px] text-white/25"><span>{article.wordCount ? `${article.wordCount.toLocaleString("ru-RU")} слов` : "объём уточняется"}</span><span>·</span><span>{article.provider ? `${article.provider} · ${article.model}` : "редакционный движок"}</span></div>
+                <div className="mt-4 flex items-center gap-3 text-[9px] text-white/25"><span>{article.wordCount ? `${article.wordCount.toLocaleString("ru-RU")} слов` : "объём уточняется"}</span><span>·</span><span>{imageCount ? `${imageCount} ${imageCount === 1 ? "изображение" : "изображения"}` : "визуалы готовятся"}</span></div>
                 <div className="mt-5 grid grid-cols-2 gap-2">
                   {editorHref ? <Link href={editorHref} className="rounded-xl bg-violet-500 px-3 py-2.5 text-center text-[10px] font-semibold text-white transition hover:bg-violet-400">Открыть</Link> : <span className="rounded-xl bg-white/[0.04] px-3 py-2.5 text-center text-[10px] text-white/25">Архивная статья</span>}
                   {done ? <a href={`/api/self-service/articles/${article.id}/docx`} className="rounded-xl border border-white/[0.07] bg-white/[0.035] px-3 py-2.5 text-center text-[10px] font-semibold text-white/55 transition hover:bg-white/[0.06]">DOCX ↓</a> : <span className="rounded-xl border border-white/[0.05] px-3 py-2.5 text-center text-[10px] text-white/20">Документ готовится</span>}

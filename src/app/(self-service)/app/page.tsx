@@ -8,6 +8,7 @@ import { hasSelfServicePaidAccess } from "@/lib/self-service/subscription";
 import { darkCardClass, SelfServiceAppShell } from "@/app/(self-service)/app/self-service-app-shell";
 import { PlatformBrandIcon, platformBrandFromName, type PlatformBrand } from "@/app/(self-service)/platform-brand-icon";
 import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
+import { articleHeroUrl } from "@/lib/article-engine";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,8 @@ function overviewVisual(item: {
     generatedVariants: Array<{ id: string }>;
   }>;
   generatedCreativeVariants: Array<{ id: string }>;
-}) {
+}, articleCover?: string | null) {
+  if (articleCover) return { src: articleCover, slideCount: 0 };
   const slides = item.creativeAssets.filter((asset) => asset.assetType === "carousel_slide");
   const activeAssets = slides.length > 0
     ? slides
@@ -117,9 +119,21 @@ export default async function SelfServiceHomePage() {
     redirect(hasSelfServicePaidAccess(workspace.subscription) ? "/app/month" : "/app/preview");
   }
   const items = latestPlan?.plannedContentItems ?? [];
-  const readyItems = items.filter((item) => item.contentDraft && overviewVisual(item)).length;
+  const articleCovers = items.length
+    ? await prisma.article.findMany({
+        where: { plannedContentItemId: { in: items.map((item) => item.id) }, status: { not: "archived" } },
+        select: { plannedContentItemId: true, images: true },
+      })
+    : [];
+  const articleCoverByItemId = new Map(
+    articleCovers.flatMap((article) => {
+      const cover = articleHeroUrl(article.images);
+      return article.plannedContentItemId && cover ? [[article.plannedContentItemId, cover] as const] : [];
+    }),
+  );
+  const readyItems = items.filter((item) => item.contentDraft && overviewVisual(item, articleCoverByItemId.get(item.id))).length;
   const nextItem = items.find((item) => item.plannedDate >= new Date().toISOString().slice(0, 10)) ?? items[0] ?? null;
-  const nextVisual = nextItem ? overviewVisual(nextItem) : null;
+  const nextVisual = nextItem ? overviewVisual(nextItem, articleCoverByItemId.get(nextItem.id)) : null;
   const nextPlatform = platformBrandFromName(nextItem?.platformName);
 
   return (
