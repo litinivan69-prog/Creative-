@@ -23,7 +23,8 @@ function localClock(now: Date, timezone: string) {
   }
 }
 
-function publicationPlatform(name: string): "vk" | "telegram" | null {
+function publicationPlatform(name: string): "vk" | "telegram" | "vcru" | null {
+  if (/vc\.ru|виси/i.test(name)) return "vcru";
   if (/vk|вконтакт/i.test(name)) return "vk";
   if (/telegram|телеграм|\btg\b/i.test(name)) return "telegram";
   return null;
@@ -57,7 +58,7 @@ export async function runScheduledAutopublish(now = new Date()) {
       client: {
         select: {
           channels: {
-            where: { status: "active", autopublishEnabled: true, platform: { in: ["vk", "telegram"] } },
+            where: { status: "active", autopublishEnabled: true, platform: { in: ["vk", "telegram", "vcru"] } },
             select: { platform: true },
           },
         },

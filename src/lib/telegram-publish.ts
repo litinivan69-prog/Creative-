@@ -4,10 +4,13 @@ import { prisma } from "@/lib/prisma";
 import { getIntegrationSetting, getTelegramBotToken, sendTelegramPost } from "@/lib/telegram";
 import { VK_ACCESS_TOKEN_KEY, sendVkPost } from "@/lib/vk";
 import { decryptChannelCredential } from "@/lib/channel-credentials";
+import { sendVcArticle } from "@/lib/vc";
+import type { ArticleImage } from "@/lib/article-schema";
 
 /** Maps a planned platform name (free text from the plan) to a channel platform. */
-function mapPublicationPlatform(name?: string | null): "vk" | "telegram" | null {
+function mapPublicationPlatform(name?: string | null): "vk" | "telegram" | "vcru" | null {
   if (!name) return null;
+  if (/vc\.ru|виси/i.test(name)) return "vcru";
   if (/vk|вконтакт/i.test(name)) return "vk";
   if (/telegram|телеграм|\btg\b/i.test(name)) return "telegram";
   return null;
@@ -81,6 +84,19 @@ async function collectPublicationImageUrls(scheduledPublicationId: string): Prom
     .filter((url): url is string => Boolean(url));
 }
 
+async function collectVcArticle(plannedContentItemId: string) {
+  const article = await prisma.article.findFirst({
+    where: { plannedContentItemId, status: { not: "archived" } },
+    orderBy: { updatedAt: "desc" },
+    select: { title: true, bodyMarkdown: true, images: true },
+  });
+  if (!article?.bodyMarkdown) return null;
+  const imageUrls = ((article.images as ArticleImage[] | null) ?? [])
+    .map((image) => image.url)
+    .filter((url): url is string => Boolean(url));
+  return { title: article.title, body: article.bodyMarkdown, imageUrls };
+}
+
 async function logIntegrationEvent(data: {
   eventType: string;
   relatedId: string;
@@ -114,7 +130,7 @@ async function logIntegrationEvent(data: {
  */
 export async function publishScheduledPublication(
   scheduledPublicationId: string,
-  options: { force?: boolean; platforms?: Array<"vk" | "telegram"> } = {},
+  options: { force?: boolean; platforms?: Array<"vk" | "telegram" | "vcru"> } = {},
 ): Promise<TelegramPublishOutcome> {
   const publication = await prisma.scheduledPublication.findUnique({
     where: { id: scheduledPublicationId },
@@ -123,6 +139,7 @@ export async function publishScheduledPublication(
       clientId: true,
       topic: true,
       platformName: true,
+      plannedContentItemId: true,
       publishStatus: true,
       externalUrl: true,
       contentDraft: { select: { draftTitle: true, draftBody: true, telegramBody: true } },
@@ -185,6 +202,9 @@ export async function publishScheduledPublication(
   const existingByPlatform = new Map(publication.results.map((result) => [result.platform, result]));
 
   const imageUrls = await collectPublicationImageUrls(publication.id);
+  const vcArticle = targets.some((channel) => channel.platform === "vcru")
+    ? await collectVcArticle(publication.plannedContentItemId)
+    : null;
   const results: PlatformPublishResult[] = [];
 
   for (const channel of targets) {
@@ -200,7 +220,31 @@ export async function publishScheduledPublication(
       continue;
     }
 
-    if (channel.platform === "vk") {
+    if (channel.platform === "vcru") {
+      const token = decryptChannelCredential(channel.credentialEncrypted);
+      const subsiteId = Number(channel.channelId);
+      if (!token || !Number.isInteger(subsiteId) || subsiteId <= 0) {
+        results.push({ platform: "vcru", ok: false, error: "VC.ru не подключён в настройках." });
+        continue;
+      }
+      if (!vcArticle) {
+        results.push({ platform: "vcru", ok: false, error: "Статья ещё не готова к публикации." });
+        continue;
+      }
+      const vc = await sendVcArticle({ token, subsiteId, ...vcArticle });
+      if (vc.ok) {
+        results.push({ platform: "vcru", ok: true, url: vc.url, externalId: String(vc.entryId), imagesSent: vc.imagesSent });
+      } else {
+        results.push({ platform: "vcru", ok: false, error: vc.error });
+      }
+      await logIntegrationEvent({
+        eventType: "vcru_publish",
+        relatedId: publication.id,
+        payload: vc.ok ? { subsiteId, url: vc.url, imagesSent: vc.imagesSent } : { subsiteId, error: vc.error },
+        ok: vc.ok,
+        errorMessage: vc.ok ? undefined : vc.error,
+      });
+    } else if (channel.platform === "vk") {
       const vkToken = decryptChannelCredential(channel.credentialEncrypted)
         ?? await getIntegrationSetting(VK_ACCESS_TOKEN_KEY);
       if (!vkToken) {

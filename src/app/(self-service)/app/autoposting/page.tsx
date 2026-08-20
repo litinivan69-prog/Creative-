@@ -154,7 +154,7 @@ export default async function SelfServiceAutopostingPage() {
   ]);
 
   const activeChannels = workspace.channels.filter(
-    (channel) => channel.status === "active" && ["telegram", "vk"].includes(channel.platform.toLowerCase()),
+    (channel) => channel.status === "active" && ["telegram", "vk", "vcru"].includes(channel.platform.toLowerCase()),
   );
   const automaticChannels = activeChannels.filter((channel) => channel.autopublishEnabled);
   const nextPublication = upcoming.find(
