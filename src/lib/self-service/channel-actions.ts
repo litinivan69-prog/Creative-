@@ -14,6 +14,7 @@ import {
 } from "@/lib/telegram";
 import { publishScheduledPublication } from "@/lib/telegram-publish";
 import { VK_ACCESS_TOKEN_KEY, verifyVkGroup, verifyVkToken } from "@/lib/vk";
+import { verifyVcSubsite, verifyVcToken } from "@/lib/vc";
 
 const platforms = ["vk", "telegram", "dzen", "vcru"] as const;
 
@@ -51,7 +52,8 @@ export async function connectSelfServiceSocialChannel(formData: FormData) {
   const membership = await currentMembership();
   if (!membership) redirect("/sign-in?callbackUrl=/app/channels");
 
-  const platform = String(formData.get("platform") ?? "") === "vk" ? "vk" : "telegram";
+  const requestedPlatform = String(formData.get("platform") ?? "");
+  const platform = requestedPlatform === "vk" ? "vk" : requestedPlatform === "vcru" ? "vcru" : "telegram";
   const reference = String(formData.get("reference") ?? "").trim();
   const suppliedToken = String(formData.get("token") ?? "").trim();
   const autopublishEnabled = formData.get("autopublishEnabled") === "on";
@@ -59,7 +61,7 @@ export async function connectSelfServiceSocialChannel(formData: FormData) {
   function connectRedirect(params: { notice?: string; error?: string }): never {
     return settingsRedirect({ ...params, fromBrief });
   }
-  if (!reference) connectRedirect({ error: platform === "vk" ? "Укажите ссылку на сообщество VK." : "Укажите адрес Telegram-канала." });
+  if (!reference && platform !== "vcru") connectRedirect({ error: platform === "vk" ? "Укажите ссылку на сообщество VK." : "Укажите адрес Telegram-канала." });
 
   const existing = await prisma.clientChannel.findFirst({
     where: { clientId: membership.clientId, platform },
@@ -67,11 +69,24 @@ export async function connectSelfServiceSocialChannel(formData: FormData) {
   });
 
   let channelId = reference;
-  let title = platform === "vk" ? "VK" : "Telegram";
+  let title = platform === "vk" ? "VK" : platform === "vcru" ? "VC.ru" : "Telegram";
   let credentialHint = existing?.credentialHint ?? null;
   let credentialEncrypted = existing?.credentialEncrypted ?? null;
 
-  if (platform === "telegram") {
+  if (platform === "vcru") {
+    const token = suppliedToken || decryptChannelCredential(existing?.credentialEncrypted);
+    if (!token) connectRedirect({ error: "Нужен API-токен VC.ru из настроек профиля." });
+    const account = await verifyVcToken(token);
+    if (!account.ok) connectRedirect({ error: account.error });
+    const requestedSubsiteId = reference ? Number(reference) : account.accountId;
+    if (!Number.isInteger(requestedSubsiteId) || requestedSubsiteId <= 0) connectRedirect({ error: "Укажите числовой ID блога VC.ru." });
+    const subsite = await verifyVcSubsite(token, requestedSubsiteId);
+    if (!subsite.ok) connectRedirect({ error: subsite.error });
+    channelId = String(subsite.subsiteId);
+    title = subsite.title;
+    credentialHint = account.label;
+    if (suppliedToken) credentialEncrypted = encryptChannelCredential(token);
+  } else if (platform === "telegram") {
     const token = suppliedToken || decryptChannelCredential(existing?.credentialEncrypted) || await getTelegramBotToken();
     if (!token) connectRedirect({ error: "Нужен токен Telegram-бота. Получите его у @BotFather и вставьте один раз." });
     if (suppliedToken) {
@@ -177,7 +192,9 @@ export async function publishSelfServiceMaterialNow(formData: FormData) {
     redirect(`/app/month/${encodeURIComponent(itemId)}?error=confirm_first`);
   }
 
-  const targetPlatform = /vk|вконтакт/i.test(item.platformName)
+  const targetPlatform = /vc\.ru|виси/i.test(item.platformName)
+    ? "vcru" as const
+    : /vk|вконтакт/i.test(item.platformName)
     ? "vk" as const
     : /telegram|телеграм|\btg\b/i.test(item.platformName)
       ? "telegram" as const
