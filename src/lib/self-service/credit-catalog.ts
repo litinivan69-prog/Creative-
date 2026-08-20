@@ -1,4 +1,9 @@
 export const TRIAL_CREDITS = 5;
+export const CREDIT_DISPLAY_MULTIPLIER = 100;
+
+export function displayCredits(value: number) {
+  return new Intl.NumberFormat("ru-RU").format(value * CREDIT_DISPLAY_MULTIPLIER);
+}
 
 export const CREDIT_PRODUCTS = {
   text_post: { label: "Пост без визуала", credits: 1 },
@@ -16,7 +21,7 @@ export type CreditProductCode = keyof typeof CREDIT_PRODUCTS;
 export const CREDIT_PLANS = [
   { code: "start", name: "Старт", credits: 30, monthlyPriceMinor: 990_000, description: "Для спокойного присутствия одного бренда" },
   { code: "growth", name: "Рост", credits: 70, monthlyPriceMinor: 1_790_000, description: "Для регулярных постов, статей и каруселей", featured: true },
-  { code: "pro", name: "Про", credits: 130, monthlyPriceMinor: 2_790_000, description: "Для активного месяца и нескольких форматов" },
+  { code: "pro", name: "Про", credits: 130, monthlyPriceMinor: 2_490_000, description: "Для активного месяца и нескольких форматов" },
 ] as const;
 
 export type CreditPlanCode = (typeof CREDIT_PLANS)[number]["code"];

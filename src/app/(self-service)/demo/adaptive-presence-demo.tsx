@@ -2,6 +2,14 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import {
+  BILLING_DURATIONS,
+  CREDIT_PLANS,
+  CREDIT_PRODUCTS,
+  displayCredits,
+  formatRubles,
+  subscriptionPriceMinor,
+} from "@/lib/self-service/credit-catalog";
 
 type DemoView = "overview" | "calendar" | "materials" | "articles" | "autoposting" | "results";
 
@@ -120,6 +128,45 @@ function DemoWorkspace() {
   );
 }
 
+function PublicPricing() {
+  const [months, setMonths] = useState(3);
+  const duration = BILLING_DURATIONS.find((item) => item.months === months) ?? BILLING_DURATIONS[1];
+  const formatExamples = [
+    ["Быстрый пост", CREDIT_PRODUCTS.quick_announcement.credits],
+    ["Пост с визуалом", CREDIT_PRODUCTS.visual_post.credits],
+    ["Статья с обложкой", CREDIT_PRODUCTS.article_with_cover.credits],
+    ["Карусель · 4 слайда", CREDIT_PRODUCTS.carousel.credits],
+    ["Ответ на отзыв", CREDIT_PRODUCTS.review_reply.credits],
+  ] as const;
+
+  return (
+    <section id="pricing" className="scroll-mt-6 border-t border-white/[0.06] py-24">
+      <div className="flex flex-wrap items-end justify-between gap-5">
+        <div><p className="text-[10px] font-bold uppercase tracking-[0.15em] text-violet-300">Стоимость</p><h2 className="mt-3 max-w-3xl font-heading text-4xl font-semibold leading-[1.02] tracking-[-0.045em] sm:text-5xl">Вы платите за нужный объём, а не за лишний пакет.</h2><p className="mt-5 max-w-2xl text-sm leading-6 text-white/40">Каждый месяц вы получаете кредиты и сами собираете набор: посты VK, Telegram и ОК, статьи Дзен и VC.ru, визуалы, карусели и быстрые публикации.</p></div>
+        <Link href="/start" className="rounded-2xl bg-white px-6 py-3.5 text-sm font-semibold text-black transition hover:bg-violet-100">Попробовать на своём бренде</Link>
+      </div>
+
+      <div className="mt-8 grid grid-cols-2 gap-2 rounded-[20px] border border-white/[0.07] bg-white/[0.025] p-1.5 sm:grid-cols-4">
+        {BILLING_DURATIONS.map((item) => <button key={item.months} type="button" onClick={() => setMonths(item.months)} className={`rounded-2xl px-4 py-3 text-left transition ${months === item.months ? "bg-violet-500 text-white shadow-[0_12px_35px_rgba(112,78,255,.22)]" : "text-white/48 hover:bg-white/[0.04]"}`}><span className="block text-xs font-semibold">{item.label}</span><span className={`mt-1 block text-[9px] ${months === item.months ? "text-white/70" : item.discountPercent ? "text-violet-300" : "text-white/22"}`}>{item.discountPercent ? `скидка ${item.discountPercent}%` : "без скидки"}</span></button>)}
+      </div>
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-3">
+        {CREDIT_PLANS.map((plan) => {
+          const totalPrice = subscriptionPriceMinor(plan.code, months);
+          const monthlyPrice = Math.round(totalPrice / months);
+          const saving = plan.monthlyPriceMinor * months - totalPrice;
+          return <article key={plan.code} className={`relative overflow-hidden rounded-[26px] border p-6 ${"featured" in plan && plan.featured ? "border-violet-400/30 bg-[linear-gradient(145deg,rgba(115,78,255,.18),rgba(255,255,255,.03))] shadow-[0_30px_90px_rgba(66,43,140,.2)]" : "border-white/[0.07] bg-white/[0.025]"}`}>{"featured" in plan && plan.featured ? <span className="absolute right-5 top-5 rounded-full bg-violet-500/16 px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.1em] text-violet-200">оптимальный</span> : null}<p className="text-sm font-semibold text-white">{plan.name}</p><div className="mt-6 flex items-end gap-2"><p className="font-heading text-4xl font-semibold tracking-[-0.05em] text-white">{formatRubles(monthlyPrice)} ₽</p><span className="pb-1 text-[10px] text-white/28">/ месяц</span></div><p className="mt-3 text-2xl font-semibold tracking-[-0.035em] text-violet-200">{displayCredits(plan.credits)}</p><p className="mt-1 text-[10px] text-white/28">кредитов каждый месяц</p><div className="my-5 h-px bg-white/[0.06]" /><ul className="space-y-3 text-xs text-white/45"><li>✓ Любое сочетание форматов</li><li>✓ Тексты и визуалы под бренд</li><li>✓ Календарь на весь месяц</li><li>✓ Быстрые посты и ответы на отзывы</li></ul><p className="mt-5 min-h-8 text-[10px] leading-4 text-white/28">{plan.description}</p>{saving > 0 ? <p className="mt-3 text-[10px] font-semibold text-violet-300">Экономия за период: {formatRubles(saving)} ₽</p> : <p className="mt-3 text-[10px] text-white/20">Можно сменить срок позже</p>}<Link href="/start" className={`mt-6 flex justify-center rounded-2xl px-5 py-3.5 text-xs font-semibold transition ${"featured" in plan && plan.featured ? "bg-violet-500 text-white hover:bg-violet-400" : "border border-white/[0.09] bg-white/[0.04] text-white/75 hover:bg-white/[0.08]"}`}>Выбрать тариф</Link></article>;
+        })}
+      </div>
+
+      <div className="mt-4 grid gap-4 rounded-[26px] border border-white/[0.07] bg-white/[0.025] p-6 lg:grid-cols-[.75fr_1.25fr] lg:items-center">
+        <div><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-violet-300">Как работают кредиты</p><h3 className="mt-3 text-2xl font-semibold tracking-[-0.035em] text-white">Понятная внутренняя валюта</h3><p className="mt-3 max-w-md text-xs leading-5 text-white/35">Кредиты не привязывают вас к фиксированному числу постов. В одном месяце можно сделать больше статей, в другом — больше коротких публикаций.</p></div>
+        <div className="grid gap-2 sm:grid-cols-2">{formatExamples.map(([label, credits]) => <div key={label} className="flex items-center justify-between rounded-2xl border border-white/[0.05] bg-black/15 px-4 py-3"><span className="text-xs text-white/48">{label}</span><span className="text-xs font-semibold text-violet-200">{displayCredits(credits)}</span></div>)}</div>
+      </div>
+    </section>
+  );
+}
+
 export function AdaptivePresenceDemo() {
   return (
     <main className="min-h-screen overflow-hidden bg-[#08070c] text-white">
@@ -127,13 +174,13 @@ export function AdaptivePresenceDemo() {
       <div className="relative mx-auto max-w-[1320px] px-4 sm:px-7">
         <header className="flex h-20 items-center justify-between gap-5 border-b border-white/[0.06]"><Link href="/"><BrandMark /></Link><nav className="hidden items-center gap-8 text-xs font-medium text-white/45 md:flex"><a href="#product" className="transition hover:text-white">Продукт</a><a href="#how" className="transition hover:text-white">Как работает</a><a href="#pricing" className="transition hover:text-white">Стоимость</a><Link href="/sign-in" className="transition hover:text-white">Войти</Link></nav><Link href="/start" className="rounded-full bg-white px-5 py-2.5 text-xs font-semibold text-black transition hover:bg-violet-100">Попробовать на своём бренде</Link></header>
 
-        <section className="pb-16 pt-16 text-center sm:pb-20 sm:pt-24"><span className="inline-flex items-center gap-2 rounded-full border border-violet-400/20 bg-violet-500/10 px-3 py-1.5 text-[10px] font-semibold text-violet-200"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />AI-система присутствия бренда</span><h1 className="mx-auto mt-7 max-w-5xl font-heading text-5xl font-semibold leading-[.96] tracking-[-0.06em] text-white sm:text-7xl lg:text-[86px]">Ваш бренд<br /><span className="bg-[linear-gradient(90deg,#b9a8ff,#7558ff,#68dfbd)] bg-clip-text text-transparent">публикуется сам.</span></h1><p className="mx-auto mt-7 max-w-2xl text-base leading-7 text-white/45 sm:text-lg">Один короткий бриф — и Adaptive Presence собирает месяц, пишет тексты, создаёт визуалы и публикует материалы в VK, Telegram, Дзен и VC.ru.</p><div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row"><a href="#product" className="rounded-2xl bg-violet-500 px-6 py-3.5 text-sm font-semibold text-white shadow-[0_18px_55px_rgba(112,78,255,.28)] transition hover:bg-violet-400">Посмотреть живое демо</a><Link href="/start" className="rounded-2xl border border-white/[0.09] bg-white/[0.04] px-6 py-3.5 text-sm font-semibold text-white/75 transition hover:bg-white/[0.08] hover:text-white">Попробовать на своём бренде</Link></div><p className="mt-5 text-[10px] text-white/25">Демо работает без регистрации и не расходует генерации</p></section>
+        <section className="pb-16 pt-16 text-center sm:pb-20 sm:pt-24"><span className="inline-flex items-center gap-2 rounded-full border border-violet-400/20 bg-violet-500/10 px-3 py-1.5 text-[10px] font-semibold text-violet-200"><span className="h-1.5 w-1.5 rounded-full bg-violet-300" />AI-система присутствия бренда</span><h1 className="mx-auto mt-7 max-w-5xl font-heading text-5xl font-semibold leading-[.96] tracking-[-0.06em] text-white sm:text-7xl lg:text-[86px]">Контент для бренда.<br /><span className="bg-[linear-gradient(90deg,#d1c7ff,#8d72ff,#7656ff)] bg-clip-text text-transparent">Без агентской рутины.</span></h1><p className="mx-auto mt-7 max-w-2xl text-base leading-7 text-white/45 sm:text-lg">Один короткий бриф — и Adaptive Presence собирает гармоничный месяц, пишет тексты, создаёт визуалы и готовит публикации для VK, Telegram, Одноклассников, Дзена и VC.ru.</p><div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row"><a href="#product" className="rounded-2xl bg-violet-500 px-6 py-3.5 text-sm font-semibold text-white shadow-[0_18px_55px_rgba(112,78,255,.28)] transition hover:bg-violet-400">Пройти живое демо</a><Link href="/start" className="rounded-2xl border border-white/[0.09] bg-white/[0.04] px-6 py-3.5 text-sm font-semibold text-white/75 transition hover:bg-white/[0.08] hover:text-white">Попробовать на своём бренде</Link></div><div className="mx-auto mt-6 flex max-w-xl flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[10px] text-white/25"><span>500 пробных кредитов</span><span>без менеджера</span><span>настройка за 10 минут</span></div></section>
 
         <section id="product" className="scroll-mt-6 pb-24"><div className="mb-7 flex flex-wrap items-end justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.15em] text-violet-300">Живой продукт</p><h2 className="mt-2 font-heading text-3xl font-semibold tracking-[-0.04em] text-white sm:text-4xl">Нажмите на раздел и пройдите кабинет.</h2></div><p className="max-w-md text-xs leading-5 text-white/35">Это не видеоролик. Переключайте обзор, календарь, материалы, статьи, автопостинг и результаты прямо на странице.</p></div><DemoWorkspace /></section>
 
         <section id="how" className="border-t border-white/[0.06] py-24"><div className="grid gap-10 lg:grid-cols-[.72fr_1.28fr]"><div><p className="text-[10px] font-bold uppercase tracking-[0.15em] text-violet-300">Как работает</p><h2 className="mt-3 font-heading text-4xl font-semibold leading-[1.02] tracking-[-0.045em]">От брифа до публикации — один спокойный цикл.</h2><p className="mt-5 max-w-md text-sm leading-6 text-white/40">Сложная производственная логика остаётся внутри. Вы видите только результат и следующий понятный шаг.</p></div><div className="grid gap-3 sm:grid-cols-2">{[["01","Понимаем бренд","Сайт, продукты, аудитория, тон и ограничения сохраняются в памяти."],["02","Собираем месяц","Темы распределяются по календарю и адаптируются под каждую площадку."],["03","Создаём материалы","Готовим тексты, статьи, визуалы и отдельные слайды каруселей."],["04","Публикуем и измеряем","Подтверждённое выходит по расписанию, результаты возвращаются в кабинет."]].map(([number,title,text])=><article key={number} className="rounded-[22px] border border-white/[0.07] bg-white/[0.025] p-5"><span className="text-[10px] font-semibold text-violet-300">{number}</span><h3 className="mt-5 text-base font-semibold text-white">{title}</h3><p className="mt-2 text-xs leading-5 text-white/35">{text}</p></article>)}</div></div></section>
 
-        <section id="pricing" className="pb-24"><div className="overflow-hidden rounded-[30px] border border-violet-400/15 bg-[radial-gradient(circle_at_70%_20%,rgba(124,92,255,.18),transparent_34%),rgba(255,255,255,.025)] p-7 sm:p-10"><div className="grid gap-8 lg:grid-cols-[1fr_auto] lg:items-end"><div><p className="text-[10px] font-bold uppercase tracking-[0.15em] text-violet-300">Один понятный тариф</p><div className="mt-3 flex flex-wrap items-end gap-3"><h2 className="font-heading text-4xl font-semibold tracking-[-0.045em]">19 900 ₽</h2><span className="pb-1 text-sm text-white/35">за контент-месяц</span></div><p className="mt-4 max-w-2xl text-sm leading-6 text-white/40">8 публикаций, статьи Дзен и VC.ru, тексты, визуалы, календарь и отдельный автопостинг для VK и Telegram. До оплаты вы увидите, как система поняла ваш бренд и какие темы предложит.</p></div><Link href="/start" className="inline-flex justify-center rounded-2xl bg-white px-6 py-3.5 text-sm font-semibold text-black transition hover:bg-violet-100">Получить персональное превью</Link></div></div></section>
+        <PublicPricing />
 
         <footer className="flex flex-wrap items-center justify-between gap-4 border-t border-white/[0.06] py-8 text-[10px] text-white/25"><BrandMark compact /><p>© 2026 Creative Command · Adaptive Presence</p><div className="flex gap-5"><Link href="/sign-in">Войти</Link><Link href="/start">Начать</Link></div></footer>
       </div>
