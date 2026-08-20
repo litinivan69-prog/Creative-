@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { grantTrialCredits } from "@/lib/self-service/credits";
+import { displayCredits } from "@/lib/self-service/credit-catalog";
 import { generateSelfServiceInstantContent, retrySelfServiceInstantContent } from "@/lib/self-service/instant-content-actions";
 import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 import { InstantResult } from "../instant-result";
@@ -27,11 +28,11 @@ export default async function QuickPostPage({ searchParams }: { searchParams: Pr
   ]);
 
   return (
-    <SelfServiceAppShell brandName={membership.client.name} active="quick" eyebrow="Вне плана" title="Быстрый пост" description="Расскажите, что произошло. Система соберёт готовую публикацию за 1 кредит — без пересборки всего месяца.">
+    <SelfServiceAppShell brandName={membership.client.name} active="quick" eyebrow="Вне плана" title="Быстрый пост" description={`Расскажите, что произошло. Система соберёт готовую публикацию за ${displayCredits(1)} кредитов — без пересборки всего месяца.`}>
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <form action={generateSelfServiceInstantContent} className={`${darkCardClass} p-5 sm:p-7`}>
           <input type="hidden" name="kind" value="quick_post" />
-          {query.error === "credits" ? <p className="mb-4 rounded-xl bg-amber-300/[0.08] px-4 py-3 text-xs text-amber-100">Не хватает одного кредита. Сохранённые материалы не изменились.</p> : null}
+          {query.error === "credits" ? <p className="mb-4 rounded-xl bg-amber-300/[0.08] px-4 py-3 text-xs text-amber-100">Не хватает {displayCredits(1)} кредитов. Сохранённые материалы не изменились.</p> : null}
           {query.error === "source" ? <p className="mb-4 rounded-xl bg-amber-300/[0.08] px-4 py-3 text-xs text-amber-100">Добавьте хотя бы несколько фактов для поста.</p> : null}
           <label className="block text-[10px] font-bold uppercase tracking-[0.13em] text-white/32">Куда подготовить</label>
           <div className="mt-3 grid grid-cols-3 gap-2">
@@ -39,7 +40,7 @@ export default async function QuickPostPage({ searchParams }: { searchParams: Pr
           </div>
           <label className="mt-6 block text-[10px] font-bold uppercase tracking-[0.13em] text-white/32">Что случилось</label>
           <textarea name="sourceText" required rows={8} placeholder="Например: сегодня получили новую поставку. В наличии появились латунные фитинги трёх размеров. Есть фотографии со склада. Цену в посте не указываем." className="mt-3 w-full resize-y rounded-2xl border border-white/[0.08] bg-black/20 px-4 py-4 text-sm leading-6 text-white/75 outline-none placeholder:text-white/18 focus:border-violet-400/35" />
-          <div className="mt-4 flex items-center justify-between gap-4"><p className="text-[10px] text-white/28">Баланс: {wallet?.balance ?? 0} кредитов</p><button className="rounded-xl bg-violet-500 px-5 py-3 text-xs font-semibold text-white">Создать за 1 кредит</button></div>
+          <div className="mt-4 flex items-center justify-between gap-4"><p className="text-[10px] text-white/28">Баланс: {displayCredits(wallet?.balance ?? 0)} кредитов</p><button className="rounded-xl bg-violet-500 px-5 py-3 text-xs font-semibold text-white">Создать за {displayCredits(1)} кредитов</button></div>
         </form>
 
         <aside className={`${darkCardClass} h-fit p-5`}>

@@ -1556,33 +1556,39 @@ function exactSelfServiceContentMix<T extends PairablePlanItem>(
   const daysInMonth = monthMatch
     ? new Date(Number(monthMatch[1]), Number(monthMatch[2]), 0).getDate()
     : 28;
-  let globalIndex = 0;
+  const weekdays = Array.from({ length: daysInMonth }, (_, index) => index + 1).filter((day) => {
+    if (!monthMatch) return true;
+    const weekday = new Date(Number(monthMatch[1]), Number(monthMatch[2]) - 1, day).getDay();
+    return weekday !== 0 && weekday !== 6;
+  });
+  const candidateDays = requestedTotal <= weekdays.length ? weekdays : Array.from({ length: daysInMonth }, (_, index) => index + 1);
+  const scheduledTargets = Array.from({ length: Math.max(...targets.map((target) => target.count)) }, (_, round) =>
+    targets.flatMap((target) => round < target.count ? [{ target, targetIndex: round }] : []),
+  ).flat();
 
-  return targets.flatMap((target) => {
+  return scheduledTargets.map(({ target, targetIndex }, globalIndex) => {
     const samePlatform = sourceItems.filter((item) => item.platformName === target.platform);
-    return Array.from({ length: target.count }, (_, index) => {
-      const base = samePlatform[index % Math.max(1, samePlatform.length)] ?? sourceItems[globalIndex % sourceItems.length];
-      if (!base) throw new Error("Не удалось подготовить темы для выбранного набора.");
-      globalIndex += 1;
-      const day = Math.min(daysInMonth, Math.max(1, Math.round((daysInMonth * globalIndex) / (requestedTotal + 1))));
-      const theme = strategicThemes[index % Math.max(1, strategicThemes.length)];
-      const useSourceTopic = index < samePlatform.length;
-      return {
-        ...base,
-        moduleType: /статья/i.test(target.format) ? "expert_articles" : "content_production",
-        platformName: target.platform!,
-        format: target.format,
-        topic: useSourceTopic ? base.topic : `${target.label} №${index + 1}${theme ? `: ${theme}` : ""}`,
-        goal: target.goal,
-        plannedDate: `${month}-${String(day).padStart(2, "0")}`,
-        week: `Неделя ${Math.min(4, Math.floor((day - 1) / 7) + 1)}`,
-        sequenceReason: `Материал входит в подтверждённый пользователем набор: ${target.label}.`,
-        approvalRequired: true,
-        autopublishEligible: !/статья|отзыв/i.test(target.format),
-        pairGroupId: null,
-        status: "planned",
-      };
-    });
+    const base = samePlatform[targetIndex % Math.max(1, samePlatform.length)] ?? sourceItems[globalIndex % sourceItems.length];
+    if (!base) throw new Error("Не удалось подготовить темы для выбранного набора.");
+    const candidateIndex = Math.min(candidateDays.length - 1, Math.floor(((globalIndex + 0.5) * candidateDays.length) / requestedTotal));
+    const day = candidateDays[candidateIndex];
+    const theme = strategicThemes[targetIndex % Math.max(1, strategicThemes.length)];
+    const useSourceTopic = targetIndex < samePlatform.length;
+    return {
+      ...base,
+      moduleType: /статья/i.test(target.format) ? "expert_articles" : "content_production",
+      platformName: target.platform!,
+      format: target.format,
+      topic: useSourceTopic ? base.topic : `${target.label} №${targetIndex + 1}${theme ? `: ${theme}` : ""}`,
+      goal: target.goal,
+      plannedDate: `${month}-${String(day).padStart(2, "0")}`,
+      week: `Неделя ${Math.min(5, Math.floor((day - 1) / 7) + 1)}`,
+      sequenceReason: `Материал входит в подтверждённый пользователем набор: ${target.label}. Площадки чередуются, а даты распределены по рабочим дням месяца.`,
+      approvalRequired: true,
+      autopublishEligible: !/статья|отзыв/i.test(target.format),
+      pairGroupId: null,
+      status: "planned",
+    };
   });
 }
 
