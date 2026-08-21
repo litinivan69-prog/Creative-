@@ -31,6 +31,56 @@ const materials = [
   { day: "20", platform: "VC.ru", title: "Как устроены комплексные поставки для инженерных сетей", status: "Готовится" },
 ];
 
+function HeroProductMontage() {
+  return (
+    <div className="relative mx-auto h-[520px] w-full max-w-[650px] sm:h-[610px] lg:mr-0">
+      <div className="absolute inset-8 rounded-full bg-violet-600/25 blur-[100px]" />
+
+      <div className="absolute left-2 right-6 top-10 overflow-hidden rounded-[28px] border border-white/[0.1] bg-[#100e16] shadow-[0_45px_150px_rgba(0,0,0,.6)] sm:left-8 sm:right-10">
+        <div className="flex h-9 items-center gap-1.5 border-b border-white/[0.06] bg-black/25 px-4">
+          <span className="h-2 w-2 rounded-full bg-rose-400/75" />
+          <span className="h-2 w-2 rounded-full bg-amber-300/75" />
+          <span className="h-2 w-2 rounded-full bg-emerald-400/75" />
+          <span className="ml-2 text-[8px] font-medium text-white/25">app.adaptivepresence.ai</span>
+        </div>
+        <div className="grid grid-cols-[72px_minmax(0,1fr)] sm:grid-cols-[102px_minmax(0,1fr)]">
+          <div className="border-r border-white/[0.06] bg-black/15 p-2.5 sm:p-3">
+            <span className="grid h-7 w-7 place-items-center rounded-lg bg-violet-500 text-[8px] font-black text-white">cc.</span>
+            <div className="mt-5 space-y-2">
+              {["Обзор", "Календарь", "Материалы", "Статьи"].map((item, index) => <div key={item} className={`truncate rounded-lg px-2 py-1.5 text-[7px] sm:text-[8px] ${index === 0 ? "bg-violet-500/15 text-white" : "text-white/28"}`}>{item}</div>)}
+            </div>
+          </div>
+          <div className="min-w-0 p-3 sm:p-4">
+            <div className="flex items-start justify-between gap-3"><div><p className="text-[8px] font-bold uppercase tracking-[0.14em] text-violet-300">Август</p><p className="mt-1 text-sm font-semibold text-white sm:text-base">Контент-месяц готов</p></div><span className="rounded-full bg-violet-500/12 px-2 py-1 text-[7px] font-semibold text-violet-200">16 / 18</span></div>
+            <div className="mt-3 grid grid-cols-3 gap-1.5 sm:gap-2">
+              {[["18", "материалов"], ["5", "площадок"], ["89%", "готово"]].map(([value, label]) => <div key={label} className="rounded-xl border border-white/[0.06] bg-white/[0.035] p-2.5"><p className="text-sm font-semibold text-white">{value}</p><p className="mt-1 truncate text-[6px] text-white/28 sm:text-[7px]">{label}</p></div>)}
+            </div>
+            <div className="mt-2.5 rounded-xl border border-white/[0.06] bg-white/[0.025] p-2.5">
+              <div className="flex items-center justify-between text-[7px]"><span className="text-white/65">Публикации месяца</span><span className="text-violet-300">распределены</span></div>
+              <div className="mt-2 grid grid-cols-7 gap-1">{[0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0].map((active, index) => <span key={index} className={`h-4 rounded-[4px] ${active ? "bg-violet-500/70" : "bg-white/[0.04]"}`} />)}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <article className="absolute bottom-7 right-1 w-[52%] overflow-hidden rounded-[24px] border border-white/[0.14] bg-[#15121b] shadow-[0_35px_90px_rgba(0,0,0,.6)] sm:right-4 sm:w-[48%]">
+        <div className="relative aspect-[4/5]"><Image src="/marketing/ilart-editorial-post-v1.webp" alt="Готовый пост для инженерного бренда" fill priority sizes="(max-width:640px) 52vw, 310px" className="object-cover" /><div className="absolute inset-x-0 top-0 bg-gradient-to-b from-black/72 to-transparent p-3 sm:p-4"><div className="flex items-center gap-2"><PlatformBrandIcon platform="VK" size="xs" /><span className="text-[8px] font-semibold text-white/75">Пост готов к публикации</span></div><p className="mt-3 max-w-[210px] text-[10px] font-semibold leading-4 text-white sm:text-xs sm:leading-5">Комплектующие как часть инженерного проекта</p></div></div>
+      </article>
+
+      <article className="absolute bottom-4 left-0 w-[43%] rotate-[-3deg] overflow-hidden rounded-[22px] border border-white/[0.12] bg-[#f2effa] text-[#17131e] shadow-[0_28px_80px_rgba(0,0,0,.48)] sm:left-5 sm:w-[39%]">
+        <div className="relative aspect-[16/9] overflow-hidden"><Image src="/marketing/adaptive-presence-longread-v2.webp" alt="Статья Дзен с изображениями" fill sizes="250px" className="object-cover" /></div>
+        <div className="p-3 sm:p-4"><div className="flex items-center gap-2"><PlatformBrandIcon platform="Дзен" size="xs" /><span className="text-[8px] font-semibold text-black/45">Статья · 1 840 слов</span></div><p className="mt-2 line-clamp-2 text-[9px] font-semibold leading-4 sm:text-[11px]">Газификация дома: этапы, документы и ошибки</p></div>
+      </article>
+
+      <div className="absolute left-[38%] top-[49%] rounded-2xl border border-violet-300/20 bg-[#18131f]/95 px-3 py-2.5 shadow-xl backdrop-blur sm:px-4"><p className="text-[7px] text-white/35">Рост аудитории · демо</p><p className="mt-1 text-xs font-semibold text-white sm:text-sm">+1 240 подписчиков</p></div>
+      <div className="absolute right-[1%] top-[4%] rotate-6"><PlatformBrandIcon platform="Telegram" size="sm" /></div>
+      <div className="absolute left-[1%] top-[35%] -rotate-6"><PlatformBrandIcon platform="Одноклассники" size="sm" /></div>
+      <div className="absolute right-[2%] top-[45%] rotate-3"><PlatformBrandIcon platform="VC.ru" size="sm" /></div>
+      <div className="absolute left-[34%] top-[1%] -rotate-3"><YandexMapsMark size="sm" /></div>
+    </div>
+  );
+}
+
 function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <span className="flex items-center gap-3">
@@ -66,7 +116,7 @@ function OverviewView() {
         <div className="mt-5 grid gap-3 sm:grid-cols-3"><MetricCard label="Материалов" value="18" detail="план месяца" /><MetricCard label="Полностью готово" value="16" detail="89%" /><MetricCard label="Площадок" value="5" detail="в одном плане" /></div>
       </section>
       <div className="grid gap-4 lg:grid-cols-[1.15fr_.85fr]">
-        <section className="overflow-hidden rounded-[22px] border border-white/[0.07] bg-white/[0.03]"><div className="grid sm:grid-cols-[1fr_150px]"><div className="p-5"><div className="flex items-center justify-between"><div><p className="text-sm font-semibold text-white">Следующая публикация</p><p className="mt-1 text-[11px] text-white/35">17 августа · 11:00</p></div><span className="rounded-full bg-violet-500/12 px-3 py-1.5 text-[10px] font-semibold text-violet-200">готово</span></div><div className="mt-5 flex items-center gap-2"><PlatformBrandIcon platform="VK" size="xs" /><span className="text-[10px] text-white/35">VK</span></div><p className="mt-4 text-sm font-medium leading-6 text-white/85">Почему комплектующие нельзя рассматривать отдельно от проекта</p><button className="mt-5 text-[10px] font-semibold text-violet-300">Открыть материал →</button></div><div className="relative hidden min-h-64 sm:block"><Image src="/marketing/adaptive-presence-hero-v2.webp" alt="Превью публикации" fill sizes="150px" className="object-cover object-[72%_center]" /></div></div></section>
+        <section className="overflow-hidden rounded-[22px] border border-white/[0.07] bg-white/[0.03]"><div className="grid sm:grid-cols-[1fr_150px]"><div className="p-5"><div className="flex items-center justify-between"><div><p className="text-sm font-semibold text-white">Следующая публикация</p><p className="mt-1 text-[11px] text-white/35">17 августа · 11:00</p></div><span className="rounded-full bg-violet-500/12 px-3 py-1.5 text-[10px] font-semibold text-violet-200">готово</span></div><div className="mt-5 flex items-center gap-2"><PlatformBrandIcon platform="VK" size="xs" /><span className="text-[10px] text-white/35">VK</span></div><p className="mt-4 text-sm font-medium leading-6 text-white/85">Почему комплектующие нельзя рассматривать отдельно от проекта</p><button className="mt-5 text-[10px] font-semibold text-violet-300">Открыть материал →</button></div><div className="relative hidden min-h-64 sm:block"><Image src="/marketing/ilart-editorial-post-v1.webp" alt="Готовый визуал публикации" fill sizes="150px" className="object-cover" /></div></div></section>
         <section className="rounded-[22px] border border-white/[0.07] bg-white/[0.03] p-5"><div className="flex items-center justify-between"><div><p className="text-sm font-semibold text-white">Площадки</p><p className="mt-1 text-[10px] text-white/30">3 подключены, 2 готовы к настройке</p></div><span className="text-[10px] font-semibold text-violet-300">Настроить</span></div><div className="mt-5 space-y-3">{(["Telegram","VK","Дзен","VC.ru"] as PlatformBrand[]).map((name,index)=><div key={name} className="flex items-center justify-between text-xs"><span className="flex items-center gap-2.5 text-white/65"><PlatformBrandIcon platform={name} size="xs" />{name}</span><span className={index < 2 ? "text-violet-200" : "text-white/30"}>{index < 2 ? "подключено" : "настроить"}</span></div>)}</div></section>
       </div>
     </div>
@@ -79,7 +129,7 @@ function CalendarView() {
   return (
     <section className="rounded-[24px] border border-white/[0.08] bg-white/[0.03] p-5 sm:p-6">
       <div className="flex items-end justify-between"><div><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-violet-300">Календарь</p><h3 className="mt-2 text-2xl font-semibold text-white">Август 2026</h3></div><span className="text-[10px] text-white/35">18 материалов · без публикаций подряд</span></div>
-      <div className="mt-5 grid grid-cols-7 gap-1.5 sm:gap-2">{["Пн","Вт","Ср","Чт","Пт","Сб","Вс"].map(day=><span key={day} className="pb-1 text-center text-[9px] font-bold uppercase text-white/25">{day}</span>)}{cells.map((day,index)=><div key={index} className={`min-h-14 overflow-hidden rounded-xl border p-1.5 sm:min-h-20 sm:p-2 ${day ? "border-white/[0.05] bg-white/[0.025]" : "border-transparent"}`}>{day ? <><span className={`text-[10px] ${scheduled.has(day) ? "text-violet-200" : "text-white/25"}`}>{day}</span>{scheduled.has(day) ? <div className={`mt-1.5 overflow-hidden rounded-lg border border-violet-400/15 ${day % 3 === 0 ? "bg-[linear-gradient(135deg,#6d55bf,#242035)]" : day % 2 === 0 ? "bg-[linear-gradient(135deg,#253e49,#6d4aff)]" : "bg-[linear-gradient(135deg,#4c2b54,#a46672)]"}`}><div className="aspect-[16/7] px-1.5 py-1 text-[8px] font-semibold text-white/80 sm:aspect-[16/9] sm:text-[9px]">{scheduled.get(day)}</div></div> : null}</> : null}</div>)}</div>
+      <div className="mt-5 grid grid-cols-7 gap-1.5 sm:gap-2">{["Пн","Вт","Ср","Чт","Пт","Сб","Вс"].map(day=><span key={day} className="pb-1 text-center text-[9px] font-bold uppercase text-white/25">{day}</span>)}{cells.map((day,index)=><div key={index} className={`min-h-14 overflow-hidden rounded-xl border p-1.5 sm:min-h-20 sm:p-2 ${day ? "border-white/[0.05] bg-white/[0.025]" : "border-transparent"}`}>{day ? <><span className={`text-[10px] ${scheduled.has(day) ? "text-violet-200" : "text-white/25"}`}>{day}</span>{scheduled.has(day) ? <div className="relative mt-1.5 aspect-[16/8] overflow-hidden rounded-lg border border-violet-400/15 sm:aspect-[16/10]"><Image src={scheduled.get(day) === "Дзен" || scheduled.get(day) === "VC" ? "/marketing/adaptive-presence-longread-v2.webp" : "/marketing/ilart-editorial-post-v1.webp"} alt={`Материал ${scheduled.get(day)}`} fill sizes="100px" className="object-cover" /><div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent" /><span className="absolute bottom-1 left-1.5 text-[7px] font-semibold text-white sm:text-[8px]">{scheduled.get(day)}</span></div> : null}</> : null}</div>)}</div>
     </section>
   );
 }
@@ -156,7 +206,7 @@ const faqItems = [
   ["Можно ли самому выбрать количество постов и статей?", "Да. Вы получаете кредиты и собираете месяц самостоятельно: больше коротких постов, больше статей или смешанный набор."],
   ["Что происходит с визуалами для статей?", "Для статьи создаётся обложка и набор изображений по смысловым блокам. Они сохраняются вместе с материалом и передаются при публикации на поддерживаемую площадку."],
   ["Контент публикуется без проверки?", "Сначала вы видите готовый материал и подтверждаете его. Автоматический режим включается отдельно для выбранных каналов."],
-  ["Что с ответами на отзывы Яндекс Карт?", "В MVP система готовит ответ в вашем стиле и открывает карточку организации. Полная автоматизация появится после безопасной интеграции с доступным API."],
+  ["Что с ответами на отзывы Яндекс Карт?", "Adaptive Presence собирает отзывы, готовит ответы в стиле бренда и сохраняет историю работы с обратной связью. Перед размещением ответ можно проверить и подтвердить."],
 ];
 
 function SectionLabel({ children, dark = true }: { children: React.ReactNode; dark?: boolean }) {
@@ -195,7 +245,7 @@ function PlatformFormats() {
           <article className="rounded-[28px] border border-black/[0.07] bg-[linear-gradient(145deg,#ebe5ff,#fff)] p-6 sm:p-8">
             <span className="grid h-11 w-11 place-items-center rounded-2xl bg-white text-xl text-violet-700 shadow-sm">✦</span>
             <h3 className="mt-6 text-2xl font-semibold tracking-[-0.04em]">Ответы на отзывы</h3>
-            <p className="mt-3 max-w-xl text-sm leading-6 text-black/45">Adaptive Presence готовит ответ с учётом оценки, текста отзыва и правил бренда. В MVP вы проверяете его и размещаете в Яндекс Картах.</p>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-black/45">Adaptive Presence собирает отзывы Яндекс Карт, готовит ответы с учётом оценки, текста и правил бренда. Вы проверяете результат, подтверждаете ответ и видите историю в кабинете.</p>
           </article>
         </div>
       </div>
@@ -231,6 +281,23 @@ function ProductValue() {
   );
 }
 
+function BusinessOutcomes() {
+  const outcomes = [
+    ["01", "Больше точек входа", "Статьи в Дзене и VC.ru отвечают на конкретные запросы. Посты в социальных сетях поддерживают тему и ведут человека к продукту."],
+    ["02", "GEO и видимость в AI", "Экспертные материалы создают понятные сущности, факты и ответы. Это основа GEO: поисковые системы индексируют страницы, а нейросети получают больше оснований упоминать бренд как источник."],
+    ["03", "Выше доверие к бренду", "Регулярные публикации и ответы на отзывы показывают живую компанию. Клиент видит экспертизу до первого обращения."],
+    ["04", "Понятная конверсия", "В кабинете видно, какие темы дают просмотры, подписки и переходы. Следующий месяц строится на фактическом результате."],
+  ];
+  return (
+    <section className="border-t border-white/[0.06] py-24 sm:py-28">
+      <div className="grid gap-10 lg:grid-cols-[.78fr_1.22fr]">
+        <div><SectionLabel>Что получает бизнес</SectionLabel><h2 className="mt-4 font-heading text-4xl font-semibold leading-[.98] tracking-[-0.055em] sm:text-6xl">Контент должен приводить к результату</h2><p className="mt-6 max-w-md text-sm leading-7 text-white/40">Adaptive Presence связывает публикации, площадки и показатели. Вы видите не объём производства, а вклад каждого формата.</p></div>
+        <div className="grid gap-3 sm:grid-cols-2">{outcomes.map(([number,title,text])=><article key={number} className="rounded-[26px] border border-white/[0.07] bg-white/[0.025] p-6"><span className="text-[10px] font-semibold text-violet-300">{number}</span><h3 className="mt-7 text-xl font-semibold tracking-[-0.03em] text-white">{title}</h3><p className="mt-3 text-xs leading-6 text-white/38">{text}</p></article>)}</div>
+      </div>
+    </section>
+  );
+}
+
 function ArticlePipeline() {
   return (
     <section id="articles" className="scroll-mt-24 py-24 sm:py-28">
@@ -258,9 +325,9 @@ function PilotCase() {
     <section id="cases" className="scroll-mt-24 bg-white py-24 text-[#121019] sm:py-28">
       <div className="mx-auto max-w-[1320px] px-4 sm:px-7">
         <div className="flex flex-wrap items-end justify-between gap-6"><div><SectionLabel dark={false}>Пилотный сценарий</SectionLabel><h2 className="mt-4 max-w-3xl font-heading text-4xl font-semibold leading-[.98] tracking-[-0.055em] sm:text-6xl">Весь контент-месяц в одном экране</h2></div><p className="max-w-md text-xs leading-6 text-black/40">ИЛАРТ используется как демонстрационный бренд для проверки полного пути. Цифры показывают состав тестового месяца.</p></div>
-        <div className="mt-12 grid gap-4 lg:grid-cols-[.9fr_1.1fr]">
-          <article className="rounded-[30px] bg-[#121018] p-7 text-white sm:p-9"><div className="flex items-center justify-between"><p className="text-xs font-semibold">ИЛАРТ · инженерные решения</p><span className="rounded-full bg-emerald-400/10 px-3 py-1.5 text-[9px] font-semibold text-emerald-300">пилот собран</span></div><div className="mt-12 grid grid-cols-2 gap-3 sm:grid-cols-4">{[["18","материалов"],["5","площадок"],["2","статьи"],["1","календарь"]].map(([value,label])=><div key={label}><p className="font-heading text-4xl font-semibold tracking-[-0.05em]">{value}</p><p className="mt-2 text-[10px] text-white/30">{label}</p></div>)}</div><div className="mt-10 h-1.5 overflow-hidden rounded-full bg-white/[0.07]"><div className="h-full w-[89%] rounded-full bg-[linear-gradient(90deg,#7d5cff,#ae92ff)]" /></div><p className="mt-3 text-[10px] text-white/30">16 из 18 материалов полностью готовы</p></article>
-          <div className="grid gap-4 sm:grid-cols-2"><article className="rounded-[30px] border border-black/[0.07] bg-[#f5f2ff] p-7"><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-violet-700">Было</p><h3 className="mt-5 text-2xl font-semibold tracking-[-0.04em]">Темы, тексты и картинки жили отдельно.</h3><p className="mt-4 text-xs leading-6 text-black/42">Ручное распределение дат, перенос между документами и повторная адаптация под каждую площадку.</p></article><article className="rounded-[30px] border border-violet-200 bg-[linear-gradient(145deg,#ede7ff,#fff)] p-7"><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-violet-700">Стало</p><h3 className="mt-5 text-2xl font-semibold tracking-[-0.04em]">Бриф запускает связанный месяц.</h3><p className="mt-4 text-xs leading-6 text-black/42">Календарь, материалы, статьи, визуалы и публикация работают как один понятный путь.</p></article></div>
+        <div className="mt-12 grid gap-4 lg:grid-cols-[1.15fr_.85fr]">
+          <article className="overflow-hidden rounded-[30px] bg-[#121018] text-white shadow-[0_30px_90px_rgba(61,42,110,.18)]"><div className="flex h-10 items-center gap-1.5 border-b border-white/[0.06] px-5"><span className="h-2 w-2 rounded-full bg-rose-400" /><span className="h-2 w-2 rounded-full bg-amber-300" /><span className="h-2 w-2 rounded-full bg-emerald-400" /><span className="ml-2 text-[8px] text-white/25">ИЛАРТ · август</span></div><div className="grid gap-3 p-5 sm:grid-cols-[.78fr_1.22fr] sm:p-7"><div><p className="text-[9px] font-bold uppercase tracking-[0.13em] text-violet-300">Месяц собран</p><p className="mt-3 text-2xl font-semibold">16 из 18 готовы</p><div className="mt-5 space-y-2">{(["VK","Telegram","Дзен","VC.ru"] as PlatformBrand[]).map((platform,index)=><div key={platform} className="flex items-center justify-between rounded-xl border border-white/[0.05] bg-white/[0.025] px-3 py-2"><span className="flex items-center gap-2 text-[9px] text-white/55"><PlatformBrandIcon platform={platform} size="xs" />{platform}</span><span className="text-[8px] text-violet-300">{[6,6,1,1][index]} материалов</span></div>)}</div></div><div className="rounded-[22px] border border-white/[0.06] bg-black/15 p-4"><div className="flex items-center justify-between"><p className="text-[10px] font-semibold">Календарь публикаций</p><span className="text-[8px] text-white/25">август</span></div><div className="mt-4 grid grid-cols-7 gap-1.5">{Array.from({length:28},(_,index)=>index+1).map(day=><div key={day} className={`aspect-square rounded-md p-1 text-[6px] ${[2,5,8,12,16,19,23,26].includes(day) ? "bg-violet-500/60 text-white" : "bg-white/[0.035] text-white/18"}`}>{day}</div>)}</div><div className="mt-4 flex items-center gap-2"><div className="relative h-16 w-14 overflow-hidden rounded-lg"><Image src="/marketing/ilart-editorial-post-v1.webp" alt="Публикация в календаре" fill sizes="56px" className="object-cover" /></div><div><p className="text-[8px] text-violet-300">Следующая публикация</p><p className="mt-1 text-[9px] leading-4 text-white/55">Комплектующие как часть проекта</p></div></div></div></div></article>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1"><article className="rounded-[30px] border border-violet-200 bg-[linear-gradient(145deg,#ede7ff,#fff)] p-7"><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-violet-700">Результат месяца · демо</p><div className="mt-7 grid grid-cols-2 gap-6">{[["186K","охват"],["+1 240","подписчики"],["3 960","переходы"],["4,8%","вовлечение"]].map(([value,label])=><div key={label}><p className="text-2xl font-semibold tracking-[-0.04em]">{value}</p><p className="mt-1 text-[9px] text-black/35">{label}</p></div>)}</div><div className="mt-7 flex h-20 items-end gap-1.5">{[28,38,34,52,61,72,92].map(value=><span key={value} className="flex-1 rounded-t bg-violet-500" style={{height:`${value}%`}} />)}</div></article><p className="px-2 text-[9px] leading-4 text-black/35">Цифры показывают структуру будущего отчёта. Реальные показатели появятся после подключения статистики площадок.</p></div>
         </div>
       </div>
     </section>
@@ -369,7 +436,7 @@ export function AdaptivePresenceDemo() {
       <div className="relative mx-auto max-w-[1320px] px-4 sm:px-7">
         <section className="grid min-h-[780px] items-center gap-12 pb-16 pt-16 lg:grid-cols-[1.02fr_.98fr] lg:py-24">
           <div className="relative z-10"><span className="inline-flex items-center gap-2 rounded-full border border-violet-400/20 bg-violet-500/10 px-3 py-1.5 text-[10px] font-semibold text-violet-200"><span className="h-1.5 w-1.5 rounded-full bg-violet-300" />AI-система присутствия бренда</span><h1 className="mt-7 max-w-4xl font-heading text-5xl font-semibold leading-[.92] tracking-[-0.065em] text-white sm:text-7xl lg:text-[82px]">Ваш бренд<br />выходит <span className="bg-[linear-gradient(90deg,#d6cdff,#9a81ff,#7656ff)] bg-clip-text text-transparent">сам.</span></h1><p className="mt-7 max-w-xl text-base leading-7 text-white/46 sm:text-lg">Заполните бриф и получите готовый контент-месяц для российских площадок. Тексты, статьи, визуалы и даты публикаций появятся в одном кабинете.</p><div className="mt-8 flex flex-col gap-3 sm:flex-row"><Link href="/start" className="rounded-2xl bg-violet-500 px-6 py-3.5 text-center text-sm font-semibold text-white shadow-[0_18px_55px_rgba(112,78,255,.3)] transition hover:bg-violet-400">Собрать пробный месяц</Link><a href="#product" className="rounded-2xl border border-white/[0.09] bg-white/[0.04] px-6 py-3.5 text-center text-sm font-semibold text-white/75 transition hover:bg-white/[0.08] hover:text-white">Открыть демо</a></div><div className="mt-7 flex flex-wrap gap-x-6 gap-y-2 text-[10px] text-white/28"><span>500 пробных кредитов</span><span>работа без менеджера</span><span>старт за 10 минут</span></div></div>
-          <div className="relative mx-auto w-full max-w-[650px] lg:mr-0"><div className="absolute -inset-12 rounded-full bg-violet-600/20 blur-[90px]" /><div className="relative overflow-hidden rounded-[34px] border border-white/[0.1] bg-white/[0.04] p-2 shadow-[0_45px_150px_rgba(0,0,0,.55)]"><div className="relative aspect-[16/10] overflow-hidden rounded-[27px]"><Image src="/marketing/adaptive-presence-hero-v2.webp" alt="Одна идея превращается в набор материалов для разных площадок" fill priority sizes="(max-width:1024px) 92vw, 650px" className="object-cover" /></div></div><div className="absolute -bottom-5 -left-3 rounded-2xl border border-violet-300/20 bg-[#17131f]/95 px-5 py-4 shadow-xl backdrop-blur"><p className="text-[10px] text-white/35">Контент-месяц</p><p className="mt-1 text-sm font-semibold">18 материалов · 5 площадок</p></div></div>
+          <HeroProductMontage />
         </section>
 
         <section className="border-y border-white/[0.06] py-7"><p className="text-center text-[10px] font-bold uppercase tracking-[0.16em] text-white/22">Площадки и каналы Adaptive Presence</p><div className="mt-5 flex flex-wrap items-center justify-center gap-6 sm:gap-10">{(["VK","Telegram","Одноклассники","Дзен","VC.ru"] as PlatformBrand[]).map(platform=><span key={platform} className="flex items-center gap-2.5 text-[11px] font-semibold text-white/42"><PlatformBrandIcon platform={platform} size="xs" />{platform}</span>)}<span className="flex items-center gap-2.5 text-[11px] font-semibold text-white/42"><YandexMapsMark />Яндекс Карты</span></div></section>
@@ -377,6 +444,7 @@ export function AdaptivePresenceDemo() {
         <section id="product" className="scroll-mt-24 py-24 sm:py-28"><div className="mb-8 flex flex-wrap items-end justify-between gap-5"><div><SectionLabel>Живой продукт</SectionLabel><h2 className="mt-3 font-heading text-4xl font-semibold tracking-[-0.05em] text-white sm:text-6xl">Не презентация.<br />Попробуйте кабинет.</h2></div><p className="max-w-md text-xs leading-6 text-white/36">Переключайте обзор, календарь, материалы, статьи, автопостинг и результаты прямо на этой странице.</p></div><DemoWorkspace /></section>
 
         <ProductValue />
+        <BusinessOutcomes />
       </div>
 
       <PlatformFormats />
