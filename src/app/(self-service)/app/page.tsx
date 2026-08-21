@@ -43,6 +43,15 @@ function overviewVisual(item: {
     : null;
 }
 
+function overviewPlatformLabel(value: string) {
+  if (/telegram|телег/i.test(value)) return "Telegram";
+  if (/(^|\s)(vk|вк)(\s|$)|vkontakte|вконтакте/i.test(value)) return "VK";
+  if (/однокласс|(^|\s)ок(\s|$)/i.test(value)) return "Одноклассники";
+  if (/vc\.ru|виси/i.test(value)) return "VC.ru";
+  if (/дзен|dzen|zen/i.test(value)) return "Дзен";
+  return value;
+}
+
 export default async function SelfServiceHomePage() {
   const session = await auth();
   const email = session?.user?.email?.trim().toLowerCase();
@@ -135,6 +144,18 @@ export default async function SelfServiceHomePage() {
   const nextItem = items.find((item) => item.plannedDate >= new Date().toISOString().slice(0, 10)) ?? items[0] ?? null;
   const nextVisual = nextItem ? overviewVisual(nextItem, articleCoverByItemId.get(nextItem.id)) : null;
   const nextPlatform = platformBrandFromName(nextItem?.platformName);
+  const readinessPercent = items.length ? Math.round((readyItems / items.length) * 100) : 0;
+  const platformCounts = new Map<string, number>();
+  for (const item of items) {
+    const label = overviewPlatformLabel(item.platformName);
+    platformCounts.set(label, (platformCounts.get(label) ?? 0) + 1);
+  }
+  const publicationRhythm = Array.from({ length: 7 }, () => 0);
+  for (const item of items) {
+    const date = new Date(`${item.plannedDate}T12:00:00`);
+    if (!Number.isNaN(date.getTime())) publicationRhythm[(date.getDay() + 6) % 7] += 1;
+  }
+  const maxRhythm = Math.max(...publicationRhythm, 1);
 
   return (
     <SelfServiceAppShell
@@ -145,14 +166,15 @@ export default async function SelfServiceHomePage() {
       description={latestPlan ? "В одном экране — готовность материалов, следующая публикация и состояние подключённых площадок." : "Бренд уже сохранён. Осталось подключить площадки и запустить первую подготовку."}
       headerAction={<Link href="/app/month" className="rounded-2xl bg-violet-500 px-5 py-3 text-sm font-semibold text-white shadow-[0_15px_40px_rgba(112,78,255,.24)] transition hover:bg-violet-400">{latestPlan ? "Открыть месяц" : "Собрать месяц"}</Link>}
     >
-      <section className="grid gap-3 sm:grid-cols-3">
-        {[
-          ["Материалов", String(items.length), latestPlan ? "план месяца" : "ещё не собран"],
-          ["Полностью готово", String(readyItems), items.length ? `${Math.round((readyItems / items.length) * 100)}% месяца` : "после запуска"],
-          ["Автопостинг", String(workspace.channels.filter((channel) => ["vk", "telegram", "vcru"].includes(channel.platform)).length), workspace.channels.length ? "VK, Telegram и VC.ru" : "можно настроить позже"],
-        ].map(([label, value, detail]) => (
-          <article key={label} className={`${darkCardClass} p-5`}><p className="text-[10px] font-bold uppercase tracking-[0.13em] text-white/28">{label}</p><div className="mt-3 flex items-end justify-between gap-3"><p className="text-3xl font-semibold tracking-[-0.04em] text-white">{value}</p><span className="text-[10px] text-violet-300/75">{detail}</span></div><div className="mt-4 h-1 overflow-hidden rounded-full bg-white/[0.06]"><div className="h-full w-4/5 rounded-full bg-violet-500" /></div></article>
-        ))}
+      <section className="rounded-[24px] border border-white/[0.08] bg-[linear-gradient(140deg,rgba(124,92,255,.13),rgba(255,255,255,.025)_50%)] p-5 shadow-[0_24px_80px_rgba(0,0,0,.18)] sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div><p className="text-[10px] font-bold uppercase tracking-[0.15em] text-violet-300">{latestPlan.month} · контент готовится</p><h2 className="mt-2 text-2xl font-semibold tracking-[-0.035em] text-white">{readyItems} из {items.length} материалов готовы</h2><p className="mt-2 max-w-xl text-xs leading-5 text-white/42">Посты, статьи и визуалы собраны в одном календаре. Открывайте материал, когда хотите проверить или изменить его.</p></div>
+          <span className="rounded-full border border-violet-400/20 bg-violet-500/10 px-3 py-1.5 text-[10px] font-semibold text-violet-200">{readinessPercent}% месяца</span>
+        </div>
+        <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-white/[0.07]"><div className="h-full rounded-full bg-[linear-gradient(90deg,#7454ff,#a98fff)]" style={{ width: `${readinessPercent}%` }} /></div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          {[["Материалов", String(items.length), "план месяца"], ["Полностью готово", String(readyItems), `${readinessPercent}%`], ["Площадок", String(platformCounts.size), "в одном плане"]].map(([label, value, detail]) => <article key={label} className="rounded-[20px] border border-white/[0.07] bg-black/15 p-4"><p className="text-[10px] font-bold uppercase tracking-[0.13em] text-white/30">{label}</p><div className="mt-3 flex items-end justify-between gap-3"><p className="text-2xl font-semibold tracking-[-0.04em]">{value}</p><span className="text-[10px] font-semibold text-violet-300">{detail}</span></div></article>)}
+        </div>
       </section>
 
       <section className="mt-4 grid gap-4 lg:grid-cols-[1.15fr_.85fr]">
@@ -163,30 +185,14 @@ export default async function SelfServiceHomePage() {
           </div>
         </article>
         <article className={`${darkCardClass} p-5 sm:p-6`}>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-white">Площадки и статьи</p>
-              <p className="mt-1 text-[10px] text-white/30">Посты и статьи в одном расписании</p>
-            </div>
-            <Link href="/app/channels" className="text-[10px] font-semibold text-violet-300">Открыть</Link>
-          </div>
-          <div className="mt-5 space-y-3">
-            {(["Telegram", "VK", "Одноклассники", "Дзен", "VC.ru"] as PlatformBrand[]).map((platform) => {
-              const isDzen = platform === "Дзен";
-              const isVc = platform === "VC.ru";
-              const isManualSocial = platform === "Одноклассники";
-              const connected = !isDzen && !isManualSocial && workspace.channels.some((channel) => isVc ? channel.platform === "vcru" : channel.platform.toLowerCase().includes(platform.toLowerCase()));
-              const status = isDzen ? "пакет для размещения" : isManualSocial ? "готово для копирования" : connected ? "подключено" : "настроить позже";
-
-              return (
-                <div key={platform} className="flex items-center justify-between gap-4 border-b border-white/[0.04] pb-3 text-xs last:border-0 last:pb-0">
-                  <span className="flex items-center gap-2.5 text-white/58"><PlatformBrandIcon platform={platform} size="xs" />{platform}</span>
-                  <span className={isDzen || isManualSocial || connected ? "text-violet-300" : "text-white/22"}>{status}</span>
-                </div>
-              );
-            })}
-          </div>
+          <div className="flex items-center justify-between"><div><p className="text-sm font-semibold text-white">Ритм публикаций</p><p className="mt-1 text-[10px] text-white/30">Как материалы распределены по неделе</p></div><Link href="/app/month#calendar" className="text-[10px] font-semibold text-violet-300">Календарь</Link></div>
+          <div className="mt-6 flex h-28 items-end gap-2">{publicationRhythm.map((count, index) => <div key={index} className="flex h-full flex-1 flex-col justify-end gap-2"><span className="w-full rounded-t-md bg-[linear-gradient(180deg,#9d83ff,#6847d8)]" style={{ height: `${count ? Math.max(22, Math.round((count / maxRhythm) * 100)) : 7}%`, opacity: count ? 1 : .22 }} /><span className="text-center text-[8px] text-white/22">{["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"][index]}</span></div>)}</div>
+          <div className="mt-5 grid grid-cols-2 gap-2"><div className="rounded-xl bg-black/20 p-3"><p className="text-lg font-semibold">{platformCounts.size}</p><p className="mt-1 text-[9px] text-white/28">площадок в плане</p></div><div className="rounded-xl bg-black/20 p-3"><p className="text-lg font-semibold">{items.length - readyItems}</p><p className="mt-1 text-[9px] text-white/28">ещё готовятся</p></div></div>
         </article>
+      </section>
+
+      <section className="mt-4 grid gap-3 rounded-[22px] border border-white/[0.07] bg-white/[0.025] p-4 sm:grid-cols-5">
+        {(["Telegram", "VK", "Одноклассники", "Дзен", "VC.ru"] as PlatformBrand[]).map((platform) => <Link key={platform} href={platform === "Дзен" || platform === "VC.ru" ? "/app/articles" : "/app/month#materials"} className="flex items-center gap-2.5 rounded-2xl bg-black/15 p-3 transition hover:bg-white/[0.04]"><PlatformBrandIcon platform={platform} size="xs" /><div><p className="text-[10px] font-semibold text-white/65">{platform}</p><p className="mt-0.5 text-[8px] text-white/28">{platformCounts.get(platform) ?? 0} материалов</p></div></Link>)}
       </section>
     </SelfServiceAppShell>
   );
