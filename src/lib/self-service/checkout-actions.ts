@@ -4,32 +4,44 @@ import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { hasSelfServicePaidAccess } from "@/lib/self-service/subscription";
+import { resolveSubscriptionPurchase, resolveTopUpPurchase } from "@/lib/self-service/credit-catalog";
 import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 import {
   createYooKassaPayment,
   isYooKassaConfigured,
-  SELF_SERVICE_PRICE_MINOR,
 } from "@/lib/yookassa";
 
-export async function beginSelfServiceCheckout() {
+export async function beginSelfServiceCheckout(formData: FormData) {
   const session = await auth();
   const email = session?.user?.email?.trim().toLowerCase();
   if (!email) redirect("/sign-in?callbackUrl=/app/subscribe");
 
   const membership = await prisma.workspaceMembership.findFirst({
     where: await selfServiceMembershipWhere(email),
-    include: { client: { select: { subscription: true } } },
+    select: { clientId: true },
   });
   if (!membership) redirect("/start");
-  if (hasSelfServicePaidAccess(membership.client.subscription)) redirect("/app/month");
   if (!isYooKassaConfigured()) redirect("/app/subscribe?error=checkout_unavailable");
+
+  const purchaseKind = String(formData.get("purchaseKind") ?? "subscription");
+  const purchase = purchaseKind === "top_up"
+    ? resolveTopUpPurchase(String(formData.get("topUpCode") ?? ""))
+    : resolveSubscriptionPurchase(
+        String(formData.get("planCode") ?? ""),
+        Number(formData.get("durationMonths")),
+      );
+  if (!purchase) redirect("/app/subscribe?error=invalid_purchase");
 
   const recentThreshold = new Date(Date.now() - 30 * 60 * 1000);
   const existingPayment = await prisma.billingPayment.findFirst({
     where: {
       clientId: membership.clientId,
       provider: "yookassa",
+      purchaseKind: purchase.purchaseKind,
+      planCode: purchase.planCode,
+      durationMonths: purchase.durationMonths,
+      amountMinor: purchase.amountMinor,
+      creditsGranted: purchase.credits,
       status: { in: ["creating", "pending", "waiting_for_capture"] },
       confirmationUrl: { not: null },
       createdAt: { gt: recentThreshold },
@@ -43,8 +55,12 @@ export async function beginSelfServiceCheckout() {
     data: {
       clientId: membership.clientId,
       idempotencyKey,
-      amountMinor: SELF_SERVICE_PRICE_MINOR,
+      amountMinor: purchase.amountMinor,
       currency: "RUB",
+      purchaseKind: purchase.purchaseKind,
+      planCode: purchase.planCode,
+      durationMonths: purchase.durationMonths,
+      creditsGranted: purchase.credits,
     },
   });
 
@@ -62,6 +78,12 @@ export async function beginSelfServiceCheckout() {
       idempotencyKey,
       email,
       returnUrl: `${appUrl}/app/subscribe/return?payment=${encodeURIComponent(localPayment.id)}`,
+      amountMinor: purchase.amountMinor,
+      description: purchase.description,
+      purchaseKind: purchase.purchaseKind,
+      planCode: purchase.planCode,
+      durationMonths: purchase.durationMonths,
+      credits: purchase.credits,
     });
     const providerConfirmationUrl = payment.confirmation?.confirmation_url;
     if (!providerConfirmationUrl) throw new Error("YOOKASSA_CONFIRMATION_URL_MISSING");

@@ -1,7 +1,5 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-
-export const SELF_SERVICE_PRICE_MINOR = 1_990_000;
-export const SELF_SERVICE_PRICE_VALUE = "19900.00";
 const YOOKASSA_API_URL = "https://api.yookassa.ru/v3";
 
 type YooKassaPayment = {
@@ -55,15 +53,22 @@ export async function createYooKassaPayment(input: {
   idempotencyKey: string;
   email: string;
   returnUrl: string;
+  amountMinor: number;
+  description: string;
+  purchaseKind: string;
+  planCode: string;
+  durationMonths: number | null;
+  credits: number;
 }) {
+  const amountValue = (input.amountMinor / 100).toFixed(2);
   const receiptVatCode = process.env.YOOKASSA_VAT_CODE?.trim();
   const receipt = receiptVatCode
     ? {
         customer: { email: input.email },
         items: [{
-          description: "Adaptive Presence — доступ на 1 месяц",
+          description: input.description.slice(0, 128),
           quantity: "1.00",
-          amount: { value: SELF_SERVICE_PRICE_VALUE, currency: "RUB" },
+          amount: { value: amountValue, currency: "RUB" },
           vat_code: Number(receiptVatCode),
           payment_mode: "full_payment",
           payment_subject: "service",
@@ -75,14 +80,17 @@ export async function createYooKassaPayment(input: {
     method: "POST",
     headers: { "Idempotence-Key": input.idempotencyKey },
     body: JSON.stringify({
-      amount: { value: SELF_SERVICE_PRICE_VALUE, currency: "RUB" },
+      amount: { value: amountValue, currency: "RUB" },
       capture: true,
       confirmation: { type: "redirect", return_url: input.returnUrl },
-      description: "Adaptive Presence — доступ на 1 месяц",
+      description: input.description.slice(0, 128),
       metadata: {
         billingPaymentId: input.billingPaymentId,
         clientId: input.clientId,
-        planCode: "presence_monthly",
+        purchaseKind: input.purchaseKind,
+        planCode: input.planCode,
+        durationMonths: String(input.durationMonths ?? 0),
+        credits: String(input.credits),
       },
       ...(receipt ? { receipt } : {}),
     }),
@@ -93,10 +101,10 @@ export function getYooKassaPayment(providerPaymentId: string) {
   return yooKassaRequest(`/payments/${encodeURIComponent(providerPaymentId)}`);
 }
 
-function nextPeriodEnd(currentPeriodEnd: Date | null) {
+function nextPeriodEnd(currentPeriodEnd: Date | null, months: number) {
   const now = new Date();
   const base = currentPeriodEnd && currentPeriodEnd > now ? new Date(currentPeriodEnd) : now;
-  base.setUTCMonth(base.getUTCMonth() + 1);
+  base.setUTCMonth(base.getUTCMonth() + months);
   return { startsAt: now, endsAt: base };
 }
 
@@ -119,12 +127,15 @@ export async function syncYooKassaPayment(providerPaymentId: string) {
     include: { client: { select: { subscription: true } } },
   });
   if (!localPayment) return { status: "unknown" as const };
-  if (localPayment.status === "succeeded") {
+  if (localPayment.status === "succeeded" && localPayment.creditsGranted > 0) {
     return { status: "succeeded" as const, clientId: localPayment.clientId };
   }
 
   const metadataMatches = payment.metadata?.billingPaymentId === localPayment.id
-    && payment.metadata?.clientId === localPayment.clientId;
+    && payment.metadata?.clientId === localPayment.clientId
+    && payment.metadata?.purchaseKind === localPayment.purchaseKind
+    && payment.metadata?.planCode === localPayment.planCode
+    && Number(payment.metadata?.credits) === localPayment.creditsGranted;
   const amountMatches = payment.amount.currency === localPayment.currency
     && Math.round(Number(payment.amount.value) * 100) === localPayment.amountMinor;
 
@@ -137,36 +148,82 @@ export async function syncYooKassaPayment(providerPaymentId: string) {
   }
 
   if (payment.status === "succeeded" && payment.paid) {
-    const period = nextPeriodEnd(localPayment.client.subscription?.currentPeriodEnd ?? null);
-    await prisma.$transaction([
-      prisma.billingPayment.update({
-        where: { id: localPayment.id },
+    await prisma.$transaction(async (tx) => {
+      const current = await tx.billingPayment.findUnique({ where: { id: localPayment.id } });
+      if (!current || (current.status === "succeeded" && current.creditsGranted > 0)) return;
+
+      const creditsToGrant = current.creditsGranted;
+      if (!Number.isInteger(creditsToGrant) || creditsToGrant <= 0) {
+        throw new Error("INVALID_PAYMENT_CREDITS");
+      }
+
+      const wallet = await tx.creditWallet.upsert({
+        where: { clientId: current.clientId },
+        create: { clientId: current.clientId },
+        update: {},
+      });
+      const creditKey = `payment:${current.id}`;
+      const existingGrant = await tx.creditTransaction.findUnique({ where: { idempotencyKey: creditKey } });
+      if (!existingGrant) {
+        const updatedWallet = await tx.creditWallet.update({
+          where: { id: wallet.id },
+          data: {
+            balance: { increment: creditsToGrant },
+            lifetimeGranted: { increment: creditsToGrant },
+          },
+        });
+        await tx.creditTransaction.create({
+          data: {
+            clientId: current.clientId,
+            walletId: wallet.id,
+            amount: creditsToGrant,
+            balanceAfter: updatedWallet.balance,
+            kind: current.purchaseKind === "top_up" ? "top_up" : "subscription_grant",
+            description: current.purchaseKind === "top_up" ? "Пополнение кредитов" : "Кредиты по тарифу",
+            referenceType: "billing_payment",
+            referenceId: current.id,
+            idempotencyKey: creditKey,
+          },
+        });
+      }
+
+      if (current.purchaseKind === "subscription") {
+        const durationMonths = current.durationMonths ?? 1;
+        const period = nextPeriodEnd(localPayment.client.subscription?.currentPeriodEnd ?? null, durationMonths);
+        await tx.subscription.upsert({
+          where: { clientId: current.clientId },
+          create: {
+            clientId: current.clientId,
+            planCode: current.planCode ?? "start",
+            status: "active",
+            provider: "yookassa",
+            currentPeriodStart: period.startsAt,
+            currentPeriodEnd: period.endsAt,
+            billingCycleMonths: durationMonths,
+            creditsPerCycle: creditsToGrant,
+          },
+          update: {
+            planCode: current.planCode ?? "start",
+            status: "active",
+            provider: "yookassa",
+            currentPeriodStart: period.startsAt,
+            currentPeriodEnd: period.endsAt,
+            billingCycleMonths: durationMonths,
+            creditsPerCycle: creditsToGrant,
+            cancelAtPeriodEnd: false,
+          },
+        });
+      }
+
+      await tx.billingPayment.update({
+        where: { id: current.id },
         data: {
           status: "succeeded",
           paidAt: payment.captured_at ? new Date(payment.captured_at) : new Date(),
           rawPayload: paymentAuditPayload(payment),
         },
-      }),
-      prisma.subscription.upsert({
-        where: { clientId: localPayment.clientId },
-        create: {
-          clientId: localPayment.clientId,
-          planCode: "presence_monthly",
-          status: "active",
-          provider: "yookassa",
-          currentPeriodStart: period.startsAt,
-          currentPeriodEnd: period.endsAt,
-        },
-        update: {
-          planCode: "presence_monthly",
-          status: "active",
-          provider: "yookassa",
-          currentPeriodStart: period.startsAt,
-          currentPeriodEnd: period.endsAt,
-          cancelAtPeriodEnd: false,
-        },
-      }),
-    ]);
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     return { status: "succeeded" as const, clientId: localPayment.clientId };
   }
 
