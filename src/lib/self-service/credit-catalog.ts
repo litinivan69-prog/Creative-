@@ -25,6 +25,7 @@ export const CREDIT_PLANS = [
 ] as const;
 
 export type CreditPlanCode = (typeof CREDIT_PLANS)[number]["code"];
+export type CreditTopUpCode = (typeof CREDIT_TOP_UPS)[number]["code"];
 
 export const BILLING_DURATIONS = [
   { months: 1, label: "1 месяц", discountPercent: 0 },
@@ -44,6 +45,35 @@ export function subscriptionPriceMinor(planCode: CreditPlanCode, months: number)
   const duration = BILLING_DURATIONS.find((candidate) => candidate.months === months);
   if (!plan || !duration) throw new Error("UNKNOWN_CREDIT_PLAN");
   return Math.round(plan.monthlyPriceMinor * months * (1 - duration.discountPercent / 100));
+}
+
+export function resolveSubscriptionPurchase(planCode: string, months: number) {
+  const plan = CREDIT_PLANS.find((candidate) => candidate.code === planCode);
+  const duration = BILLING_DURATIONS.find((candidate) => candidate.months === months);
+  if (!plan || !duration) return null;
+
+  return {
+    purchaseKind: "subscription" as const,
+    planCode: plan.code,
+    durationMonths: duration.months,
+    amountMinor: subscriptionPriceMinor(plan.code, duration.months),
+    credits: plan.credits * duration.months,
+    description: `Adaptive Presence — тариф «${plan.name}» на ${duration.label.toLowerCase()}`,
+  };
+}
+
+export function resolveTopUpPurchase(topUpCode: string) {
+  const topUp = CREDIT_TOP_UPS.find((candidate) => candidate.code === topUpCode);
+  if (!topUp) return null;
+
+  return {
+    purchaseKind: "top_up" as const,
+    planCode: topUp.code,
+    durationMonths: null,
+    amountMinor: topUp.priceMinor,
+    credits: topUp.credits,
+    description: `Adaptive Presence — пополнение на ${displayCredits(topUp.credits)} кредитов`,
+  };
 }
 
 export function formatRubles(amountMinor: number) {

@@ -510,6 +510,8 @@ Sprint 1 does not generate full post, article, email, or caption text. It only c
 - `BLOB_READ_WRITE_TOKEN` is required for Vercel Blob uploads. Without it, generated visuals temporarily fall back to database base64 storage.
 - The premium defaults are `openai`, `gpt-image-2`, `high`, `auto`, and `image_text`.
 - Self-service checkout uses YooKassa when `YOOKASSA_SHOP_ID` and `YOOKASSA_SECRET_KEY` are set.
+- `YOOKASSA_TEST_MODE=true` adds a visible test-mode notice to the checkout screen. Actual test payments are controlled by YooKassa test-shop credentials, not by this flag.
+- Subscription purchases grant all credits for the selected prepaid period immediately; top-ups grant only the purchased credit pack and do not change the subscription period.
 - Configure YooKassa notifications for `payment.succeeded` and `payment.canceled` at `https://<production-domain>/api/billing/yookassa/webhook`.
 - Payment notifications are never trusted on their own: the app fetches the payment from YooKassa and verifies the amount, currency, client metadata, and local payment id before activating access.
 - `YOOKASSA_VAT_CODE` is optional and should be set only when receipt items must be sent by the application according to the shop's YooKassa/online-cash-register configuration.

@@ -28,8 +28,9 @@ export default async function YooKassaReturnPage({ searchParams }: { searchParam
 
   try {
     const result = await syncYooKassaPayment(localPayment.providerPaymentId);
-    if (result.status === "succeeded") redirect("/app/month?payment=success");
+    if (result.status === "succeeded") redirect("/app/credits?payment=success");
     if (result.status === "canceled") redirect("/app/subscribe?error=payment_canceled");
+    if (result.status === "verification_failed" || result.status === "unknown") redirect("/app/subscribe?error=payment_verification_failed");
   } catch (error) {
     console.error("YooKassa return sync failed", error instanceof Error ? error.message : "unknown error");
   }
