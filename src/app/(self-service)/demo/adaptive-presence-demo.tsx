@@ -271,7 +271,7 @@ function PlatformFormats() {
         <div className="grid gap-8 lg:grid-cols-[.8fr_1.2fr] lg:items-end">
           <div>
             <SectionLabel dark={false}>Форматы месяца</SectionLabel>
-            <h2 className="mt-4 max-w-xl font-heading text-4xl font-semibold leading-[.98] tracking-[-0.055em] sm:text-6xl">Одна система.<br /><span className="text-violet-700">Разный язык</span> площадок.</h2>
+            <h2 className="mt-4 max-w-xl font-heading text-4xl font-semibold leading-[.98] tracking-[-0.055em] sm:text-6xl">Одна система.<br />Разный язык площадок.</h2>
           </div>
           <p className="max-w-2xl text-sm leading-7 text-black/50 sm:text-base">Не копируем один текст пять раз. Сохраняем общую идею бренда, но меняем ритм, длину, структуру и визуальную подачу под каждую площадку.</p>
         </div>
@@ -412,7 +412,7 @@ function CreativeCommandStory() {
     <section className="bg-[#f5f2ff] py-24 text-[#121019] sm:py-28">
       <div className="mx-auto max-w-[1320px] px-4 sm:px-7">
         <div className="grid gap-10 lg:grid-cols-[.72fr_1.28fr] lg:items-center">
-          <div><SectionLabel dark={false}>Сделано Creative Command</SectionLabel><h2 className="mt-4 font-heading text-4xl font-semibold leading-[.98] tracking-[-0.055em] sm:text-6xl">Опыт агентства стал <span className="text-violet-700">продуктом</span></h2><p className="mt-6 max-w-md text-sm leading-7 text-black/48">Внутри Adaptive Presence работают редакторская логика, память бренда, визуальная система и контроль качества. Пользователь получает понятный кабинет и готовые материалы.</p><div className="mt-8 inline-flex items-center gap-2 rounded-full border border-violet-200 bg-white/55 px-4 py-2 text-sm font-semibold text-violet-700"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />технология с характером</div></div>
+          <div><SectionLabel dark={false}>Сделано Creative Command</SectionLabel><h2 className="mt-4 font-heading text-4xl font-semibold leading-[.98] tracking-[-0.055em] sm:text-6xl">Опыт агентства стал продуктом</h2><p className="mt-6 max-w-md text-sm leading-7 text-black/48">Внутри Adaptive Presence работают редакторская логика, память бренда, визуальная система и контроль качества. Пользователь получает понятный кабинет и готовые материалы.</p><div className="mt-8 inline-flex rotate-[-2deg] rounded-full border-2 border-violet-600 px-4 py-2 text-sm font-semibold italic text-violet-700">технология с характером ↗</div></div>
           <div className="relative aspect-[16/10] overflow-hidden rounded-[30px] bg-[#100d18] shadow-[0_30px_90px_rgba(76,51,135,.22)]"><Image src="/marketing/adaptive-presence-mascots-v2.webp" alt="Маскоты Adaptive Presence работают с контент-календарём" fill sizes="(max-width:1024px) 92vw, 760px" className="object-cover" /><div className="absolute left-5 top-5 rounded-full border border-white/10 bg-black/30 px-3 py-2 text-[9px] font-bold uppercase tracking-[0.13em] text-violet-200 backdrop-blur">Внутри — опыт Creative Command</div></div>
         </div>
       </div>
@@ -443,7 +443,7 @@ function PublicPricing() {
       <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[1fr_auto] lg:items-end">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-violet-300">Стоимость</p>
-          <h2 className="mt-3 max-w-3xl font-heading text-4xl font-semibold leading-[1.02] tracking-[-0.045em] sm:text-5xl">Выбирайте объём <span className="text-violet-300">под себя</span></h2>
+          <h2 className="mt-3 max-w-3xl font-heading text-4xl font-semibold leading-[1.02] tracking-[-0.045em] sm:text-5xl">Выбирайте объём под себя</h2>
           <p className="mt-4 max-w-2xl text-sm leading-6 text-white/40">Кредиты можно распределить между постами, статьями, визуалами и каруселями в любой пропорции.</p>
         </div>
         <Link href="/start" className="inline-flex w-fit rounded-2xl bg-white px-5 py-3 text-xs font-semibold text-black transition hover:bg-violet-100">Попробовать бесплатно</Link>
@@ -516,7 +516,7 @@ export function AdaptivePresenceDemo() {
 
         <section className="mb-20 overflow-hidden rounded-[36px] bg-[radial-gradient(circle_at_85%_10%,rgba(255,255,255,.9),transparent_30%),linear-gradient(135deg,#ddd4ff,#f4f0ff_55%,#e4ddff)] p-7 text-[#14111b] shadow-[0_40px_130px_rgba(78,54,145,.22)] sm:p-12 lg:p-14">
           <div className="grid gap-10 lg:grid-cols-[1.2fr_.8fr] lg:items-center">
-            <div><p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-violet-700"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />Пробный доступ</p><h2 className="mt-5 max-w-4xl font-heading text-4xl font-semibold leading-[.98] tracking-[-0.055em] sm:text-6xl">Попробуйте Adaptive Presence <span className="text-violet-700">бесплатно</span></h2><p className="mt-6 max-w-2xl text-sm leading-7 text-black/55">Получите {displayCredits(TRIAL_CREDITS)} пробных кредитов. Заполните бриф, соберите профиль бренда и откройте первые материалы. Подписка и подключение площадок на этом этапе не нужны.</p><div className="mt-8 flex flex-col gap-3 sm:flex-row"><Link href="/start" className="rounded-2xl bg-black px-6 py-3.5 text-center text-sm font-semibold text-white transition hover:bg-violet-700">Попробовать бесплатно →</Link><Link href="/sign-in" className="rounded-2xl border border-black/10 bg-white/45 px-6 py-3.5 text-center text-sm font-semibold text-black/65 transition hover:bg-white/70">Уже есть аккаунт</Link></div></div>
+            <div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-violet-700">Пробный доступ</p><h2 className="mt-5 max-w-4xl font-heading text-4xl font-semibold leading-[.98] tracking-[-0.055em] sm:text-6xl">Попробуйте Adaptive Presence бесплатно</h2><p className="mt-6 max-w-2xl text-sm leading-7 text-black/55">Получите {displayCredits(TRIAL_CREDITS)} пробных кредитов. Заполните бриф, соберите профиль бренда и откройте первые материалы. Подписка и подключение площадок на этом этапе не нужны.</p><div className="mt-8 flex flex-col gap-3 sm:flex-row"><Link href="/start" className="rounded-2xl bg-black px-6 py-3.5 text-center text-sm font-semibold text-white transition hover:bg-violet-700">Попробовать бесплатно →</Link><Link href="/sign-in" className="rounded-2xl border border-black/10 bg-white/45 px-6 py-3.5 text-center text-sm font-semibold text-black/65 transition hover:bg-white/70">Уже есть аккаунт</Link></div></div>
             <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">{[[displayCredits(TRIAL_CREDITS),"кредитов на знакомство"],["0 ₽","до выбора подписки"],["3 шага","бриф, профиль, материалы"]].map(([value,label],index)=><div key={label} className={`rounded-[22px] border border-black/[0.07] bg-white/55 p-5 backdrop-blur ${index === 1 ? "lg:ml-8" : index === 2 ? "lg:ml-16" : ""}`}><p className="text-2xl font-semibold tracking-[-0.04em]">{value}</p><p className="mt-2 text-[10px] text-black/42">{label}</p></div>)}</div>
           </div>
         </section>
