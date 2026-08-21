@@ -52,23 +52,30 @@ export default async function SelfServiceArticlesPage() {
   const ready = articles.filter((article) => article.stage === "done" && article.status !== "failed").length;
   const preparing = articles.filter((article) => article.stage !== "done" && article.status !== "failed").length;
   const platforms = new Set(articles.map((article) => platformLabel(article.platformTarget))).size;
+  const totalImages = articles.reduce((sum, article) => sum + (((article.images as ArticleImage[] | null) ?? []).filter((image) => image.url).length), 0);
+  const articlesWithWordCount = articles.filter((article) => article.wordCount);
+  const averageWords = articlesWithWordCount.length
+    ? Math.round(articlesWithWordCount.reduce((sum, article) => sum + (article.wordCount ?? 0), 0) / articlesWithWordCount.length)
+    : 0;
 
   return (
     <SelfServiceAppShell
       brandName={membership.client.name}
       active="articles"
-      eyebrow="Редакционные материалы"
-      title="Статьи Дзен и VC.ru."
-      description="Отдельное пространство для длинных материалов: структура, редактура, обложка и готовый документ без менеджерской сложности."
+      eyebrow="Статьи"
+      title="Полноценные материалы для Дзена и VC.ru."
+      description="Структура, полный текст, обложка и дополнительные изображения собраны в одном месте."
       headerAction={<Link href="/app/month#materials" className="rounded-2xl border border-white/[0.08] bg-white/[0.04] px-5 py-3 text-xs font-semibold text-white/65 transition hover:bg-white/[0.07]">Открыть календарь</Link>}
     >
       <section className="grid gap-3 sm:grid-cols-3">
         {[
           ["Всего статей", String(articles.length), "в кабинете"],
-          ["Готово", String(ready), preparing ? `${preparing} готовятся` : "можно размещать"],
-          ["Площадки", String(platforms || 0), "Дзен и VC.ru"],
-        ].map(([label, value, detail]) => <article key={label} className={`${darkCardClass} p-5`}><p className="text-[10px] font-bold uppercase tracking-[0.13em] text-white/28">{label}</p><div className="mt-3 flex items-end justify-between gap-3"><p className="text-3xl font-semibold tracking-[-0.04em]">{value}</p><span className="text-[9px] text-white/24">{detail}</span></div></article>)}
+          ["Изображений", String(totalImages), "с обложками"],
+          ["Средний объём", averageWords ? averageWords.toLocaleString("ru-RU") : "—", averageWords ? "слов" : "после подготовки"],
+        ].map(([label, value, detail]) => <article key={label} className={`${darkCardClass} p-5`}><p className="text-[10px] font-bold uppercase tracking-[0.13em] text-white/28">{label}</p><div className="mt-3 flex items-end justify-between gap-3"><p className="text-3xl font-semibold tracking-[-0.04em]">{value}</p><span className="text-[9px] font-semibold text-violet-300/70">{detail}</span></div><div className="mt-4 h-1 overflow-hidden rounded-full bg-white/[0.06]"><div className="h-full w-4/5 rounded-full bg-violet-500" /></div></article>)}
       </section>
+
+      {articles.length ? <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-white/[0.06] bg-white/[0.025] px-4 py-3 text-[10px]"><span className="text-white/35">{ready} готовы{preparing ? ` · ${preparing} ещё собираются` : " · можно размещать"}</span><span className="text-violet-300">{platforms || 0} площадки · Дзен и VC.ru</span></div> : null}
 
       {articles.length ? (
         <section className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -78,13 +85,15 @@ export default async function SelfServiceArticlesPage() {
             const done = article.stage === "done" && article.status !== "failed";
             const editorHref = article.plannedContentItemId ? `/app/month/${article.plannedContentItemId}` : null;
             const platform = platformBrandFromName(article.platformTarget);
-            return <article key={article.id} className={`${darkCardClass} overflow-hidden`}>
-              <div className="relative aspect-[16/8.5] overflow-hidden bg-[radial-gradient(circle_at_30%_10%,rgba(124,92,255,.25),transparent_45%),#111016]">
-                {cover ? <img src={cover} alt="" className="h-full w-full object-cover opacity-80" /> : <div className="grid h-full place-items-center"><span className="text-4xl font-light text-violet-300/45">Aa</span></div>}
+            return <article key={article.id} className={`${darkCardClass} group overflow-hidden transition hover:-translate-y-0.5 hover:border-violet-400/20`}>
+              <div className="relative aspect-[16/7] overflow-hidden bg-[radial-gradient(circle_at_30%_10%,rgba(124,92,255,.25),transparent_45%),#111016]">
+                {cover ? <img src={cover} alt="" className="h-full w-full object-cover opacity-82 transition duration-500 group-hover:scale-[1.03] group-hover:opacity-95" /> : <div className="grid h-full place-items-center"><span className="text-4xl font-light text-violet-300/45">Aa</span></div>}
+                <div className="absolute inset-0 bg-gradient-to-t from-[#111018] via-transparent to-transparent" />
                 <span className="absolute left-3 top-3 flex items-center gap-2 rounded-full border border-white/10 bg-black/60 py-1 pl-1 pr-3 text-[9px] font-semibold text-white/80 backdrop-blur">{platform ? <PlatformBrandIcon platform={platform} size="xs" /> : null}{platformLabel(article.platformTarget)}</span>
+                <span className="absolute bottom-3 left-4 rounded-full bg-black/55 px-2.5 py-1 text-[9px] font-semibold text-white/80 backdrop-blur">{stageLabel(article.stage, article.status)}</span>
               </div>
               <div className="p-5">
-                <div className="flex items-center justify-between gap-3 text-[9px]"><span className={done ? "text-violet-300" : article.status === "failed" ? "text-rose-300" : "text-white/30"}>{stageLabel(article.stage, article.status)}</span><span className="text-white/20">{formatDate(article.createdAt)}</span></div>
+                <div className="flex items-center justify-between gap-3 text-[9px]"><span className="text-white/28">{imageCount ? `Обложка · ${imageCount} изображения` : "Визуалы готовятся"}</span><span className="text-white/20">{formatDate(article.createdAt)}</span></div>
                 <h2 className="mt-3 line-clamp-3 min-h-[3.75rem] text-lg font-semibold leading-5 tracking-[-0.025em] text-white/82">{article.title}</h2>
                 <div className="mt-4 flex items-center gap-3 text-[9px] text-white/25"><span>{article.wordCount ? `${article.wordCount.toLocaleString("ru-RU")} слов` : "объём уточняется"}</span><span>·</span><span>{imageCount ? `${imageCount} ${imageCount === 1 ? "изображение" : "изображения"}` : "визуалы готовятся"}</span></div>
                 <div className="mt-5 grid grid-cols-2 gap-2">

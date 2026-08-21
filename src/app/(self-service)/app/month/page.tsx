@@ -256,11 +256,13 @@ export default async function SelfServiceMonthPage({
           </section>
         ) : (
           <>
-            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <article className="rounded-[24px] border border-white bg-white p-5 shadow-[0_18px_55px_rgba(77,61,112,0.06)]"><p className="text-xs text-slate-400">План месяца</p><p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950">{items.length}</p><div className="mt-4 h-1.5 rounded-full bg-slate-100"><div className="h-full w-full rounded-full bg-violet-500" /></div></article>
-              <article className="rounded-[24px] border border-white bg-white p-5 shadow-[0_18px_55px_rgba(77,61,112,0.06)]"><p className="text-xs text-slate-400">Тексты готовы</p><p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950">{readyTexts}</p><div className="mt-4 h-1.5 rounded-full bg-slate-100"><div className="h-full rounded-full bg-violet-500" style={{ width: `${items.length ? Math.round((readyTexts / items.length) * 100) : 0}%` }} /></div></article>
-              <article className="rounded-[24px] border border-white bg-white p-5 shadow-[0_18px_55px_rgba(77,61,112,0.06)]"><p className="text-xs text-slate-400">Визуалы готовы</p><p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950">{readyVisuals}</p><div className="mt-4 h-1.5 rounded-full bg-slate-100"><div className="h-full rounded-full bg-violet-400" style={{ width: `${items.length ? Math.round((readyVisuals / items.length) * 100) : 0}%` }} /></div></article>
-              <article className="rounded-[24px] border border-white bg-white p-5 shadow-[0_18px_55px_rgba(77,61,112,0.06)]"><p className="text-xs text-slate-400">Готовность месяца</p><p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950">{readinessPercent}%</p><div className="mt-4 h-1.5 rounded-full bg-slate-100"><div className="h-full rounded-full bg-violet-400" style={{ width: `${readinessPercent}%` }} /></div></article>
+            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                ["План месяца", String(items.length), 100],
+                ["Тексты готовы", String(readyTexts), items.length ? Math.round((readyTexts / items.length) * 100) : 0],
+                ["Визуалы готовы", String(readyVisuals), items.length ? Math.round((readyVisuals / items.length) * 100) : 0],
+                ["Готовность месяца", `${readinessPercent}%`, readinessPercent],
+              ].map(([label, value, percent]) => <article key={label} className="rounded-[20px] border border-white/[0.07] bg-white/[0.035] p-5 shadow-[0_24px_70px_rgba(0,0,0,.14)]"><p className="text-[10px] font-bold uppercase tracking-[0.13em] text-white/30">{label}</p><p className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-white">{value}</p><div className="mt-4 h-1 overflow-hidden rounded-full bg-white/[0.06]"><div className="h-full rounded-full bg-violet-500" style={{ width: `${percent}%` }} /></div></article>)}
             </section>
 
             {productionRun ? (
@@ -281,21 +283,18 @@ export default async function SelfServiceMonthPage({
 
             <MonthCalendar month={plan.month} items={items} />
 
-            <section id="materials" className="mt-5 scroll-mt-24 overflow-hidden rounded-[28px] border border-white bg-white shadow-[0_22px_70px_rgba(77,61,112,0.07)]">
-              <div className="border-b border-slate-100 px-5 py-5 sm:px-7"><h2 className="text-base font-semibold text-slate-950">Материалы по порядку</h2><p className="mt-1 text-xs text-slate-400">Без производственных этапов — только дата, площадка и результат.</p></div>
-              <div className="divide-y divide-slate-100">
+            <section id="materials" className="mt-5 scroll-mt-24 overflow-hidden rounded-[24px] border border-white/[0.08] bg-white/[0.03] shadow-[0_24px_80px_rgba(0,0,0,.18)]">
+              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/[0.06] px-5 py-4 sm:px-6"><div><h2 className="text-base font-semibold text-white">Материалы месяца</h2><p className="mt-1 text-[10px] text-white/35">Откройте текст, визуал или карусель</p></div><Link href="/app/quick-post" className="rounded-xl bg-violet-500 px-4 py-2.5 text-[10px] font-semibold text-white transition hover:bg-violet-400">+ Быстрый пост</Link></div>
+              <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
                 {items.map((item, index) => {
                   const sourceItem = rawItems.find((candidate) => candidate.id === item.id)!;
                   const state = materialState(sourceItem, Boolean(item.thumbnailUrl || item.thumbnailVariantId));
                   const thumbnail = materialThumbnailUrl(item);
                   const platform = platformBrandFromName(item.platformName);
                   return (
-                    <Link href={`/app/month/${item.id}`} key={item.id} className="grid gap-4 px-5 py-4 transition hover:bg-white/[0.025] sm:grid-cols-[56px_76px_105px_minmax(0,1fr)_100px] sm:items-center sm:px-7">
-                      <div className="relative h-14 w-14 overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.03]">{thumbnail ? <img src={thumbnail} alt="" className="h-full w-full object-cover" /> : <span className="grid h-full place-items-center text-lg text-violet-300/45">◇</span>}{item.slideCount > 0 ? <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 py-0.5 text-[7px] font-bold text-white">{item.slideCount}</span> : null}</div>
-                      <div><p className="text-sm font-semibold text-slate-950">{formatDate(item.plannedDate)}</p><p className="mt-0.5 text-[11px] text-slate-400">#{String(index + 1).padStart(2, "0")}</p></div>
-                      <span className="flex w-fit items-center gap-2 rounded-full bg-slate-100 py-1 pl-1 pr-3 text-[11px] font-semibold text-slate-600">{platform ? <PlatformBrandIcon platform={platform} size="xs" /> : null}{platformLabel(item.platformName)}</span>
-                      <div className="min-w-0"><h3 className="truncate text-sm font-semibold text-slate-950 sm:whitespace-normal">{item.topic}</h3><p className="mt-1 line-clamp-1 text-xs text-slate-400">{item.goal}</p></div>
-                      <span className={`w-fit rounded-full px-3 py-1.5 text-[11px] font-semibold ${state === "Готов" ? "bg-violet-50 text-violet-700" : "bg-slate-100 text-slate-500"}`}>{state}</span>
+                    <Link href={`/app/month/${item.id}`} key={item.id} className="group overflow-hidden rounded-[20px] border border-white/[0.06] bg-black/15 transition hover:-translate-y-0.5 hover:border-violet-400/20 hover:bg-white/[0.04]">
+                      <div className="relative aspect-[16/8] overflow-hidden bg-[radial-gradient(circle_at_50%_20%,rgba(124,92,255,.18),transparent_60%)]">{thumbnail ? <img src={thumbnail} alt="" className="h-full w-full object-cover opacity-82 transition duration-500 group-hover:scale-[1.03] group-hover:opacity-95" /> : <span className="grid h-full place-items-center text-2xl text-violet-300/45">◇</span>}<div className="absolute inset-0 bg-gradient-to-t from-[#0d0c12] via-transparent to-transparent" /><span className="absolute left-3 top-3">{platform ? <PlatformBrandIcon platform={platform} size="xs" /> : null}</span><span className="absolute bottom-2.5 right-3 text-[9px] font-semibold text-white/75">{formatDate(item.plannedDate)}</span>{item.slideCount > 0 ? <span className="absolute bottom-2.5 left-3 rounded-full bg-black/65 px-2 py-1 text-[8px] font-semibold text-white/75 backdrop-blur">Карусель · {item.slideCount}</span> : null}</div>
+                      <div className="p-4"><div className="flex items-center justify-between gap-2"><span className="text-[9px] text-white/30">{platformLabel(item.platformName)} · #{String(index + 1).padStart(2, "0")}</span><span className={`rounded-full px-2 py-1 text-[8px] font-semibold ${state === "Готов" ? "bg-violet-500/12 text-violet-200" : "bg-white/[0.06] text-white/40"}`}>{state}</span></div><h3 className="mt-3 line-clamp-2 min-h-10 text-xs font-medium leading-5 text-white/82">{item.topic}</h3><p className="mt-3 line-clamp-1 border-t border-white/[0.05] pt-3 text-[9px] text-white/28">{item.goal}</p></div>
                     </Link>
                   );
                 })}

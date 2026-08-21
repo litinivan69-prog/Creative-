@@ -83,6 +83,25 @@ export default async function SelfServiceResultsPage() {
   }
   const latestMetrics = [...latestMetricByMaterial.values()];
 
+  const latestMetricByMaterialAndDay = new Map<string, (typeof metrics)[number]>();
+  for (const metric of metrics) {
+    const day = metric.capturedAt.toISOString().slice(0, 10);
+    const materialKey = metric.scheduledPublicationId || metric.plannedContentItemId || `unlinked:${metric.platformName}`;
+    const key = `${day}:${materialKey}`;
+    if (!latestMetricByMaterialAndDay.has(key)) latestMetricByMaterialAndDay.set(key, metric);
+  }
+  const trendByDay = new Map<string, { views: number; reactions: number }>();
+  for (const metric of latestMetricByMaterialAndDay.values()) {
+    const day = metric.capturedAt.toISOString().slice(0, 10);
+    const current = trendByDay.get(day) ?? { views: 0, reactions: 0 };
+    current.views += metric.views ?? metric.reach ?? 0;
+    current.reactions += (metric.likes ?? 0) + (metric.comments ?? 0) + (metric.shares ?? 0) + (metric.saves ?? 0);
+    trendByDay.set(day, current);
+  }
+  const trend = [...trendByDay.entries()].sort(([left], [right]) => left.localeCompare(right)).slice(-7);
+  const trendMax = Math.max(...trend.map(([, value]) => value.views), 1);
+  const trendPolyline = trend.map(([, value], index) => `${trend.length === 1 ? 350 : (index / (trend.length - 1)) * 700},${170 - (value.views / trendMax) * 140}`).join(" ");
+
   const publishedItems = items.filter((item) => item.scheduledPublications[0]?.publishStatus === "published");
   const readyItems = items.filter((item) => ["ready_to_schedule", "approved"].includes(item.contentDraft?.status ?? "") || item.scheduledPublications[0]?.publishStatus === "published");
   const views = latestMetrics.reduce((sum, metric) => sum + (metric.views ?? metric.reach ?? 0), 0);
@@ -109,8 +128,8 @@ export default async function SelfServiceResultsPage() {
       brandName={workspace.name}
       active="results"
       eyebrow={plan ? `Результаты · ${formatMonth(plan.month)}` : "Результаты"}
-      title="Только реальные данные месяца."
-      description="Готовность и публикации считаются по календарю. Просмотры и реакции появляются только тогда, когда их действительно вернула площадка."
+      title="Что получилось за месяц."
+      description="Публикации, просмотры и реакции собраны в одном отчёте. Здесь только реальные данные, которые вернули подключённые площадки."
       headerAction={<Link href={workspace.channels.length ? "/app/month" : "/app/channels"} className="rounded-2xl border border-white/[0.08] bg-white/[0.04] px-5 py-3 text-xs font-semibold text-white/65 transition hover:bg-white/[0.07]">{workspace.channels.length ? "Открыть месяц" : "Подключить площадки"}</Link>}
     >
       {!plan ? (
@@ -124,6 +143,19 @@ export default async function SelfServiceResultsPage() {
               { label: "Просмотры", value: views.toLocaleString("ru-RU"), detail: latestMetrics.length ? "по последним замерам" : "данных площадок пока нет", percent: null },
               { label: "Вовлечение", value: latestMetrics.length ? `${engagement.toFixed(1)}%` : "—", detail: reactions ? `${reactions.toLocaleString("ru-RU")} реакций` : "после первых метрик", percent: null },
             ].map((card) => <article key={card.label} className={`${darkCardClass} p-5`}><p className="text-[10px] font-bold uppercase tracking-[0.13em] text-white/28">{card.label}</p><div className="mt-3 flex items-end justify-between gap-2"><p className="text-3xl font-semibold tracking-[-0.04em]">{card.value}</p><span className="max-w-28 text-right text-[9px] leading-4 text-white/24">{card.detail}</span></div>{card.percent !== null ? <div className="mt-4 h-1 overflow-hidden rounded-full bg-white/[0.05]"><div className="h-full rounded-full bg-violet-500" style={{ width: `${card.percent}%` }} /></div> : <p className="mt-4 text-[9px] text-white/18">без прогнозных значений</p>}</article>)}
+          </section>
+
+          <section className={`${darkCardClass} mt-4 p-5 sm:p-7`}>
+            <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-sm font-semibold text-white">Динамика присутствия</p><p className="mt-1 text-[10px] text-white/32">Последние фактические замеры подключённых площадок</p></div><span className="rounded-full border border-white/[0.07] px-3 py-1.5 text-[9px] text-white/30">{trend.length ? `${trend.length} ${trend.length === 1 ? "день" : "дней"}` : "данных пока нет"}</span></div>
+            {trend.length ? <>
+              <div className="relative mt-6 h-52 overflow-hidden border-b border-white/[0.06]"><svg viewBox="0 0 700 180" preserveAspectRatio="none" className="absolute inset-0 h-[180px] w-full" aria-hidden="true"><defs><linearGradient id="actualResultArea" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#8f72ff" stopOpacity=".42"/><stop offset="1" stopColor="#8f72ff" stopOpacity="0"/></linearGradient></defs>{trend.length > 1 ? <path d={`M ${trendPolyline.replaceAll(" ", " L ")} L 700 180 L 0 180 Z`} fill="url(#actualResultArea)" /> : null}<polyline points={trendPolyline} fill="none" stroke="#9b82ff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
+              <div className="mt-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${trend.length}, minmax(0, 1fr))` }}>{trend.map(([day]) => <span key={day} className="text-center text-[8px] text-white/22">{new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short" }).format(new Date(`${day}T12:00:00`))}</span>)}</div>
+            </> : <div className="mt-6 grid min-h-44 place-items-center rounded-[20px] border border-dashed border-white/[0.07] bg-black/15 text-center"><div><span className="text-2xl text-violet-300/35">⌁</span><p className="mt-3 text-xs font-semibold text-white/55">График появится после первых замеров</p><p className="mt-1 text-[10px] text-white/25">Публикации уже можно учитывать, прогнозные числа мы не рисуем.</p></div></div>}
+            <div className="mt-5 grid gap-3 sm:grid-cols-3">{[
+              ["Опубликовано", `${publishedItems.length} из ${items.length}`, "по календарю"],
+              ["Просмотры", views.toLocaleString("ru-RU"), latestMetrics.length ? "по последним замерам" : "ожидаем данные"],
+              ["Реакции", reactions.toLocaleString("ru-RU"), engagement ? `${engagement.toFixed(1)}% вовлечения` : "после первых откликов"],
+            ].map(([label, value, detail]) => <div key={label} className="rounded-2xl border border-white/[0.05] bg-black/15 p-4"><p className="text-[9px] uppercase tracking-[0.12em] text-white/25">{label}</p><p className="mt-3 text-sm font-semibold text-white/80">{value}</p><p className="mt-1 text-[10px] text-violet-300">{detail}</p></div>)}</div>
           </section>
 
           <section className="mt-4 grid gap-4 lg:grid-cols-[1.08fr_.92fr]">
