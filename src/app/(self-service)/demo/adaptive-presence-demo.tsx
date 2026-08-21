@@ -8,6 +8,7 @@ import {
   BILLING_DURATIONS,
   CREDIT_PLANS,
   CREDIT_PRODUCTS,
+  TRIAL_CREDITS,
   displayCredits,
   formatRubles,
   subscriptionPriceMinor,
@@ -92,6 +93,26 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
 
 function YandexMapsMark({ size = "xs" }: { size?: "xs" | "sm" }) {
   return <span className={`grid shrink-0 place-items-center rounded-[9px] bg-white font-black text-[#ff2c2c] shadow-[0_8px_24px_rgba(15,23,42,.1)] ${size === "sm" ? "h-9 w-9 text-sm" : "h-7 w-7 text-[11px]"}`}>Я</span>;
+}
+
+function TelegramMark({ dark = false }: { dark?: boolean }) {
+  return (
+    <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${dark ? "bg-black text-white" : "bg-[#229ED9] text-white"}`}>
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5 fill-current"><path d="M20.7 3.5 3.3 10.2c-1.2.5-1.2 1.1-.2 1.4l4.5 1.4 1.7 5.2c.2.6.1.8.8.8.5 0 .8-.2 1-.4l2.2-2.1 4.6 3.4c.9.5 1.5.3 1.7-.8l3-14.2c.3-1.4-.6-2-1.9-1.4Zm-2.4 3.3-7.5 6.8-.3 3.2-1.7-5.2 9.5-5.9c.5-.3.9-.1 0 1.1Z" /></svg>
+    </span>
+  );
+}
+
+function JourneyIcon({ step }: { step: number }) {
+  const paths = [
+    <path key="brief" d="M6 3h9l3 3v15H6zM9 11h6M9 15h6M15 3v4h4" />,
+    <path key="brand" d="M12 3 4 7v5c0 5 3.4 8 8 9 4.6-1 8-4 8-9V7zM9 12l2 2 4-4" />,
+    <path key="mix" d="M4 6h16M4 12h16M4 18h16M7 3v6M16 9v6M10 15v6" />,
+    <path key="production" d="m12 3 1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5zM18 15l.8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8z" />,
+    <path key="calendar" d="M5 5h14v15H5zM8 3v4M16 3v4M5 9h14M8 13h2M13 13h3M8 17h4" />,
+    <path key="result" d="M4 19h16M6 16l4-4 3 2 5-7M15 7h3v3" />,
+  ];
+  return <span className="grid h-12 w-12 place-items-center rounded-2xl border border-violet-300/20 bg-violet-500/15 text-violet-200 shadow-[0_12px_35px_rgba(95,62,190,.2)]"><svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5 fill-none stroke-current stroke-[1.6]" strokeLinecap="round" strokeLinejoin="round">{paths[step]}</svg></span>;
 }
 
 function MetricCard({ label, value, detail, tone = "violet" }: { label: string; value: string; detail: string; tone?: "violet" | "mint" }) {
@@ -253,27 +274,49 @@ function PlatformFormats() {
 }
 
 function ProductValue() {
-  const valueBlocks = [
-    ["01", "Контекст", "Сайт, продукты, аудитория, география, тон и ограничения становятся памятью бренда, а не теряются между запросами."],
-    ["02", "Ритм", "Материалы распределяются по месяцу с нормальными интервалами. Площадки поддерживают друг друга, но не дублируются день в день."],
-    ["03", "Производство", "Посты, статьи, обложки, изображения внутри longread и отдельные слайды каруселей готовятся одним процессом."],
-    ["04", "Доставка", "Подтверждённые материалы уходят по расписанию. Ошибка не создаёт дубль: система сохраняет результат и повторяет безопасно."],
-  ];
+  const platformNames: PlatformBrand[] = ["VK", "Telegram", "Одноклассники", "Дзен", "VC.ru"];
+  const startPrice = formatRubles(CREDIT_PLANS[0].monthlyPriceMinor);
   return (
     <section id="why" className="scroll-mt-24 border-t border-white/[0.06] py-24 sm:py-28">
-      <div className="grid gap-12 lg:grid-cols-[.72fr_1.28fr]">
-        <div className="lg:sticky lg:top-28 lg:self-start">
-          <SectionLabel>Почему работает</SectionLabel>
-          <h2 className="mt-4 font-heading text-4xl font-semibold leading-[.98] tracking-[-0.05em] sm:text-6xl">Не магия.<br />Собранный процесс.</h2>
-          <p className="mt-6 max-w-md text-sm leading-7 text-white/40">Человек видит простой кабинет. Под ним работает производственное ядро, которое мы уже проверили на реальных месячных планах.</p>
+      <div>
+        <SectionLabel>Экономика и процесс</SectionLabel>
+        <div className="mt-4 grid gap-8 lg:grid-cols-[1.15fr_.85fr] lg:items-end">
+          <h2 className="max-w-4xl font-heading text-4xl font-semibold leading-[.96] tracking-[-0.055em] sm:text-6xl">Не магия. Работа, которую можно разложить по фактам.</h2>
+          <p className="max-w-xl text-sm leading-7 text-white/40">Платформа не обещает одинаковый рост каждому бренду. Она заменяет повторяющуюся работу: собирает контекст, производит материалы, держит ритм и показывает результат.</p>
         </div>
-        <div className="space-y-3">
-          {valueBlocks.map(([number, title, description]) => (
-            <article key={number} className="group grid gap-6 rounded-[28px] border border-white/[0.07] bg-white/[0.025] p-6 transition hover:border-violet-400/20 hover:bg-violet-500/[0.045] sm:grid-cols-[80px_1fr] sm:p-8">
-              <span className="font-heading text-3xl font-semibold text-violet-400/55">{number}</span>
-              <div><h3 className="text-2xl font-semibold tracking-[-0.035em] text-white">{title}</h3><p className="mt-3 max-w-2xl text-sm leading-7 text-white/40">{description}</p></div>
-            </article>
-          ))}
+
+        <article className="mt-12 overflow-hidden rounded-[32px] border border-violet-400/20 bg-[radial-gradient(circle_at_80%_10%,rgba(126,86,255,.22),transparent_32%),#100e16] p-6 sm:p-9">
+          <div className="grid gap-8 lg:grid-cols-[1fr_auto_1fr] lg:items-center">
+            <div><p className="text-[9px] font-bold uppercase tracking-[0.14em] text-white/28">Ручная модель · пример комплектации</p><p className="mt-3 font-heading text-4xl font-semibold tracking-[-0.05em] text-white">от 100 000 ₽</p><p className="mt-3 text-xs leading-5 text-white/38">SMM-специалист, редактура, дизайн, контроль календаря и ручная публикация.</p></div>
+            <div className="hidden h-24 w-px bg-white/[0.08] lg:block" />
+            <div><p className="text-[9px] font-bold uppercase tracking-[0.14em] text-violet-300">Adaptive Presence · тариф «Старт»</p><p className="mt-3 font-heading text-4xl font-semibold tracking-[-0.05em] text-white">от {startPrice} ₽</p><p className="mt-3 text-xs leading-5 text-white/38">Один кабинет, самостоятельная проверка и нужный набор форматов за кредиты.</p></div>
+          </div>
+          <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.07] pt-5"><p className="text-xs font-semibold text-violet-200">Примерно в 10 раз ниже операционные затраты в этой конфигурации</p><p className="text-[9px] text-white/22">Это сравнение модели затрат, а не обещание маркетингового результата</p></div>
+        </article>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <article className="rounded-[28px] border border-white/[0.07] bg-white/[0.025] p-6 sm:p-8">
+            <div className="flex items-start justify-between gap-4"><div><span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-violet-300">01 · Память бренда</span><h3 className="mt-4 text-2xl font-semibold tracking-[-0.035em]">Один бриф вместо повторных объяснений</h3></div><span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-violet-500/12 text-lg text-violet-200">◎</span></div>
+            <div className="mt-7 rounded-2xl border border-white/[0.06] bg-black/20 p-4 text-[11px]"><div className="flex justify-between border-b border-white/[0.05] pb-3"><span className="text-white/28">Что продаём</span><span className="text-white/70">продукт и услуги</span></div><div className="flex justify-between border-b border-white/[0.05] py-3"><span className="text-white/28">Для кого</span><span className="text-white/70">целевая аудитория</span></div><div className="flex justify-between pt-3"><span className="text-white/28">Как говорим</span><span className="text-white/70">tone of voice сохранён</span></div></div>
+          </article>
+
+          <article className="rounded-[28px] border border-white/[0.07] bg-white/[0.025] p-6 sm:p-8">
+            <div className="flex items-start justify-between gap-4"><div><span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-violet-300">02 · Пять площадок</span><h3 className="mt-4 text-2xl font-semibold tracking-[-0.035em]">Одна тема звучит по-разному</h3></div><span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-violet-500/12 text-lg text-violet-200">↗</span></div>
+            <div className="mt-7 flex flex-wrap gap-2">{platformNames.map(platform => <span key={platform} className="flex items-center gap-2 rounded-2xl border border-white/[0.06] bg-black/20 px-3 py-2 text-[10px] text-white/55"><PlatformBrandIcon platform={platform} size="xs" />{platform}</span>)}</div>
+            <p className="mt-6 text-xs leading-6 text-white/34">Не копии одного текста. Короткий пост, подробная статья и анонс получают свою структуру.</p>
+          </article>
+
+          <article className="rounded-[28px] border border-white/[0.07] bg-white/[0.025] p-6 sm:p-8">
+            <div className="flex items-start justify-between gap-4"><div><span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-violet-300">03 · Ритм месяца</span><h3 className="mt-4 text-2xl font-semibold tracking-[-0.035em]">Материалы не выходят подряд</h3></div><span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-violet-500/12 text-lg text-violet-200">□</span></div>
+            <div className="mt-7 grid grid-cols-7 gap-2">{Array.from({length: 21},(_,index)=><span key={index} className={`h-8 rounded-lg border ${[1,4,8,12,16,19].includes(index) ? "border-violet-400/25 bg-violet-500/30" : "border-white/[0.04] bg-white/[0.025]"}`} />)}</div>
+            <p className="mt-5 text-xs leading-6 text-white/34">Календарь разводит форматы и площадки по неделям, сохраняя естественный темп.</p>
+          </article>
+
+          <article className="rounded-[28px] border border-white/[0.07] bg-[linear-gradient(145deg,rgba(124,92,255,.12),rgba(255,255,255,.025))] p-6 sm:p-8">
+            <div className="flex items-start justify-between gap-4"><div><span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-violet-300">04 · Один контрольный экран</span><h3 className="mt-4 text-2xl font-semibold tracking-[-0.035em]">Видно, что готово и что сработало</h3></div><span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-violet-500/12 text-lg text-violet-200">⌁</span></div>
+            <div className="mt-7 grid grid-cols-3 gap-2">{[["18","в плане"],["16","готово"],["5","каналов"]].map(([value,label])=><div key={label} className="rounded-2xl border border-white/[0.06] bg-black/20 p-3"><p className="text-xl font-semibold">{value}</p><p className="mt-1 text-[9px] text-white/25">{label}</p></div>)}</div>
+            <p className="mt-5 text-xs leading-6 text-white/34">Статусы, календарь и отчёт остаются в продукте. Их не нужно собирать по чатам и таблицам.</p>
+          </article>
         </div>
       </div>
     </section>
@@ -281,31 +324,27 @@ function ProductValue() {
 }
 
 function BusinessOutcomes() {
-  const outcomes = [
-    ["01", "Больше точек входа", "Статьи в Дзене и VC.ru отвечают на конкретные запросы. Посты в социальных сетях поддерживают тему и ведут человека к продукту."],
-    ["02", "GEO и видимость в AI", "Экспертные материалы создают понятные сущности, факты и ответы. Это основа GEO: поисковые системы индексируют страницы, а нейросети получают больше оснований упоминать бренд как источник."],
-    ["03", "Выше доверие к бренду", "Регулярные публикации и ответы на отзывы показывают живую компанию. Клиент видит экспертизу до первого обращения."],
-    ["04", "Понятная конверсия", "В кабинете видно, какие темы дают просмотры, подписки и переходы. Следующий месяц строится на фактическом результате."],
-  ];
   return (
     <section id="outcomes" className="scroll-mt-24 py-24 sm:py-28">
-      <div className="overflow-hidden rounded-[38px] border border-violet-400/20 bg-[radial-gradient(circle_at_15%_15%,rgba(135,91,255,.24),transparent_32%),#100d17] shadow-[0_45px_150px_rgba(62,35,130,.22)]">
-        <div className="grid lg:grid-cols-[.82fr_1.18fr] lg:items-stretch">
-          <div className="relative z-10 p-7 sm:p-10 lg:p-14">
-            <SectionLabel>Что получает бизнес</SectionLabel>
-            <h2 className="mt-5 max-w-xl font-heading text-4xl font-semibold leading-[.94] tracking-[-0.06em] sm:text-6xl">Контент должен приводить к результату</h2>
-            <p className="mt-6 max-w-lg text-sm leading-7 text-white/46">Adaptive Presence связывает публикации, площадки и показатели. В кабинете видно, какой формат создаёт охват, доверие и переходы.</p>
-            <div className="mt-8 flex flex-wrap gap-2">{["поиск", "GEO", "AI-ответы", "социальные сети"].map(item=><span key={item} className="rounded-full border border-violet-300/15 bg-violet-500/10 px-3 py-2 text-[10px] font-semibold text-violet-200">{item}</span>)}</div>
-          </div>
-          <div className="relative min-h-[420px] overflow-hidden border-t border-white/[0.06] lg:border-l lg:border-t-0">
-            <Image src="/marketing/content-outcomes-v1.webp" alt="Одна экспертиза превращается в множество точек видимости бренда" fill sizes="(max-width:1024px) 100vw, 760px" className="object-cover" />
-            <div className="absolute inset-0 bg-gradient-to-r from-[#100d17]/55 via-transparent to-transparent" />
-            <div className="absolute left-5 top-5 rounded-2xl border border-white/10 bg-black/55 px-4 py-3 backdrop-blur"><p className="text-[8px] uppercase tracking-[0.12em] text-white/35">Видимость бренда</p><p className="mt-1 text-sm font-semibold text-white">поиск + AI + площадки</p></div>
-            <div className="absolute bottom-5 right-5 rounded-2xl border border-violet-300/20 bg-[#17121f]/90 px-4 py-3 shadow-xl backdrop-blur"><p className="text-[8px] text-white/35">Переходы · демо</p><p className="mt-1 text-lg font-semibold text-white">+24%</p></div>
-          </div>
-        </div>
-        <div className="grid border-t border-white/[0.07] sm:grid-cols-2 xl:grid-cols-4">{outcomes.map(([number,title,text],index)=><article key={number} className={`p-6 sm:p-8 ${["", "border-t border-white/[0.07] sm:border-l sm:border-t-0", "border-t border-white/[0.07] xl:border-l xl:border-t-0", "border-t border-white/[0.07] sm:border-l xl:border-t-0"][index]}`}><span className="text-[10px] font-semibold text-violet-300">{number}</span><h3 className="mt-6 text-xl font-semibold tracking-[-0.03em] text-white">{title}</h3><p className="mt-3 text-xs leading-6 text-white/38">{text}</p></article>)}</div>
+      <div className="mb-12 grid gap-8 lg:grid-cols-[.82fr_1.18fr] lg:items-end">
+        <div><SectionLabel>Что получает бизнес</SectionLabel><h2 className="mt-5 max-w-2xl font-heading text-4xl font-semibold leading-[.94] tracking-[-0.06em] sm:text-6xl">Контент должен приводить к результату</h2></div>
+        <div><p className="max-w-2xl text-sm leading-7 text-white/44">Не абстрактные «охваты», а понятные точки присутствия: публикация в ленте, статья в поиске, упоминание в AI-ответе и переход в продукт.</p><p className="mt-3 text-[9px] uppercase tracking-[0.13em] text-white/20">Ниже — интерфейсный пример. Показатели отмечены как демо-данные.</p></div>
       </div>
+
+      <div className="grid gap-4 lg:grid-cols-[1.12fr_.88fr]">
+        <article className="overflow-hidden rounded-[32px] border border-white/[0.08] bg-[#f6f4fb] text-[#17141e] shadow-[0_35px_100px_rgba(0,0,0,.25)]">
+          <div className="flex items-center justify-between border-b border-black/[0.07] px-5 py-4"><div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-xl bg-[linear-gradient(135deg,#7c5cff,#ff5b7f)] text-sm font-black text-white">Я</span><div><p className="text-xs font-semibold">Алиса AI</p><p className="text-[9px] text-black/35">пример нейросетевой выдачи</p></div></div><span className="rounded-full bg-violet-100 px-3 py-1.5 text-[9px] font-semibold text-violet-700">GEO</span></div>
+          <div className="p-5 sm:p-7"><div className="ml-auto max-w-[82%] rounded-[20px_20px_5px_20px] bg-violet-600 px-4 py-3 text-xs leading-5 text-white">Как выстроить регулярное присутствие бренда без большой команды?</div><div className="mt-5 flex gap-3"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-black text-[10px] text-white">✦</span><div className="text-xs leading-6 text-black/65"><p>Подход можно собрать вокруг единого профиля бренда, календаря и адаптации материалов под разные площадки.</p><p className="mt-3 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 font-medium text-violet-950">В числе решений упоминается Adaptive Presence: система готовит посты, статьи и визуалы на основе одного брифа.</p><div className="mt-4 flex flex-wrap gap-2">{["Дзен", "VC.ru", "сайт бренда"].map(source=><span key={source} className="rounded-full border border-black/[0.08] bg-white px-3 py-1.5 text-[9px] text-black/45">источник · {source}</span>)}</div></div></div></div>
+          <div className="border-t border-black/[0.06] bg-white/65 px-5 py-4 text-[9px] text-black/35">Появление бренда в конкретном ответе не гарантируется. Система создаёт и поддерживает цифровой след, который можно измерять.</div>
+        </article>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+          <article className="overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.03]"><div className="grid grid-cols-[1fr_112px]"><div className="p-5"><div className="flex items-center gap-2"><PlatformBrandIcon platform="VK" size="xs" /><span className="text-[10px] font-semibold text-white/55">Публикация VK</span></div><h3 className="mt-4 text-base font-semibold leading-6 text-white/88">Как системный контент сокращает путь до первого обращения</h3><div className="mt-6 flex gap-5"><div><p className="text-xl font-semibold">38,4K</p><p className="mt-1 text-[8px] text-white/25">просмотров · демо</p></div><div><p className="text-xl font-semibold">620</p><p className="mt-1 text-[8px] text-white/25">подписок · демо</p></div></div></div><div className="relative min-h-56"><Image src="/marketing/universal-brand-post-v1.webp" alt="Пример готовой публикации VK" fill sizes="112px" className="object-cover" /></div></div></article>
+          <article className="overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.03]"><div className="relative h-28"><Image src="/marketing/adaptive-presence-longread-v2.webp" alt="Пример статьи Дзен" fill sizes="420px" className="object-cover" /><div className="absolute inset-0 bg-gradient-to-t from-[#111018] to-transparent" /><span className="absolute bottom-3 left-4 flex items-center gap-2 text-[9px] font-semibold"><PlatformBrandIcon platform="Дзен" size="xs" />Статья Дзен</span></div><div className="p-5"><h3 className="text-base font-semibold leading-6">Как клиент выбирает бренд ещё до первого обращения</h3><div className="mt-5 flex items-center justify-between text-[9px]"><span className="text-white/28">1 840 слов · 4 изображения</span><span className="font-semibold text-violet-300">64,2K чтений · демо</span></div></div></article>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 rounded-[28px] border border-white/[0.08] bg-white/[0.025] p-5 sm:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] sm:items-center sm:p-7">{[["01","Материал опубликован"],["02","Получен просмотр"],["03","Человек перешёл"],["04","Результат попал в отчёт"]].map(([number,label],index)=><div key={number} className="contents"><div className="flex items-center gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-violet-500/12 text-[9px] font-semibold text-violet-200">{number}</span><span className="text-[10px] leading-4 text-white/48">{label}</span></div>{index < 3 ? <span className="hidden text-white/15 sm:block">→</span> : null}</div>)}</div>
     </section>
   );
 }
@@ -328,6 +367,41 @@ function ArticlePipeline() {
           </div>
         </div>
       </div>
+    </section>
+  );
+}
+
+function ClientJourney() {
+  const steps = [
+    ["Бриф", "Сайт и ответы превращаются в контекст бренда.", "контекст собран"],
+    ["Профиль", "Вы проверяете аудиторию, продукты и стиль.", "бренд понят"],
+    ["Набор месяца", "Выбираете посты, статьи, визуалы и карусели.", "объём выбран"],
+    ["Производство", "Система готовит тексты и изображения.", "материалы готовы"],
+    ["Календарь", "Публикации распределяются с нормальным ритмом.", "даты расставлены"],
+    ["Публикация", "Вы подтверждаете, а результат попадает в отчёт.", "цикл замкнут"],
+  ];
+  return (
+    <section id="how" className="border-t border-white/[0.06] py-24 sm:py-28">
+      <div className="grid gap-8 lg:grid-cols-[.82fr_1.18fr] lg:items-end">
+        <div><SectionLabel>Путь клиента</SectionLabel><h2 className="mt-4 max-w-3xl font-heading text-4xl font-semibold leading-[.98] tracking-[-0.05em] sm:text-6xl">От знакомства до публикации</h2></div>
+        <p className="max-w-2xl text-sm leading-7 text-white/40">Один последовательный маршрут. Каждый шаг заканчивается понятным результатом, поэтому в кабинете всегда видно, что делать дальше.</p>
+      </div>
+
+      <div className="relative mt-14">
+        <div className="absolute left-6 top-6 hidden h-px w-[calc(100%-3rem)] bg-[linear-gradient(90deg,rgba(139,110,255,.65),rgba(139,110,255,.08))] lg:block" />
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+          {steps.map(([title, description, result], index) => (
+            <article key={title} className="relative rounded-[24px] border border-white/[0.07] bg-[#0f0d14] p-5 transition hover:border-violet-400/22 hover:bg-[#12101a]">
+              <div className="relative z-10 flex items-center justify-between gap-3"><JourneyIcon step={index} /><span className="text-[9px] font-semibold text-white/22">0{index + 1}</span></div>
+              <h3 className="mt-6 text-base font-semibold text-white/88">{title}</h3>
+              <p className="mt-3 min-h-16 text-[11px] leading-5 text-white/34">{description}</p>
+              <p className="mt-5 border-t border-white/[0.06] pt-4 text-[9px] font-semibold text-violet-300">✓ {result}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-4 rounded-[24px] border border-violet-400/18 bg-violet-500/[0.07] px-5 py-4"><p className="text-xs text-white/46"><span className="font-semibold text-white/82">На пробном доступе:</span> пройдите бриф и получите первые материалы, не подключая площадки.</p><Link href="/start" className="text-xs font-semibold text-violet-200">Начать путь →</Link></div>
     </section>
   );
 }
@@ -451,7 +525,7 @@ export function AdaptivePresenceDemo() {
       <div className="mx-auto max-w-[1320px] px-4 sm:px-7">
         <ArticlePipeline />
 
-        <section id="how" className="border-t border-white/[0.06] py-24 sm:py-28"><div className="grid gap-12 lg:grid-cols-[.7fr_1.3fr]"><div><SectionLabel>Путь клиента</SectionLabel><h2 className="mt-4 font-heading text-4xl font-semibold leading-[.98] tracking-[-0.05em] sm:text-5xl">От сайта до публикации без менеджерской панели</h2><p className="mt-5 max-w-md text-sm leading-7 text-white/38">Каждый этап заканчивается готовым результатом и открывает следующий раздел кабинета.</p></div><div className="grid gap-3 sm:grid-cols-2">{[["01","Знакомство","Вводите сайт и отвечаете на короткие вопросы о бизнесе."],["02","Профиль бренда","Проверяете аудиторию, продукты и правила коммуникации."],["03","Конструктор месяца","Выбираете нужное количество постов, статей и визуальных форматов."],["04","Готовый календарь","Система распределяет материалы по месяцу с нормальными интервалами."],["05","Проверка","Редактируете текст, визуал или отдельный слайд карусели."],["06","Публикация","Подключаете площадки и утверждаете расписание."]].map(([number,title,text])=><article key={number} className="rounded-[24px] border border-white/[0.07] bg-white/[0.025] p-6"><span className="text-[10px] font-semibold text-violet-300">{number}</span><h3 className="mt-6 text-lg font-semibold text-white">{title}</h3><p className="mt-3 text-xs leading-6 text-white/35">{text}</p></article>)}</div></div></section>
+        <ClientJourney />
       </div>
 
       <ResultsReport />
@@ -461,9 +535,21 @@ export function AdaptivePresenceDemo() {
         <PublicPricing />
         <FAQ />
 
-        <section className="mb-20 overflow-hidden rounded-[34px] border border-violet-400/20 bg-[radial-gradient(circle_at_20%_15%,rgba(149,112,255,.25),transparent_35%),linear-gradient(135deg,#171220,#0d0b12)] p-7 text-center shadow-[0_40px_130px_rgba(68,43,140,.18)] sm:p-14"><p className="text-[10px] font-bold uppercase tracking-[0.17em] text-violet-300">Можно начать без подключения площадок</p><h2 className="mx-auto mt-5 max-w-4xl font-heading text-4xl font-semibold leading-[.98] tracking-[-0.055em] sm:text-6xl">Покажите системе бренд.<br />Она покажет вам месяц.</h2><p className="mx-auto mt-6 max-w-xl text-sm leading-7 text-white/40">Пробных кредитов хватит, чтобы пройти путь и увидеть результат. Подписка и автопостинг понадобятся только после решения продолжить.</p><div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row"><Link href="/start" className="rounded-2xl bg-white px-6 py-3.5 text-sm font-semibold text-black transition hover:bg-violet-100">Попробовать на своём бренде</Link><Link href="/sign-in" className="rounded-2xl border border-white/[0.1] bg-white/[0.04] px-6 py-3.5 text-sm font-semibold text-white/75 transition hover:bg-white/[0.08]">Уже есть аккаунт</Link></div></section>
+        <section className="mb-20 overflow-hidden rounded-[36px] bg-[radial-gradient(circle_at_85%_10%,rgba(255,255,255,.9),transparent_30%),linear-gradient(135deg,#ddd4ff,#f4f0ff_55%,#e4ddff)] p-7 text-[#14111b] shadow-[0_40px_130px_rgba(78,54,145,.22)] sm:p-12 lg:p-14">
+          <div className="grid gap-10 lg:grid-cols-[1.2fr_.8fr] lg:items-center">
+            <div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-violet-700">Пробный доступ</p><h2 className="mt-5 max-w-4xl font-heading text-4xl font-semibold leading-[.98] tracking-[-0.055em] sm:text-6xl">Попробуйте Adaptive Presence <span className="inline-block rounded-xl bg-lime-300 px-2 text-black">бесплатно</span></h2><p className="mt-6 max-w-2xl text-sm leading-7 text-black/55">Получите {displayCredits(TRIAL_CREDITS)} пробных кредитов. Заполните бриф, соберите профиль бренда и откройте первые материалы. Подписка и подключение площадок на этом этапе не нужны.</p><div className="mt-8 flex flex-col gap-3 sm:flex-row"><Link href="/start" className="rounded-2xl bg-black px-6 py-3.5 text-center text-sm font-semibold text-white transition hover:bg-violet-700">Попробовать бесплатно →</Link><Link href="/sign-in" className="rounded-2xl border border-black/10 bg-white/45 px-6 py-3.5 text-center text-sm font-semibold text-black/65 transition hover:bg-white/70">Уже есть аккаунт</Link></div></div>
+            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">{[[displayCredits(TRIAL_CREDITS),"кредитов на знакомство"],["0 ₽","до выбора подписки"],["3 шага","бриф, профиль, материалы"]].map(([value,label],index)=><div key={label} className={`rounded-[22px] border border-black/[0.07] bg-white/55 p-5 backdrop-blur ${index === 1 ? "lg:ml-8" : index === 2 ? "lg:ml-16" : ""}`}><p className="text-2xl font-semibold tracking-[-0.04em]">{value}</p><p className="mt-2 text-[10px] text-black/42">{label}</p></div>)}</div>
+          </div>
+        </section>
 
-        <footer className="border-t border-white/[0.06] py-10"><div className="flex flex-wrap items-start justify-between gap-8"><div><BrandMark /><p className="mt-5 max-w-xs text-[11px] leading-5 text-white/28">AI-система регулярного присутствия бренда. Продукт Creative Command.</p></div><div className="grid grid-cols-2 gap-x-12 gap-y-3 text-[11px] text-white/38 sm:grid-cols-3"><a href="#product">Продукт</a><a href="#formats">Форматы</a><a href="#pricing">Тарифы</a><a href="#results">Результаты</a><a href="#faq">Вопросы</a><Link href="/sign-in">Войти</Link></div></div><div className="mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.05] pt-6 text-[9px] text-white/20"><p>© 2026 Creative Command · Adaptive Presence</p><p>Создано в России для российских площадок</p></div></footer>
+        <footer className="border-t border-white/[0.06] py-10">
+          <div className="grid gap-8 lg:grid-cols-[1fr_1fr_1.15fr]">
+            <div><BrandMark /><p className="mt-5 max-w-xs text-[11px] leading-5 text-white/28">AI-система регулярного присутствия бренда. Продукт Creative Command.</p></div>
+            <div className="grid grid-cols-2 gap-x-10 gap-y-3 text-[11px] text-white/38"><a href="#product">Продукт</a><a href="#formats">Форматы</a><a href="#pricing">Тарифы</a><a href="#results">Результаты</a><a href="#faq">Вопросы</a><Link href="/sign-in">Войти</Link></div>
+            <a href="https://t.me/creative_command" target="_blank" rel="noreferrer" className="group rounded-[24px] border border-violet-400/16 bg-[linear-gradient(135deg,rgba(184,164,255,.16),rgba(255,255,255,.035))] p-5 transition hover:border-violet-300/28 hover:bg-violet-500/[0.1]"><div className="flex items-start justify-between gap-4"><div><p className="text-sm font-semibold text-white">Telegram-канал Creative Command</p><p className="mt-2 max-w-sm text-[10px] leading-5 text-white/32">Кейсы агентства, наблюдения о брендах и новости продукта.</p></div><TelegramMark /></div><span className="mt-5 inline-flex text-[10px] font-semibold text-violet-300 transition group-hover:text-violet-200">Открыть Telegram →</span></a>
+          </div>
+          <div className="mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.05] pt-6 text-[9px] text-white/20"><p>© 2026 Creative Command · Adaptive Presence</p><p>Создано в России для российских площадок</p></div>
+        </footer>
       </div>
     </main>
   );
