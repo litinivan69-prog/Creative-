@@ -19,7 +19,7 @@ export const CREDIT_PRODUCTS = {
 export type CreditProductCode = keyof typeof CREDIT_PRODUCTS;
 
 export const CREDIT_PLANS = [
-  { code: "start", name: "Старт", credits: 30, monthlyPriceMinor: 990_000, description: "Для спокойного присутствия одного бренда" },
+  { code: "start", name: "Старт", credits: 30, monthlyPriceMinor: 990_000, description: "Для регулярного контента одного бренда" },
   { code: "growth", name: "Рост", credits: 70, monthlyPriceMinor: 1_790_000, description: "Для регулярных постов, статей и каруселей", featured: true },
   { code: "pro", name: "Про", credits: 130, monthlyPriceMinor: 2_490_000, description: "Для активного месяца и нескольких форматов" },
 ] as const;
@@ -28,9 +28,9 @@ export type CreditPlanCode = (typeof CREDIT_PLANS)[number]["code"];
 
 export const BILLING_DURATIONS = [
   { months: 1, label: "1 месяц", discountPercent: 0 },
-  { months: 3, label: "3 месяца", discountPercent: 7 },
-  { months: 6, label: "6 месяцев", discountPercent: 12 },
-  { months: 12, label: "1 год", discountPercent: 20 },
+  { months: 3, label: "3 месяца", discountPercent: 10 },
+  { months: 6, label: "6 месяцев", discountPercent: 20 },
+  { months: 12, label: "1 год", discountPercent: 35 },
 ] as const;
 
 export const CREDIT_TOP_UPS = [
