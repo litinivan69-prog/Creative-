@@ -13,7 +13,7 @@ import type { ArticleImage } from "@/lib/article-schema";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Материал · Adaptive Presence",
+  title: "Материал · Ribes",
   robots: { index: false, follow: false },
 };
 

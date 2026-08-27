@@ -9,11 +9,12 @@ import { darkCardClass, SelfServiceAppShell } from "@/app/(self-service)/app/sel
 import { PlatformBrandIcon, platformBrandFromName, type PlatformBrand } from "@/app/(self-service)/platform-brand-icon";
 import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 import { articleHeroUrl } from "@/lib/article-engine";
+import { RibesBrand } from "@/app/(self-service)/ribes-brand";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Главная · Adaptive Presence",
+  title: "Главная · Ribes",
   robots: { index: false, follow: false },
 };
 
@@ -105,8 +106,8 @@ export default async function SelfServiceHomePage() {
         <div className="relative mx-auto max-w-[1080px]">
           <header className="flex items-center justify-between rounded-[24px] border border-white/80 bg-white/75 px-4 py-3 shadow-[0_18px_55px_rgba(77,61,112,0.07)] backdrop-blur-xl sm:px-5">
             <div className="flex items-center gap-3">
-              <div className="grid h-10 w-10 place-items-center rounded-2xl bg-violet-600 text-xs font-extrabold lowercase text-white">cc.</div>
-              <div><p className="text-sm font-semibold text-slate-950">Adaptive Presence</p><p className="text-[11px] text-slate-400">{email}</p></div>
+              <RibesBrand dark={false} />
+              <p className="text-[11px] text-slate-400">{email}</p>
             </div>
             <form action={signOutSelfService}><button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600">Выйти</button></form>
           </header>

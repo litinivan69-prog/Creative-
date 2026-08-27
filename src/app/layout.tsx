@@ -15,8 +15,8 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: "Adaptive Presence OS",
-  description: "Adaptive Presence OS by Creative: внутренняя панель менеджера для управления цифровым присутствием.",
+  title: "Ribes",
+  description: "Ribes — контент-система для регулярного присутствия бренда. Продукт Creative Command.",
 };
 
 export default function RootLayout({

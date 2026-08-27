@@ -11,6 +11,7 @@ import {
   type SelfServiceFormatId,
 } from "@/lib/self-service/product";
 import { PlatformBrandIcon, platformBrandFromFormatId, type PlatformBrand } from "@/app/(self-service)/platform-brand-icon";
+import { RibesBrand } from "@/app/(self-service)/ribes-brand";
 
 const coreFormats = SELF_SERVICE_FORMATS.filter((format) => format.core);
 const helperFormats = SELF_SERVICE_FORMATS.filter((format) => !format.core);
@@ -156,11 +157,7 @@ export function SelfServiceStart() {
       <div className="relative mx-auto max-w-[1180px]">
         <header className="flex items-center justify-between gap-4 rounded-[24px] border border-white/80 bg-white/75 px-4 py-3 shadow-[0_18px_55px_rgba(77,61,112,0.07)] backdrop-blur-xl sm:px-5">
           <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-2xl bg-violet-600 text-xs font-extrabold lowercase text-white">cc.</div>
-            <div>
-              <p className="text-sm font-semibold tracking-[-0.01em] text-slate-950">Adaptive Presence</p>
-              <p className="text-[11px] font-medium text-slate-400">by Creative Command</p>
-            </div>
+            <RibesBrand dark={false} />
           </div>
           <div className="flex items-center gap-2">
             <a href="/demo" className="rounded-full border border-violet-100 bg-white px-3.5 py-2 text-xs font-semibold text-violet-700 transition hover:bg-violet-50">Посмотреть демо</a>

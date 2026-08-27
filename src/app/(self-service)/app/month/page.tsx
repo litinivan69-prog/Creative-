@@ -17,7 +17,7 @@ import { articleHeroUrl } from "@/lib/article-engine";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Контент месяца · Adaptive Presence",
+  title: "Контент месяца · Ribes",
   robots: { index: false, follow: false },
 };
 

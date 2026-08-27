@@ -11,7 +11,7 @@ import { PlatformBrandIcon, platformBrandFromFormatId } from "@/app/(self-servic
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Ваш контент-план · Adaptive Presence",
+  title: "Ваш контент-план · Ribes",
   robots: { index: false, follow: false },
 };
 

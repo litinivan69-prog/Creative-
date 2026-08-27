@@ -11,7 +11,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   providers: [
     Resend({
-      from: process.env.AUTH_EMAIL_FROM ?? "Adaptive Presence <no-reply@example.com>",
+      from: process.env.AUTH_EMAIL_FROM ?? "Ribes <no-reply@example.com>",
     }),
   ],
   pages: {

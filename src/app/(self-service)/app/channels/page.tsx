@@ -14,7 +14,7 @@ import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Площадки · Adaptive Presence",
+  title: "Площадки · Ribes",
   robots: { index: false, follow: false },
 };
 

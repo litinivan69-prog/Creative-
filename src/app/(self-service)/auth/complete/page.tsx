@@ -11,7 +11,7 @@ import {
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Завершаем вход · Adaptive Presence",
+  title: "Завершаем вход · Ribes",
   robots: { index: false, follow: false },
 };
 

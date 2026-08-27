@@ -8,7 +8,7 @@ import { syncYooKassaPayment } from "@/lib/yookassa";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Проверяем оплату · Adaptive Presence",
+  title: "Проверяем оплату · Ribes",
   robots: { index: false, follow: false },
 };
 

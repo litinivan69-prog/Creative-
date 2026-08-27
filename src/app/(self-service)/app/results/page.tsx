@@ -10,7 +10,7 @@ import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Результаты · Adaptive Presence",
+  title: "Результаты · Ribes",
   robots: { index: false, follow: false },
 };
 
