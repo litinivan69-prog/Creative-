@@ -1,4 +1,5 @@
-export const TRIAL_CREDITS = 5;
+// Enough for a real trial: two posts with visuals and one article with a cover.
+export const TRIAL_CREDITS = 9;
 export const CREDIT_DISPLAY_MULTIPLIER = 100;
 
 export function displayCredits(value: number) {

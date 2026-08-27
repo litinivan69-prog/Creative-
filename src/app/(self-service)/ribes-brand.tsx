@@ -36,9 +36,9 @@ export function RibesBrand({
     <span className={`inline-flex items-center gap-3 ${className}`}>
       <RibesMark className="h-10 w-10" compact={compact} />
       {!compact ? (
-        <span>
+        <span className="min-w-0">
           <span className={`block font-heading text-[15px] font-semibold tracking-[-0.025em] ${dark ? "text-white" : "text-slate-950"}`}>Ribes</span>
-          <span className={`block text-[10px] ${dark ? "text-white/35" : "text-slate-400"}`}>продукт Creative Command</span>
+          <span className={`block whitespace-nowrap text-[9px] ${dark ? "text-white/35" : "text-slate-400"}`}>продукт Creative Command</span>
         </span>
       ) : null}
     </span>

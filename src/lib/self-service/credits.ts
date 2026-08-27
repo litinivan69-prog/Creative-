@@ -21,7 +21,28 @@ export async function grantTrialCredits(clientId: string) {
     });
     const idempotencyKey = `trial:${clientId}`;
     const existing = await tx.creditTransaction.findUnique({ where: { idempotencyKey } });
-    if (existing) return existing;
+    if (existing) {
+      if (existing.amount >= TRIAL_CREDITS) return existing;
+      const upgradeKey = `trial:upgrade:${TRIAL_CREDITS}:${clientId}`;
+      const existingUpgrade = await tx.creditTransaction.findUnique({ where: { idempotencyKey: upgradeKey } });
+      if (existingUpgrade) return existingUpgrade;
+      const difference = TRIAL_CREDITS - existing.amount;
+      const upgradedWallet = await tx.creditWallet.update({
+        where: { id: wallet.id },
+        data: { balance: { increment: difference }, lifetimeGranted: { increment: difference } },
+      });
+      return tx.creditTransaction.create({
+        data: {
+          clientId,
+          walletId: wallet.id,
+          amount: difference,
+          balanceAfter: upgradedWallet.balance,
+          kind: "trial_grant",
+          description: "Дополнение пробных кредитов до полного тестового набора",
+          idempotencyKey: upgradeKey,
+        },
+      });
+    }
 
     const updatedWallet = await tx.creditWallet.update({
       where: { id: wallet.id },

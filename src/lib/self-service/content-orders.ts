@@ -19,6 +19,7 @@ export const SelfServiceContentOrderConfigurationSchema = z.object({
   dzenArticles: z.number().int().min(0).max(20),
   vcruArticles: z.number().int().min(0).max(20),
   carousels: z.number().int().min(0).max(30),
+  carouselPlatform: z.enum(["vk", "telegram"]).default("vk"),
   quickAnnouncements: z.number().int().min(0).max(100),
   reviewReplies: z.number().int().min(0).max(100),
 });
@@ -26,9 +27,10 @@ export const SelfServiceContentOrderConfigurationSchema = z.object({
 export type SelfServiceContentOrderConfiguration = z.infer<typeof SelfServiceContentOrderConfigurationSchema>;
 
 export function contentOrderConfigurationFromFormData(formData: FormData) {
-  return SelfServiceContentOrderConfigurationSchema.parse(
-    Object.fromEntries(SELF_SERVICE_CONTENT_ORDER_FIELDS.map((field) => [field, Number(formData.get(field) ?? 0)])),
-  );
+  return SelfServiceContentOrderConfigurationSchema.parse({
+    ...Object.fromEntries(SELF_SERVICE_CONTENT_ORDER_FIELDS.map((field) => [field, Number(formData.get(field) ?? 0)])),
+    carouselPlatform: formData.get("carouselPlatform") ?? "vk",
+  });
 }
 
 export function parseSelfServiceContentOrderConfiguration(value: unknown) {
@@ -48,8 +50,8 @@ export function estimateContentOrderCredits(configuration: SelfServiceContentOrd
 
 export function contentOrderFormatIds(configuration: SelfServiceContentOrderConfiguration) {
   return [
-    configuration.vkPosts > 0 || configuration.carousels > 0 ? "vk_post" : null,
-    configuration.telegramPosts > 0 || configuration.quickAnnouncements > 0 || configuration.reviewReplies > 0 ? "telegram_post" : null,
+    configuration.vkPosts > 0 || (configuration.carousels > 0 && configuration.carouselPlatform === "vk") ? "vk_post" : null,
+    configuration.telegramPosts > 0 || configuration.quickAnnouncements > 0 || configuration.reviewReplies > 0 || (configuration.carousels > 0 && configuration.carouselPlatform === "telegram") ? "telegram_post" : null,
     configuration.okPosts > 0 ? "ok_post" : null,
     configuration.dzenArticles > 0 ? "dzen_article" : null,
     configuration.vcruArticles > 0 ? "vcru_article" : null,

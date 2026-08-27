@@ -281,10 +281,15 @@ export default async function SelfServiceMonthPage({
               <div className="mt-5 rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm font-medium text-violet-900">Площадки сохранены. Теперь собирайте месяц — материалы сразу лягут в календарь.</div>
             ) : null}
 
+            <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-stretch">
+              <div className="rounded-[20px] border border-white/[0.07] bg-white/[0.025] px-5 py-4"><p className="text-xs font-semibold text-white/75">Нужно опубликовать что-то сегодня?</p><p className="mt-1 text-[10px] leading-4 text-white/30">Создайте отдельный материал — он появится в календаре, не меняя план месяца.</p></div>
+              <Link href="/app/quick-post" className="flex items-center justify-center rounded-[20px] bg-violet-500 px-6 py-4 text-xs font-semibold text-white transition hover:bg-violet-400">+ Быстрый пост</Link>
+            </div>
+
             <MonthCalendar month={plan.month} items={items} />
 
             <section id="materials" className="mt-5 scroll-mt-24 overflow-hidden rounded-[24px] border border-white/[0.08] bg-white/[0.03] shadow-[0_24px_80px_rgba(0,0,0,.18)]">
-              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/[0.06] px-5 py-4 sm:px-6"><div><h2 className="text-base font-semibold text-white">Материалы месяца</h2><p className="mt-1 text-[10px] text-white/35">Откройте текст, визуал или карусель</p></div><Link href="/app/quick-post" className="rounded-xl bg-violet-500 px-4 py-2.5 text-[10px] font-semibold text-white transition hover:bg-violet-400">+ Быстрый пост</Link></div>
+              <div className="border-b border-white/[0.06] px-5 py-4 sm:px-6"><h2 className="text-base font-semibold text-white">Материалы месяца</h2><p className="mt-1 text-[10px] text-white/35">Откройте текст, визуал или карусель</p></div>
               <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
                 {items.map((item, index) => {
                   const sourceItem = rawItems.find((candidate) => candidate.id === item.id)!;
