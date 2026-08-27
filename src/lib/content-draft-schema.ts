@@ -33,6 +33,16 @@ export const ContentDraftSchema = z.object({
 
 export type ContentDraft = z.infer<typeof ContentDraftSchema>;
 
+/** Removes visible Markdown emphasis markers from social post copy. */
+export function cleanVisibleContentText(value: string) {
+  return value
+    .replace(/\*\*([^*\n]+)\*\*/g, "$1")
+    .replace(/__([^_\n]+)__/g, "$1")
+    .replace(/^[\t ]*\*[\t ]+/gm, "• ")
+    .replace(/(^|[\s(])\*([^*\n]+)\*(?=$|[\s).,!?:;])/g, "$1$2")
+    .trim();
+}
+
 export function isSensitiveContent(values: Array<string | null | undefined>) {
   const text = values.filter(Boolean).join(" ").toLowerCase();
 
@@ -88,9 +98,9 @@ export function validateContentDraftForPersistence(
   return {
     ...draft,
     // Slide index («карточка 1/4») is service metadata — keep it out of visible post text.
-    draftTitle: stripCarouselSlideLabel(draft.draftTitle) || draft.draftTitle,
-    draftBody: stripCarouselSlideLabel(draft.draftBody) || draft.draftBody,
-    telegramBody: clampTelegramBody(draft.telegramBody ? stripCarouselSlideLabel(draft.telegramBody) : draft.telegramBody),
+    draftTitle: cleanVisibleContentText(stripCarouselSlideLabel(draft.draftTitle) || draft.draftTitle),
+    draftBody: cleanVisibleContentText(stripCarouselSlideLabel(draft.draftBody) || draft.draftBody),
+    telegramBody: clampTelegramBody(draft.telegramBody ? cleanVisibleContentText(stripCarouselSlideLabel(draft.telegramBody)) : draft.telegramBody),
     status: needsReview ? "needs_review" : "draft",
     approvalRequired: needsReview,
     autopublishEligible:

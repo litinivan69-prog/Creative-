@@ -15,16 +15,6 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-const formatLabels: Record<string, string> = {
-  vk_post: "Посты VK",
-  telegram_post: "Посты Telegram",
-  ok_post: "Посты Одноклассники",
-  dzen_article: "Статьи Дзен",
-  vcru_article: "Статьи VC.ru",
-  quick_announcement: "Короткие анонсы",
-  review_reply: "Ответы на отзывы",
-};
-
 function briefValue(rawBrief: string, label: string) {
   return rawBrief
     .split("\n")
@@ -90,16 +80,14 @@ export default async function SelfServicePreviewPage() {
   if (!brief) redirect("/start");
 
   const rawBrief = brief.rawBrief;
-  const formats = briefValue(rawBrief, "Выбранные форматы")
-    .split(",")
-    .map((format) => ({ id: format.trim(), label: formatLabels[format.trim()] ?? format.trim() }))
-    .filter(Boolean);
   const topics = previewTopics(rawBrief, workspace.name);
   const profile = workspace.brandProfile;
-  const postTopics = briefValue(rawBrief, "Ритм постов") === "calm" ? 4 : 8;
-  const articleRhythm = briefValue(rawBrief, "Ритм статей");
-  const articleCount = articleRhythm === "two" ? 2 : articleRhythm === "one" ? 1 : 0;
-  const platformFormats = formats.map((format) => ({ ...format, platform: platformBrandFromFormatId(format.id) })).filter((format) => format.platform);
+  const platformFormats = [
+    { id: "vk_post", label: "VK", platform: platformBrandFromFormatId("vk_post") },
+    { id: "telegram_post", label: "Telegram", platform: platformBrandFromFormatId("telegram_post") },
+    { id: "dzen_article", label: "Дзен", platform: platformBrandFromFormatId("dzen_article") },
+    { id: "vcru_article", label: "VC.ru", platform: platformBrandFromFormatId("vcru_article") },
+  ].filter((format) => format.platform);
   const calendarPreview = topics.slice(0, 6).map((topic, index) => ({
     topic,
     day: [3, 6, 10, 13, 17, 20][index],
@@ -112,8 +100,8 @@ export default async function SelfServicePreviewPage() {
       active="overview"
       eyebrow="Персональное превью"
       title="Мы уже поняли ваш бренд."
-      description="Показываем структуру будущего месяца до оплаты — без пустых обещаний. Полные тексты, визуалы и скачивание откроются после активации."
-      headerAction={<Link href="/app/subscribe" className="rounded-2xl bg-violet-500 px-5 py-3 text-sm font-semibold text-white shadow-[0_16px_45px_rgba(112,78,255,.28)] transition hover:bg-violet-400">Открыть полный месяц</Link>}
+      description="Профиль бренда уже собран. Теперь выберите пробный набор материалов — стоимость в кредитах будет видна до запуска."
+      headerAction={<Link href="/app/plan-builder" className="rounded-2xl bg-violet-500 px-5 py-3 text-sm font-semibold text-white shadow-[0_16px_45px_rgba(112,78,255,.28)] transition hover:bg-violet-400">Собрать пробный набор</Link>}
     >
       <section className="grid gap-4 lg:grid-cols-[1.08fr_.92fr]">
         <article className={`${darkCardClass} p-6 sm:p-7`}>
@@ -129,18 +117,14 @@ export default async function SelfServicePreviewPage() {
         </article>
 
         <article className={`${darkCardClass} p-6 sm:p-7`}>
-          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-violet-300">Ваш набор</p>
-          <h2 className="mt-3 text-2xl font-semibold tracking-[-0.035em] text-white">Лёгкий месяц без перегруза</h2>
-          <p className="mt-2 text-sm leading-6 text-white/38">Только выбранные площадки и понятный ритм публикаций.</p>
-          <div className="mt-6 grid gap-2 sm:grid-cols-2">{formats.map((format) => {
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-violet-300">Следующий шаг</p>
+          <h2 className="mt-3 text-2xl font-semibold tracking-[-0.035em] text-white">Вы сами собираете набор</h2>
+          <p className="mt-2 text-sm leading-6 text-white/38">Посты, статьи и карусели выбираются отдельно. Ничего не запускается и не списывается без подтверждения.</p>
+          <div className="mt-6 grid gap-2 sm:grid-cols-2">{platformFormats.map((format) => {
             const platform = platformBrandFromFormatId(format.id);
             return <div key={format.id} className="flex min-w-0 items-center gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.04] p-3">{platform ? <PlatformBrandIcon platform={platform} size="sm" /> : null}<span className="truncate text-xs font-medium text-white/68">{format.label}</span></div>;
           })}</div>
-          <div className="mt-6 grid grid-cols-3 gap-2 text-center">
-            <div className="rounded-2xl bg-violet-500/10 p-3"><p className="text-xl font-semibold text-white">до {postTopics}</p><p className="mt-1 text-[9px] text-white/30">тем для постов</p></div>
-            <div className="rounded-2xl bg-white/[0.035] p-3"><p className="text-xl font-semibold text-white">4</p><p className="mt-1 text-[9px] text-white/30">недели</p></div>
-            <div className="rounded-2xl bg-white/[0.035] p-3"><p className="text-xl font-semibold text-white">{articleCount || "—"}</p><p className="mt-1 text-[9px] text-white/30">{articleCount === 0 ? "без статей" : articleCount === 1 ? "статья" : "статьи"}</p></div>
-          </div>
+          <div className="mt-6 rounded-2xl bg-violet-500/10 p-4"><p className="text-xs font-semibold text-violet-100">Пробные кредиты уже начислены</p><p className="mt-1 text-[10px] leading-4 text-white/32">Их хватит, чтобы пройти реальный путь и получить первые материалы.</p></div>
         </article>
       </section>
 
@@ -169,8 +153,8 @@ export default async function SelfServicePreviewPage() {
       </section>
 
       <section className="mt-4 flex flex-col items-center justify-between gap-5 rounded-[22px] border border-violet-400/18 bg-[linear-gradient(120deg,rgba(111,75,255,.18),rgba(255,255,255,.025))] p-6 text-center sm:flex-row sm:text-left">
-        <div><p className="text-lg font-semibold text-white">Готовы собрать полноценный месяц?</p><p className="mt-1 text-sm text-white/40">После оплаты система подготовит тексты, визуалы и календарь автоматически.</p></div>
-        <Link href="/app/subscribe" className="shrink-0 rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-violet-50">Посмотреть тариф</Link>
+        <div><p className="text-lg font-semibold text-white">Попробуйте на реальных материалах</p><p className="mt-1 text-sm text-white/40">Сначала соберите пробный набор. Подписка понадобится, когда бесплатные кредиты закончатся.</p></div>
+        <Link href="/app/plan-builder" className="shrink-0 rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-violet-50">Собрать набор</Link>
       </section>
     </SelfServiceAppShell>
   );

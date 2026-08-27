@@ -6,6 +6,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { scheduledAutopublishDefaults } from "@/lib/scheduled-autopublish";
 import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
+import { cleanVisibleContentText } from "@/lib/content-draft-schema";
 
 async function currentClientId() {
   const session = await auth();
@@ -20,11 +21,11 @@ async function currentClientId() {
 
 export async function saveSelfServiceMaterialText(formData: FormData) {
   const itemId = String(formData.get("itemId") ?? "").trim();
-  const body = String(formData.get("body") ?? "").trim();
+  const rawBody = String(formData.get("body") ?? "").trim();
   const clientId = await currentClientId();
 
   if (!clientId) redirect(`/sign-in?callbackUrl=/app/month/${encodeURIComponent(itemId)}`);
-  if (!itemId || !body || body.length > 120_000) {
+  if (!itemId || !rawBody || rawBody.length > 120_000) {
     redirect(`/app/month/${encodeURIComponent(itemId)}?error=text_invalid`);
   }
 
@@ -37,6 +38,7 @@ export async function saveSelfServiceMaterialText(formData: FormData) {
   const article = item.deliverableKind === "article"
     ? await prisma.article.findFirst({ where: { plannedContentItemId: item.id, clientId }, select: { id: true } })
     : null;
+  const body = article ? rawBody : cleanVisibleContentText(rawBody);
 
   if (item.contentDraft) {
     const telegram = /telegram|телег/i.test(item.contentDraft.platformName);

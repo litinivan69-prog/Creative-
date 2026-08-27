@@ -61,13 +61,13 @@ export default async function SelfServiceChannelsPage({ searchParams }: { search
   return (
     <SelfServiceAppShell
       brandName={membership.client.name}
-      active="channels"
-      eyebrow={isOnboarding ? "Шаг 4 из 4" : "Бренд и площадки"}
+      active="autoposting"
+      eyebrow={isOnboarding ? "Площадки" : "Площадки и публикации"}
       title={isOnboarding ? "Куда будем публиковать?" : "Подключите площадки один раз."}
       description={isOnboarding ? "Подключение не обязательно для знакомства с платформой. Без него мы всё равно подготовим материалы — автоматическая публикация включится позже." : "VK, Telegram и VC.ru публикуются из кабинета. Одноклассники и Дзен пока получают готовые материалы для размещения."}
     >
       <div className="max-w-[960px]">
-        {isOnboarding ? <section className="mb-5 overflow-hidden rounded-[22px] border border-violet-400/15 bg-violet-500/[0.07] p-5"><div className="flex items-center justify-between gap-4"><div><p className="text-xs font-semibold text-violet-100">Последний шаг настройки</p><p className="mt-1 text-[10px] leading-4 text-white/35">Профиль бренда уже сохранён. Теперь решите, куда система сможет отправлять готовые посты.</p></div><span className="shrink-0 rounded-full bg-violet-500/15 px-3 py-1.5 text-[10px] font-semibold text-violet-200">75 → 100%</span></div><div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/[0.06]"><div className="h-full w-full rounded-full bg-violet-500" /></div></section> : null}
+        {isOnboarding ? <section className="mb-5 overflow-hidden rounded-[22px] border border-violet-400/15 bg-violet-500/[0.07] p-5"><div><p className="text-xs font-semibold text-violet-100">Подключение можно пропустить</p><p className="mt-1 text-[10px] leading-4 text-white/35">Материалы подготовятся в любом случае. Автоматическую публикацию можно включить позже в этом же разделе.</p></div></section> : null}
         {query.notice ? <div className="rounded-2xl border border-violet-400/15 bg-violet-500/10 px-4 py-3 text-xs font-semibold text-violet-100">{query.notice}</div> : null}
         {query.error ? <div className="rounded-2xl border border-rose-400/15 bg-rose-500/10 px-4 py-3 text-xs text-rose-100">{query.error}</div> : null}
         <section className="mt-7">

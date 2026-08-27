@@ -9,6 +9,7 @@ import { markSelfServiceMaterialPublishedManually, markSelfServiceMaterialReady,
 import { publishSelfServiceMaterialNow } from "@/lib/self-service/channel-actions";
 import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 import type { ArticleImage } from "@/lib/article-schema";
+import { cleanVisibleContentText } from "@/lib/content-draft-schema";
 
 export const dynamic = "force-dynamic";
 
@@ -93,7 +94,8 @@ export default async function SelfServiceMaterialPage({
     ? await prisma.article.findFirst({ where: { plannedContentItemId: item.id, clientId: membership.clientId } })
     : null;
   const isTelegram = /telegram|телег/i.test(item.platformName);
-  const body = article?.bodyMarkdown || (isTelegram ? item.contentDraft?.telegramBody : null) || item.contentDraft?.draftBody || "";
+  const rawBody = article?.bodyMarkdown || (isTelegram ? item.contentDraft?.telegramBody : null) || item.contentDraft?.draftBody || "";
+  const body = isArticle ? rawBody : cleanVisibleContentText(rawBody);
   const slides = item.creativeAssets.filter((asset) => asset.assetType === "carousel_slide");
   const articleImages = ((article?.images as ArticleImage[] | null) ?? [])
     .map((image, sourceIndex) => ({ image, sourceIndex }))
@@ -102,7 +104,7 @@ export default async function SelfServiceMaterialPage({
     ? slides.flatMap((asset) => asset.generatedVariants)
     : item.generatedCreativeVariants.slice(0, 1);
   const generatedVisuals = visualVariants
-    .map((variant) => ({ id: variant.id, src: variantSource(variant), downloadHref: `/api/self-service/materials/${item.id}/visuals?variant=${variant.id}`, label: "Визуал" }))
+    .map((variant, index) => ({ id: variant.id, src: variantSource(variant), downloadHref: `/api/self-service/materials/${item.id}/visuals?variant=${variant.id}`, label: slides.length ? `Слайд ${index + 1}` : "Визуал" }))
     .filter((visual): visual is { id: string; src: string; downloadHref: string; label: string } => Boolean(visual.src));
   const visuals = isArticle
     ? articleImages.map(({ image, sourceIndex }, index) => ({
@@ -155,8 +157,8 @@ export default async function SelfServiceMaterialPage({
               <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] px-5 py-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-violet-300">{isArticle ? "Визуалы статьи" : "Визуал"}</p><p className="mt-1 text-xs font-medium text-white/55">{slides.length > 0 ? `Карусель · ${visuals.length}/${slides.length}` : isArticle ? `${visuals.length} ${visuals.length === 1 ? "изображение" : "изображения"}: обложка и иллюстрации` : "Изображение поста"}</p></div>{visuals[0] ? <a href={visuals[0].downloadHref} className="rounded-xl border border-white/[0.07] bg-white/[0.035] px-3 py-2 text-[10px] font-semibold text-white/55 transition hover:bg-white/[0.06] hover:text-white">Скачать {isArticle ? "обложку" : visuals.length > 1 ? "первый" : ""}</a> : null}</div>
               {visuals.length > 0 ? (
                 <div className="p-3">
-                  <div className="relative overflow-hidden rounded-[18px] bg-black/25"><img src={visuals[0].src} alt={isArticle ? "Обложка статьи" : "Основной визуал"} className={`${isArticle ? "aspect-[16/9]" : "aspect-square"} h-full w-full object-cover`} />{visuals.length > 1 ? <span className="absolute bottom-3 right-3 rounded-full bg-black/65 px-2.5 py-1 text-[9px] font-semibold text-white/75 backdrop-blur">1 / {visuals.length}</span> : null}</div>
-                  {visuals.length > 1 ? <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">{visuals.slice(1, 5).map((visual, index) => <a key={visual.id} href={visual.downloadHref} aria-label={`Скачать: ${visual.label}`} className="group relative overflow-hidden rounded-xl border border-white/[0.06] bg-black/20"><img src={visual.src} alt={visual.label} className={`${isArticle ? "aspect-[3/2]" : "aspect-square"} h-full w-full object-cover opacity-75 transition group-hover:opacity-100`} /><span className="absolute inset-x-1.5 bottom-1.5 truncate rounded-md bg-black/65 px-1.5 py-1 text-[8px] text-white/70 backdrop-blur">{visual.label}</span>{index === 3 && visuals.length > 5 ? <span className="absolute inset-0 grid place-items-center bg-black/65 text-xs font-semibold text-white">+{visuals.length - 5}</span> : null}</a>)}</div> : null}
+                  <a href={visuals[0].src} target="_blank" rel="noreferrer" className="relative block overflow-hidden rounded-[18px] bg-black/25" aria-label="Открыть изображение"><img src={visuals[0].src} alt={isArticle ? "Обложка статьи" : "Основной визуал"} className={`${isArticle ? "aspect-[16/9]" : "aspect-square"} h-full w-full object-cover`} />{visuals.length > 1 ? <span className="absolute bottom-3 right-3 rounded-full bg-black/65 px-2.5 py-1 text-[9px] font-semibold text-white/75 backdrop-blur">1 / {visuals.length}</span> : null}<span className="absolute bottom-3 left-3 rounded-full bg-black/65 px-2.5 py-1 text-[9px] text-white/70 backdrop-blur">Открыть крупнее</span></a>
+                  {visuals.length > 1 ? <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">{visuals.slice(1, 5).map((visual, index) => <a key={visual.id} href={visual.src} target="_blank" rel="noreferrer" aria-label={`Открыть: ${visual.label}`} className="group relative overflow-hidden rounded-xl border border-white/[0.06] bg-black/20"><img src={visual.src} alt={visual.label} className={`${isArticle ? "aspect-[3/2]" : "aspect-square"} h-full w-full object-cover opacity-75 transition group-hover:opacity-100`} /><span className="absolute inset-x-1.5 bottom-1.5 truncate rounded-md bg-black/65 px-1.5 py-1 text-[8px] text-white/70 backdrop-blur">{visual.label}</span>{index === 3 && visuals.length > 5 ? <span className="absolute inset-0 grid place-items-center bg-black/65 text-xs font-semibold text-white">+{visuals.length - 5}</span> : null}</a>)}</div> : null}
                 </div>
               ) : (
                 <div className="grid aspect-square place-items-center p-6 text-center"><div><span className="mx-auto block h-2.5 w-2.5 animate-pulse rounded-full bg-violet-400" /><p className="mt-4 text-sm font-semibold text-white/70">Визуал готовится</p><p className="mt-2 text-xs text-white/25">Появится автоматически.</p></div></div>

@@ -165,11 +165,15 @@ export default async function SelfServiceAutopostingPage() {
     <SelfServiceAppShell
       brandName={workspace.name}
       active="autoposting"
-      eyebrow="Автопостинг"
-      title="Публикации выходят сами."
+      eyebrow="Площадки и публикации"
+      title="Всё для публикации — в одном месте."
       description="Вы подтверждаете материал и выбираете время. Дальше система публикует его в подключённом канале и сохраняет результат."
-      headerAction={<Link href="/app/channels" className="rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-xs font-semibold text-white/70 transition hover:bg-white/[0.07]">Площадки</Link>}
+      headerAction={<Link href="/app/channels" className="rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-xs font-semibold text-white/70 transition hover:bg-white/[0.07]">Настроить площадки</Link>}
     >
+      <section className={`${darkCardClass} mb-4 p-5 sm:p-6`}>
+        <div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="text-sm font-semibold text-white">Подключённые площадки</h2><p className="mt-1 text-[10px] text-white/30">Здесь же настраиваются токены, адреса каналов и автоматическая публикация.</p></div><Link href="/app/channels" className="text-[10px] font-semibold text-violet-300">Изменить →</Link></div>
+        <div className="mt-4 grid gap-2 sm:grid-cols-3">{["telegram", "vk", "vcru"].map((platform) => { const channel = workspace.channels.find((item) => item.platform.toLowerCase() === platform); const connected = channel?.status === "active"; return <div key={platform} className="rounded-2xl border border-white/[0.06] bg-black/15 px-4 py-3"><div className="flex items-center justify-between gap-3"><span className="text-xs font-semibold text-white/65">{platform === "telegram" ? "Telegram" : platform === "vk" ? "VK" : "VC.ru"}</span><span className={`text-[9px] font-semibold ${connected ? "text-violet-300" : "text-white/25"}`}>{connected ? "подключено" : "не подключено"}</span></div></div>; })}</div>
+      </section>
       <section className="grid gap-4 lg:grid-cols-[1.55fr_.8fr]">
         <article className="relative min-h-[250px] overflow-hidden rounded-[28px] border border-violet-400/15 bg-[radial-gradient(circle_at_20%_10%,rgba(124,92,255,.25),transparent_42%),rgba(255,255,255,.03)] p-6 shadow-[0_28px_90px_rgba(0,0,0,.24)] sm:p-8">
           {nextPublication ? (

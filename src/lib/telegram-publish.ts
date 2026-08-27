@@ -6,6 +6,7 @@ import { VK_ACCESS_TOKEN_KEY, sendVkPost } from "@/lib/vk";
 import { decryptChannelCredential } from "@/lib/channel-credentials";
 import { sendVcArticle } from "@/lib/vc";
 import type { ArticleImage } from "@/lib/article-schema";
+import { cleanVisibleContentText } from "@/lib/content-draft-schema";
 
 /** Maps a planned platform name (free text from the plan) to a channel platform. */
 function mapPublicationPlatform(name?: string | null): "vk" | "telegram" | "vcru" | null {
@@ -252,11 +253,11 @@ export async function publishScheduledPublication(
         continue;
       }
       // Legacy drafts may still carry the service slide label — never publish it.
-      const message = stripCarouselSlideLabel(
+      const message = cleanVisibleContentText(stripCarouselSlideLabel(
         [publication.contentDraft?.draftTitle || publication.topic, publication.contentDraft?.draftBody ?? ""]
           .filter(Boolean)
           .join("\n\n"),
-      );
+      ));
       const vk = await sendVkPost({ token: vkToken, groupId: Number(channel.channelId), message, imageUrls });
       if (vk.ok) {
         results.push({ platform: "vk", ok: true, url: vk.url, externalId: String(vk.postId), imagesSent: vk.imagesSent });
@@ -285,8 +286,8 @@ export async function publishScheduledPublication(
         channelId: channel.channelId,
         title: telegramBody
           ? null
-          : stripCarouselSlideLabel(publication.contentDraft?.draftTitle || publication.topic),
-        body: stripCarouselSlideLabel(telegramBody || publication.contentDraft?.draftBody || ""),
+          : cleanVisibleContentText(stripCarouselSlideLabel(publication.contentDraft?.draftTitle || publication.topic)),
+        body: cleanVisibleContentText(stripCarouselSlideLabel(telegramBody || publication.contentDraft?.draftBody || "")),
         imageUrls,
       });
       if (tg.ok) {

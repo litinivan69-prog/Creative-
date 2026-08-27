@@ -101,22 +101,22 @@ export default async function SelfServiceHomePage() {
 
   if (!workspace) {
     return (
-      <main className="relative min-h-screen overflow-hidden px-4 py-5 sm:px-7 sm:py-7">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(139,92,246,0.16),transparent_38%)]" />
+      <main className="relative min-h-screen overflow-hidden bg-[#09090d] px-4 py-5 text-white sm:px-7 sm:py-7">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(124,92,255,.18),transparent_38%)]" />
         <div className="relative mx-auto max-w-[1080px]">
-          <header className="flex items-center justify-between rounded-[24px] border border-white/80 bg-white/75 px-4 py-3 shadow-[0_18px_55px_rgba(77,61,112,0.07)] backdrop-blur-xl sm:px-5">
+          <header className="flex items-center justify-between border-b border-white/[.08] px-1 py-3">
             <div className="flex items-center gap-3">
-              <RibesBrand dark={false} />
-              <p className="text-[11px] text-slate-400">{email}</p>
+              <RibesBrand dark />
+              <p className="text-[11px] text-slate-600">{email}</p>
             </div>
-            <form action={signOutSelfService}><button className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600">Выйти</button></form>
+            <form action={signOutSelfService}><button className="rounded-full border border-white/10 px-4 py-2 text-xs font-semibold text-slate-400">Выйти</button></form>
           </header>
           <section className="mx-auto grid min-h-[calc(100vh-120px)] max-w-2xl place-items-center py-12 text-center">
             <div>
-              <span className="inline-flex rounded-full bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700">Аккаунт готов</span>
-              <h1 className="mt-5 font-heading text-5xl font-semibold tracking-[-0.045em] text-slate-950">Теперь создадим ваш бренд.</h1>
-              <p className="mx-auto mt-4 max-w-xl text-base leading-7 text-slate-600">Вы вошли безопасно. Осталось заполнить короткий бриф — после него появится личный кабинет и первый месяц.</p>
-              <a href="/start" className="mt-7 inline-flex rounded-2xl bg-violet-600 px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-violet-700">Начать настройку</a>
+              <span className="inline-flex rounded-full bg-violet-500/10 px-3 py-1.5 text-xs font-semibold text-violet-200">Аккаунт готов</span>
+              <h1 className="mt-5 font-heading text-5xl font-semibold tracking-[-0.045em] text-white">Теперь создадим ваш бренд.</h1>
+              <p className="mx-auto mt-4 max-w-xl text-base leading-7 text-slate-400">Осталось пройти короткую настройку — после неё появится личный кабинет и первый месяц.</p>
+              <a href="/start" className="mt-7 inline-flex rounded-2xl bg-violet-500 px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-violet-400">Начать настройку</a>
             </div>
           </section>
         </div>
@@ -135,6 +135,25 @@ export default async function SelfServiceHomePage() {
         select: { plannedContentItemId: true, images: true },
       })
     : [];
+  const [metricSnapshots, publishedThisMonth] = latestPlan
+    ? await Promise.all([
+        prisma.publicationMetric.findMany({
+          where: { clientId: workspace.id, monthlyPlanId: latestPlan.id },
+          orderBy: { capturedAt: "desc" },
+        }),
+        prisma.scheduledPublication.count({
+          where: { clientId: workspace.id, monthlyPlanId: latestPlan.id, publishStatus: "published" },
+        }),
+      ])
+    : [[], 0];
+  const latestMetricByMaterial = new Map<string, (typeof metricSnapshots)[number]>();
+  for (const metric of metricSnapshots) {
+    const key = metric.scheduledPublicationId || metric.plannedContentItemId || `unlinked:${metric.platformName}`;
+    if (!latestMetricByMaterial.has(key)) latestMetricByMaterial.set(key, metric);
+  }
+  const latestMetrics = [...latestMetricByMaterial.values()];
+  const actualViews = latestMetrics.reduce((sum, metric) => sum + (metric.views ?? metric.reach ?? 0), 0);
+  const actualReactions = latestMetrics.reduce((sum, metric) => sum + (metric.likes ?? 0) + (metric.comments ?? 0) + (metric.shares ?? 0) + (metric.saves ?? 0), 0);
   const articleCoverByItemId = new Map(
     articleCovers.flatMap((article) => {
       const cover = articleHeroUrl(article.images);
@@ -151,12 +170,6 @@ export default async function SelfServiceHomePage() {
     const label = overviewPlatformLabel(item.platformName);
     platformCounts.set(label, (platformCounts.get(label) ?? 0) + 1);
   }
-  const publicationRhythm = Array.from({ length: 7 }, () => 0);
-  for (const item of items) {
-    const date = new Date(`${item.plannedDate}T12:00:00`);
-    if (!Number.isNaN(date.getTime())) publicationRhythm[(date.getDay() + 6) % 7] += 1;
-  }
-  const maxRhythm = Math.max(...publicationRhythm, 1);
 
   return (
     <SelfServiceAppShell
@@ -186,9 +199,13 @@ export default async function SelfServiceHomePage() {
           </div>
         </article>
         <article className={`${darkCardClass} p-5 sm:p-6`}>
-          <div className="flex items-center justify-between"><div><p className="text-sm font-semibold text-white">Ритм публикаций</p><p className="mt-1 text-[10px] text-white/30">Как материалы распределены по неделе</p></div><Link href="/app/month#calendar" className="text-[10px] font-semibold text-violet-300">Календарь</Link></div>
-          <div className="mt-6 flex h-28 items-end gap-2">{publicationRhythm.map((count, index) => <div key={index} className="flex h-full flex-1 flex-col justify-end gap-2"><span className="w-full rounded-t-md bg-[linear-gradient(180deg,#9d83ff,#6847d8)]" style={{ height: `${count ? Math.max(22, Math.round((count / maxRhythm) * 100)) : 7}%`, opacity: count ? 1 : .22 }} /><span className="text-center text-[8px] text-white/22">{["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"][index]}</span></div>)}</div>
-          <div className="mt-5 grid grid-cols-2 gap-2"><div className="rounded-xl bg-black/20 p-3"><p className="text-lg font-semibold">{platformCounts.size}</p><p className="mt-1 text-[9px] text-white/28">площадок в плане</p></div><div className="rounded-xl bg-black/20 p-3"><p className="text-lg font-semibold">{items.length - readyItems}</p><p className="mt-1 text-[9px] text-white/28">ещё готовятся</p></div></div>
+          <div className="flex items-center justify-between"><div><p className="text-sm font-semibold text-white">Результаты публикаций</p><p className="mt-1 text-[10px] text-white/30">Только данные подключённых площадок</p></div><Link href="/app/results" className="text-[10px] font-semibold text-violet-300">Отчёт</Link></div>
+          <div className="mt-6 grid grid-cols-3 gap-2">
+            <div className="rounded-xl bg-black/20 p-3"><p className="text-lg font-semibold">{publishedThisMonth}</p><p className="mt-1 text-[9px] text-white/28">опубликовано</p></div>
+            <div className="rounded-xl bg-black/20 p-3"><p className="text-lg font-semibold">{actualViews.toLocaleString("ru-RU")}</p><p className="mt-1 text-[9px] text-white/28">просмотров</p></div>
+            <div className="rounded-xl bg-black/20 p-3"><p className="text-lg font-semibold">{actualReactions.toLocaleString("ru-RU")}</p><p className="mt-1 text-[9px] text-white/28">реакций</p></div>
+          </div>
+          <div className="mt-5 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4"><p className="text-xs font-medium text-white/65">{latestMetrics.length ? "Показатели обновляются по мере получения данных от площадок." : "После первых публикаций здесь появятся просмотры, лайки, комментарии и репосты."}</p></div>
         </article>
       </section>
 

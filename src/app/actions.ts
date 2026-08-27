@@ -29,6 +29,7 @@ import { collectPublicationMetrics } from "@/lib/metrics-collect";
 import { VK_ACCESS_TOKEN_KEY, VK_ACCOUNT_LABEL_KEY, verifyVkGroup, verifyVkToken } from "@/lib/vk";
 import { validateBlueprintForPersistence } from "@/lib/blueprint-schema";
 import {
+  cleanVisibleContentText,
   isSensitiveContent,
   validateContentDraftForPersistence,
 } from "@/lib/content-draft-schema";
@@ -1545,7 +1546,7 @@ function exactSelfServiceContentMix<T extends PairablePlanItem>(
     { count: configuration.okPosts, platform: ok, format: "пост Одноклассники с визуалом", label: "Пост Одноклассники", goal: "Понятное и доверительное общение с аудиторией Одноклассников" },
     { count: configuration.dzenArticles, platform: dzen, format: "экспертная статья Дзен с обложкой", label: "Статья Дзен", goal: "Экспертность и органический охват" },
     { count: configuration.vcruArticles, platform: vcru, format: "деловая статья VC.ru с обложкой", label: "Статья VC.ru", goal: "Экспертность и доверие деловой аудитории" },
-    { count: configuration.carousels, platform: vk ?? telegram, format: "карусель из 4 отдельных слайдов", label: "Карусель", goal: "Наглядно раскрыть тему в четырёх карточках" },
+    { count: configuration.carousels, platform: configuration.carouselPlatform === "telegram" ? (telegram ?? vk) : (vk ?? telegram), format: "карусель из 4 отдельных слайдов", label: "Карусель", goal: "Наглядно раскрыть тему в четырёх карточках" },
     { count: configuration.quickAnnouncements, platform: telegram ?? vk, format: "короткий анонс", label: "Анонс", goal: "Быстро сообщить важную новость или предложение" },
     { count: configuration.reviewReplies, platform: telegram ?? vk, format: "ответ на отзыв", label: "Ответ на отзыв", goal: "Подготовить корректный ответ в тоне бренда" },
   ].filter((target) => target.count > 0 && target.platform);
@@ -5000,8 +5001,8 @@ export async function retryMaterialProductionStep(formData: FormData) {
 export async function updatePublicationText(formData: FormData) {
   const contentDraftId = formText(formData, "contentDraftId");
   // Slide index («карточка 1/4») is service metadata — strip it even from manual edits.
-  const draftTitle = stripCarouselSlideLabel(formText(formData, "draftTitle"));
-  const draftBody = stripCarouselSlideLabel(formText(formData, "draftBody"));
+  const draftTitle = cleanVisibleContentText(stripCarouselSlideLabel(formText(formData, "draftTitle")));
+  const draftBody = cleanVisibleContentText(stripCarouselSlideLabel(formText(formData, "draftBody")));
   const comment = formText(formData, "comment");
 
   if (!contentDraftId) {

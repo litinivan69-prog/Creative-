@@ -7,11 +7,10 @@ export type SelfServiceAppView = "overview" | "calendar" | "materials" | "articl
 const navItems: Array<{ id: SelfServiceAppView; label: string; href: string; icon: string }> = [
   { id: "overview", label: "Обзор", href: "/app", icon: "⌁" },
   { id: "builder", label: "Собрать месяц", href: "/app/plan-builder", icon: "+" },
-  { id: "quick", label: "Быстрый пост", href: "/app/quick-post", icon: "⚡" },
   { id: "calendar", label: "Календарь", href: "/app/month#calendar", icon: "□" },
   { id: "materials", label: "Материалы", href: "/app/month#materials", icon: "◇" },
   { id: "articles", label: "Статьи", href: "/app/articles", icon: "≡" },
-  { id: "autoposting", label: "Автопостинг", href: "/app/autoposting", icon: "↗" },
+  { id: "autoposting", label: "Площадки и публикации", href: "/app/autoposting", icon: "↗" },
   { id: "results", label: "Результаты", href: "/app/results", icon: "⌇" },
   { id: "reputation", label: "Отзывы", href: "/app/reputation", icon: "☆" },
   { id: "credits", label: "Кредиты", href: "/app/credits", icon: "✦" },
@@ -46,7 +45,7 @@ export function SelfServiceAppShell({
           <div className="mt-5 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-3.5">
             <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-white/25">Ваш бренд</p>
             <p className="mt-2 truncate text-sm font-semibold text-white/85">{brandName}</p>
-            <div className="mt-2 flex items-center gap-2 text-[9px] text-emerald-300/75"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />система активна</div>
+            <div className="mt-2 text-[9px] text-violet-300/65">кабинет настроен</div>
           </div>
 
           <nav className="mt-6 space-y-1">
@@ -60,7 +59,6 @@ export function SelfServiceAppShell({
 
           <div className="mt-auto space-y-1 border-t border-white/[0.06] pt-4">
             <Link href="/app/brands" className="flex items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-xs font-medium text-white/38 transition hover:bg-white/[0.035] hover:text-white/75"><span className="w-4 text-center text-violet-300/80">◫</span>Мои бренды</Link>
-            <Link href="/app/channels" className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-xs font-medium transition ${active === "channels" ? "border-violet-400/25 bg-violet-500/12 text-white" : "border-transparent text-white/38 hover:bg-white/[0.035] hover:text-white/75"}`}><span className="w-4 text-center text-violet-300/80">◎</span>Бренд и площадки</Link>
             <Link href="/demo" className="flex items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-xs font-medium text-white/38 transition hover:bg-white/[0.035] hover:text-white/75"><span className="w-4 text-center text-violet-300/80">◉</span>Публичное демо</Link>
             <form action={signOutSelfService}><button className="flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-left text-xs font-medium text-white/28 transition hover:bg-white/[0.035] hover:text-white/65"><span className="w-4 text-center">←</span>Выйти</button></form>
           </div>
