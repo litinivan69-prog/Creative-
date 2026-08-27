@@ -3,7 +3,7 @@ import { SelfServiceBrief } from "@/app/(self-service)/start/brief/self-service-
 import { parseSelfServiceSelection } from "@/lib/self-service/product";
 
 export const metadata: Metadata = {
-  title: "Короткий бриф · Adaptive Presence",
+  title: "Короткий бриф · Ribes",
   description: "Расскажите самое важное о бренде — без длинной анкеты.",
   robots: {
     index: false,

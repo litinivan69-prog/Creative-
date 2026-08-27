@@ -1,4 +1,4 @@
-# Creative Command / Adaptive Presence OS
+# Creative Command / Ribes
 
 ## Language and style
 
@@ -15,9 +15,17 @@ Style:
 
 When the user asks for a prompt, provide a ready-to-paste prompt for Claude Code / Codex / Cursor.
 
+## Official product brand
+
+The official customer-facing product name is **Ribes**.
+
+Ribes is inspired by the gooseberry (`Ribes` is the botanical genus), but the visual identity must remain a serious technology/SaaS brand rather than look like a food shop.
+
+Use `Ribes` on the public website, authentication screens, self-service onboarding, emails and customer cabinet. Keep `Creative Command` as the company and product creator. Legacy internal identifiers, database names, routes and historical architecture may still use `Adaptive Presence`; do not rename them unless a task explicitly requires a technical migration.
+
 ## Project
 
-Adaptive Presence OS is the operating system for brand presence built by Creative Command.
+Ribes is the self-service operating system for brand presence built by Creative Command. Its proven generation core originated in Adaptive Presence OS.
 
 It is not a post generator.
 It is not just a content calendar.
@@ -42,7 +50,7 @@ build a much lighter self-service SaaS while preserving the proven generation co
 
 ## Current product pivot
 
-Adaptive Presence is moving away from a manager-led agency console.
+Ribes is moving away from a manager-led agency console.
 
 The new customer product is self-service:
 

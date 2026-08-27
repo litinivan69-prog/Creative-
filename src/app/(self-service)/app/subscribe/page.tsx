@@ -12,7 +12,7 @@ import { isYooKassaConfigured } from "@/lib/yookassa";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Тарифы и кредиты · Adaptive Presence",
+  title: "Тарифы и кредиты · Ribes",
   robots: { index: false, follow: false },
 };
 

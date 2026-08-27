@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { requestSelfServiceMagicLink } from "@/lib/self-service/auth-actions";
+import { RibesBrand } from "@/app/(self-service)/ribes-brand";
 
 export const metadata: Metadata = {
-  title: "Войти · Adaptive Presence",
-  description: "Вход в Adaptive Presence по одноразовой ссылке.",
+  title: "Войти · Ribes",
+  description: "Вход в Ribes по одноразовой ссылке.",
   robots: { index: false, follow: false },
 };
 
@@ -32,11 +33,7 @@ export default async function SignInPage({ searchParams }: { searchParams: SignI
       <div className="relative mx-auto max-w-[1080px]">
         <header className="flex items-center justify-between rounded-[24px] border border-white/80 bg-white/75 px-4 py-3 shadow-[0_18px_55px_rgba(77,61,112,0.07)] backdrop-blur-xl sm:px-5">
           <a href="/start" className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-2xl bg-violet-600 text-xs font-extrabold lowercase text-white">cc.</div>
-            <div>
-              <p className="text-sm font-semibold text-slate-950">Adaptive Presence</p>
-              <p className="text-[11px] font-medium text-slate-400">by Creative Command</p>
-            </div>
+            <RibesBrand dark={false} />
           </a>
         </header>
 

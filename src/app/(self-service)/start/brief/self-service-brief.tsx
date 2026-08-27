@@ -8,6 +8,7 @@ import {
   type SelfServiceSelection,
 } from "@/lib/self-service/product";
 import { stageSelfServiceOnboarding } from "@/lib/self-service/onboarding-actions";
+import { RibesBrand } from "@/app/(self-service)/ribes-brand";
 
 type BriefValues = {
   brandName: string;
@@ -181,11 +182,7 @@ export function SelfServiceBrief({ selection }: { selection: SelfServiceSelectio
         <div className="relative mx-auto max-w-[1040px]">
           <header className="flex items-center justify-between gap-4 rounded-[24px] border border-white/80 bg-white/75 px-4 py-3 shadow-[0_18px_55px_rgba(77,61,112,0.07)] backdrop-blur-xl sm:px-5">
             <a href="/start" className="flex items-center gap-3">
-              <div className="grid h-10 w-10 place-items-center rounded-2xl bg-violet-600 text-xs font-extrabold lowercase text-white">cc.</div>
-              <div>
-                <p className="text-sm font-semibold text-slate-950">Adaptive Presence</p>
-                <p className="text-[11px] font-medium text-slate-400">by Creative Command</p>
-              </div>
+              <RibesBrand dark={false} />
             </a>
             <span className="rounded-full bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700">75%</span>
           </header>
@@ -266,11 +263,7 @@ export function SelfServiceBrief({ selection }: { selection: SelfServiceSelectio
       <div className="relative mx-auto max-w-[1120px]">
         <header className="flex items-center justify-between gap-4 rounded-[24px] border border-white/80 bg-white/75 px-4 py-3 shadow-[0_18px_55px_rgba(77,61,112,0.07)] backdrop-blur-xl sm:px-5">
           <a href="/start" className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-2xl bg-violet-600 text-xs font-extrabold lowercase text-white">cc.</div>
-            <div>
-              <p className="text-sm font-semibold text-slate-950">Adaptive Presence</p>
-              <p className="text-[11px] font-medium text-slate-400">by Creative Command</p>
-            </div>
+            <RibesBrand dark={false} />
           </a>
           <span className="rounded-full bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700">{progress}%</span>
         </header>

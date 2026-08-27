@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { signOutSelfService } from "@/lib/self-service/auth-actions";
+import { RibesBrand, RibesMark } from "@/app/(self-service)/ribes-brand";
 
 export type SelfServiceAppView = "overview" | "calendar" | "materials" | "articles" | "autoposting" | "results" | "channels" | "credits" | "builder" | "quick" | "reputation";
 
@@ -39,8 +40,7 @@ export function SelfServiceAppShell({
       <div className="relative min-h-screen lg:grid lg:grid-cols-[226px_minmax(0,1fr)]">
         <aside className="hidden border-r border-white/[0.06] bg-black/15 p-4 lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col">
           <Link href="/app" className="flex items-center gap-3 px-2 py-2">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-[linear-gradient(135deg,#9b87ff,#6d4aff)] text-[10px] font-black lowercase text-white shadow-[0_0_28px_rgba(124,92,255,.25)]">cc.</span>
-            <span><span className="block text-sm font-semibold text-white">Adaptive Presence</span><span className="block text-[10px] text-white/30">Creative Command</span></span>
+            <RibesBrand />
           </Link>
 
           <div className="mt-5 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-3.5">
@@ -69,7 +69,7 @@ export function SelfServiceAppShell({
         <div className="min-w-0">
           <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-[#09080d]/85 px-4 py-3 backdrop-blur-xl sm:px-7">
             <div className="mx-auto flex max-w-[1180px] items-center justify-between gap-4">
-              <Link href="/app" className="flex items-center gap-3 lg:hidden"><span className="grid h-9 w-9 place-items-center rounded-xl bg-violet-600 text-[10px] font-black lowercase">cc.</span><span className="text-xs font-semibold text-white">{brandName}</span></Link>
+              <Link href="/app" className="flex items-center gap-3 lg:hidden"><RibesMark className="h-9 w-9" compact /><span className="text-xs font-semibold text-white">{brandName}</span></Link>
               <div className="hidden lg:block"><p className="text-[10px] text-white/25">{brandName} <span className="mx-1.5">·</span> <span className="text-white/55">{eyebrow}</span></p></div>
               <div className="flex items-center gap-2"><span className="hidden rounded-xl border border-white/[0.06] bg-black/20 px-3 py-2 text-[9px] text-white/25 sm:block">⌘ Поиск или команда</span><span className="grid h-8 w-8 place-items-center rounded-full bg-violet-500/15 text-[10px] font-bold text-violet-200">{brandName.slice(0, 1).toUpperCase()}</span></div>
             </div>

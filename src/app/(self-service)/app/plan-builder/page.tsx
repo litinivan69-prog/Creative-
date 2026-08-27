@@ -8,7 +8,7 @@ import { SelfServiceAppShell } from "@/app/(self-service)/app/self-service-app-s
 import { ContentMixBuilder } from "@/app/(self-service)/app/plan-builder/content-mix-builder";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Собрать месяц · Adaptive Presence", robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: "Собрать месяц · Ribes", robots: { index: false, follow: false } };
 
 const defaultConfiguration = { vkPosts: 2, telegramPosts: 2, okPosts: 0, dzenArticles: 1, vcruArticles: 0, carousels: 0, quickAnnouncements: 0, reviewReplies: 0 };
 

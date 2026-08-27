@@ -6,7 +6,7 @@ import { SelfServiceOnboardingSchema } from "@/lib/self-service/onboarding";
 import { continueWithExistingBrand, createNewBrandFromOnboarding } from "@/lib/self-service/onboarding-actions";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Выбор бренда · Adaptive Presence", robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: "Выбор бренда · Ribes", robots: { index: false, follow: false } };
 
 export default async function BrandChoicePage() {
   const session = await auth();

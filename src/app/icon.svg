@@ -1,4 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="16" fill="#7C3AED"/>
-  <text x="32" y="44" font-family="Manrope, Inter, sans-serif" font-size="30" font-weight="800" fill="#FFFFFF" text-anchor="middle">cc.</text>
+  <defs>
+    <linearGradient id="ribes" x1="8" y1="5" x2="56" y2="60" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#9B75F5"/>
+      <stop offset=".58" stop-color="#6D3FE7"/>
+      <stop offset="1" stop-color="#5325BD"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="18" fill="url(#ribes)"/>
+  <path d="M37 16c5-6 11-7 16-5-2 6-7 10-15 9" fill="#B9F15F"/>
+  <path d="M38 20c-2-4-5-6-9-8" fill="none" stroke="#D6FF96" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="31" cy="36" r="17" fill="#fff"/>
+  <circle cx="24" cy="31" r="3" fill="#7C3AED"/>
+  <circle cx="33" cy="28" r="2.4" fill="#9A76F3"/>
+  <circle cx="39" cy="36" r="3" fill="#7040D7"/>
+  <circle cx="27" cy="41" r="2.4" fill="#A78BFA"/>
+  <circle cx="34" cy="45" r="1.8" fill="#7C3AED"/>
 </svg>

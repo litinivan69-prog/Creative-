@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
 import { PlatformBrandIcon, type PlatformBrand } from "@/app/(self-service)/platform-brand-icon";
+import { RibesBrand, RibesMark } from "@/app/(self-service)/ribes-brand";
 import {
   BILLING_DURATIONS,
   CREDIT_PLANS,
@@ -44,11 +45,11 @@ function HeroProductMontage() {
           <span className="h-2 w-2 rounded-full bg-rose-400/75" />
           <span className="h-2 w-2 rounded-full bg-amber-300/75" />
           <span className="h-2 w-2 rounded-full bg-emerald-400/75" />
-          <span className="ml-2 text-[8px] font-medium text-white/25">app.adaptivepresence.ai</span>
+          <span className="ml-2 text-[8px] font-medium text-white/25">app.ribes.ru</span>
         </div>
         <div className="grid grid-cols-[72px_minmax(0,1fr)] sm:grid-cols-[102px_minmax(0,1fr)]">
           <div className="border-r border-white/[0.06] bg-black/15 p-2.5 sm:p-3">
-            <span className="grid h-7 w-7 place-items-center rounded-lg bg-violet-500 text-[8px] font-black text-white">cc.</span>
+            <RibesMark className="h-7 w-7" compact />
             <div className="mt-5 space-y-2">
               {["Обзор", "Календарь", "Материалы", "Статьи"].map((item, index) => <div key={item} className={`truncate rounded-lg px-2 py-1.5 text-[7px] sm:text-[8px] ${index === 0 ? "bg-violet-500/15 text-white" : "text-white/28"}`}>{item}</div>)}
             </div>
@@ -85,12 +86,7 @@ function HeroProductMontage() {
 }
 
 function BrandMark({ compact = false }: { compact?: boolean }) {
-  return (
-    <span className="flex items-center gap-3">
-      <span className="grid h-9 w-9 place-items-center rounded-xl bg-[linear-gradient(135deg,#9b87ff,#6d4aff)] text-[10px] font-black lowercase text-white shadow-[0_0_30px_rgba(124,92,255,.35)]">cc.</span>
-      {!compact ? <span><span className="block text-sm font-semibold text-white">Adaptive Presence</span><span className="block text-[10px] text-white/35">продукт Creative Command</span></span> : null}
-    </span>
-  );
+  return <RibesBrand compact={compact} />;
 }
 
 function YandexMapsMark({ size = "xs" }: { size?: "xs" | "sm" }) {
@@ -257,7 +253,7 @@ const faqItems = [
   ["Можно ли самому выбрать количество постов и статей?", "Да. Вы получаете кредиты и собираете месяц самостоятельно: больше коротких постов, больше статей или смешанный набор."],
   ["Что происходит с визуалами для статей?", "Для статьи создаётся обложка и набор изображений по смысловым блокам. Они сохраняются вместе с материалом и передаются при публикации на поддерживаемую площадку."],
   ["Контент публикуется без проверки?", "Сначала вы видите готовый материал и подтверждаете его. Автоматический режим включается отдельно для выбранных каналов."],
-  ["Что с ответами на отзывы Яндекс Карт?", "Adaptive Presence собирает отзывы, готовит ответы в стиле бренда и сохраняет историю работы с обратной связью. Перед размещением ответ можно проверить и подтвердить."],
+  ["Что с ответами на отзывы Яндекс Карт?", "Ribes собирает отзывы, готовит ответы в стиле бренда и сохраняет историю работы с обратной связью. Перед размещением ответ можно проверить и подтвердить."],
 ];
 
 function SectionLabel({ children, dark = true }: { children: React.ReactNode; dark?: boolean }) {
@@ -295,7 +291,7 @@ function PlatformFormats() {
           <article className="rounded-[28px] border border-black/[0.07] bg-[linear-gradient(145deg,#ebe5ff,#fff)] p-6 sm:p-8">
             <span className="grid h-11 w-11 place-items-center rounded-2xl bg-white text-xl text-violet-700 shadow-sm">✦</span>
             <h3 className="mt-6 text-2xl font-semibold tracking-[-0.04em]">Ответы на отзывы</h3>
-            <p className="mt-3 max-w-xl text-sm leading-6 text-black/45">Adaptive Presence собирает отзывы Яндекс Карт, готовит ответы с учётом оценки, текста и правил бренда. Вы проверяете результат, подтверждаете ответ и видите историю в кабинете.</p>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-black/45">Ribes собирает отзывы Яндекс Карт, готовит ответы с учётом оценки, текста и правил бренда. Вы проверяете результат, подтверждаете ответ и видите историю в кабинете.</p>
           </article>
         </div>
       </div>
@@ -314,7 +310,7 @@ function BusinessOutcomes() {
       <div className="grid gap-4 lg:grid-cols-[1.12fr_.88fr]">
         <article className="overflow-hidden rounded-[32px] border border-white/[0.08] bg-[#f6f4fb] text-[#17141e] shadow-[0_35px_100px_rgba(0,0,0,.25)]">
           <div className="flex items-center justify-between border-b border-black/[0.07] px-5 py-4"><div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-xl bg-[linear-gradient(135deg,#7c5cff,#ff5b7f)] text-sm font-black text-white">Я</span><div><p className="text-xs font-semibold">Алиса</p><p className="text-[9px] text-black/35">пример нейросетевой выдачи</p></div></div><span className="rounded-full bg-violet-100 px-3 py-1.5 text-[9px] font-semibold text-violet-700">видимость в нейросетях</span></div>
-          <div className="p-5 sm:p-7"><div className="ml-auto max-w-[82%] rounded-[20px_20px_5px_20px] bg-violet-600 px-4 py-3 text-xs leading-5 text-white">Как выстроить регулярное присутствие бренда без большой команды?</div><div className="mt-5 flex gap-3"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-black text-[10px] text-white">✦</span><div className="text-xs leading-6 text-black/65"><p>Подход можно собрать вокруг единого профиля бренда, календаря и адаптации материалов под разные площадки.</p><p className="mt-3 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 font-medium text-violet-950">В числе решений упоминается Adaptive Presence: система готовит посты, статьи и визуалы на основе одного брифа.</p><div className="mt-4 flex flex-wrap gap-2">{["Дзен", "VC.ru", "сайт бренда"].map(source=><span key={source} className="rounded-full border border-black/[0.08] bg-white px-3 py-1.5 text-[9px] text-black/45">источник · {source}</span>)}</div></div></div></div>
+          <div className="p-5 sm:p-7"><div className="ml-auto max-w-[82%] rounded-[20px_20px_5px_20px] bg-violet-600 px-4 py-3 text-xs leading-5 text-white">Как выстроить регулярное присутствие бренда без большой команды?</div><div className="mt-5 flex gap-3"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-black text-[10px] text-white">✦</span><div className="text-xs leading-6 text-black/65"><p>Подход можно собрать вокруг единого профиля бренда, календаря и адаптации материалов под разные площадки.</p><p className="mt-3 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 font-medium text-violet-950">В числе решений упоминается Ribes: система готовит посты, статьи и визуалы на основе одного брифа.</p><div className="mt-4 flex flex-wrap gap-2">{["Дзен", "VC.ru", "сайт бренда"].map(source=><span key={source} className="rounded-full border border-black/[0.08] bg-white px-3 py-1.5 text-[9px] text-black/45">источник · {source}</span>)}</div></div></div></div>
           <div className="border-t border-black/[0.06] bg-white/65 px-5 py-4 text-[9px] text-black/35">Появление бренда в конкретном ответе не гарантируется. Система создаёт и поддерживает цифровой след, который можно измерять.</div>
         </article>
 
@@ -412,8 +408,8 @@ function CreativeCommandStory() {
     <section className="bg-[#f5f2ff] py-24 text-[#121019] sm:py-28">
       <div className="mx-auto max-w-[1320px] px-4 sm:px-7">
         <div className="grid gap-10 lg:grid-cols-[.72fr_1.28fr] lg:items-center">
-          <div><SectionLabel dark={false}>Сделано Creative Command</SectionLabel><h2 className="mt-4 font-heading text-4xl font-semibold leading-[.98] tracking-[-0.055em] sm:text-6xl">Опыт агентства стал продуктом</h2><p className="mt-6 max-w-md text-sm leading-7 text-black/48">Внутри Adaptive Presence работают редакторская логика, память бренда, визуальная система и контроль качества. Пользователь получает понятный кабинет и готовые материалы.</p><div className="mt-8 inline-flex rotate-[-2deg] rounded-full border-2 border-violet-600 px-4 py-2 text-sm font-semibold italic text-violet-700">технология с характером ↗</div></div>
-          <div className="relative aspect-[16/10] overflow-hidden rounded-[30px] bg-[#100d18] shadow-[0_30px_90px_rgba(76,51,135,.22)]"><Image src="/marketing/adaptive-presence-mascots-v2.webp" alt="Маскоты Adaptive Presence работают с контент-календарём" fill sizes="(max-width:1024px) 92vw, 760px" className="object-cover" /><div className="absolute left-5 top-5 rounded-full border border-white/10 bg-black/30 px-3 py-2 text-[9px] font-bold uppercase tracking-[0.13em] text-violet-200 backdrop-blur">Внутри — опыт Creative Command</div></div>
+          <div><SectionLabel dark={false}>Сделано Creative Command</SectionLabel><h2 className="mt-4 font-heading text-4xl font-semibold leading-[.98] tracking-[-0.055em] sm:text-6xl">Опыт агентства стал продуктом</h2><p className="mt-6 max-w-md text-sm leading-7 text-black/48">Внутри Ribes работают редакторская логика, память бренда, визуальная система и контроль качества. Пользователь получает понятный кабинет и готовые материалы.</p><div className="mt-8 inline-flex rotate-[-2deg] rounded-full border-2 border-violet-600 px-4 py-2 text-sm font-semibold italic text-violet-700">технология с характером ↗</div></div>
+          <div className="relative aspect-[16/10] overflow-hidden rounded-[30px] bg-[#100d18] shadow-[0_30px_90px_rgba(76,51,135,.22)]"><Image src="/marketing/adaptive-presence-mascots-v2.webp" alt="Маскоты Ribes работают с контент-календарём" fill sizes="(max-width:1024px) 92vw, 760px" className="object-cover" /><div className="absolute left-5 top-5 rounded-full border border-white/10 bg-black/30 px-3 py-2 text-[9px] font-bold uppercase tracking-[0.13em] text-violet-200 backdrop-blur">Внутри — опыт Creative Command</div></div>
         </div>
       </div>
     </section>
@@ -479,7 +475,7 @@ export function AdaptivePresenceDemo() {
 
       <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#08070c]/80 backdrop-blur-xl">
         <div className="mx-auto flex h-20 max-w-[1320px] items-center justify-between gap-4 px-4 sm:px-7">
-          <Link href="/" aria-label="Adaptive Presence"><BrandMark /></Link>
+          <Link href="/" aria-label="Ribes"><BrandMark /></Link>
           <nav className="hidden items-center gap-7 text-[11px] font-medium text-white/48 lg:flex"><a href="#product" className="transition hover:text-white">Продукт</a><a href="#formats" className="transition hover:text-white">Форматы</a><a href="#articles" className="transition hover:text-white">Статьи</a><a href="#outcomes" className="transition hover:text-white">Результат</a><a href="#pricing" className="transition hover:text-white">Тарифы</a><a href="#faq" className="transition hover:text-white">Вопросы</a><Link href="/sign-in" className="transition hover:text-white">Войти</Link></nav>
           <div className="flex items-center gap-2"><button type="button" onClick={() => setMobileMenuOpen(value => !value)} className="grid h-10 w-10 place-items-center rounded-full border border-white/[0.08] text-sm text-white/70 lg:hidden" aria-label="Открыть меню">{mobileMenuOpen ? "×" : "≡"}</button><Link href="/start" className="rounded-full bg-white px-4 py-2.5 text-[11px] font-semibold text-black transition hover:bg-violet-100 sm:px-5">Попробовать</Link></div>
         </div>
@@ -492,7 +488,7 @@ export function AdaptivePresenceDemo() {
           <HeroProductMontage />
         </section>
 
-        <section className="border-y border-white/[0.06] py-7"><p className="text-center text-[10px] font-bold uppercase tracking-[0.16em] text-white/22">Площадки и каналы Adaptive Presence</p><div className="mt-5 flex flex-wrap items-center justify-center gap-6 sm:gap-10">{(["VK","Telegram","Одноклассники","Дзен","VC.ru"] as PlatformBrand[]).map(platform=><span key={platform} className="flex items-center gap-2.5 text-[11px] font-semibold text-white/42"><PlatformBrandIcon platform={platform} size="xs" />{platform}</span>)}<span className="flex items-center gap-2.5 text-[11px] font-semibold text-white/42"><YandexMapsMark />Яндекс Карты</span></div></section>
+        <section className="border-y border-white/[0.06] py-7"><p className="text-center text-[10px] font-bold uppercase tracking-[0.16em] text-white/22">Площадки и каналы Ribes</p><div className="mt-5 flex flex-wrap items-center justify-center gap-6 sm:gap-10">{(["VK","Telegram","Одноклассники","Дзен","VC.ru"] as PlatformBrand[]).map(platform=><span key={platform} className="flex items-center gap-2.5 text-[11px] font-semibold text-white/42"><PlatformBrandIcon platform={platform} size="xs" />{platform}</span>)}<span className="flex items-center gap-2.5 text-[11px] font-semibold text-white/42"><YandexMapsMark />Яндекс Карты</span></div></section>
 
         <section id="product" className="scroll-mt-24 py-24 sm:py-28"><div className="mb-8 flex flex-wrap items-end justify-between gap-5"><div><SectionLabel>Живой продукт</SectionLabel><h2 className="mt-3 font-heading text-4xl font-semibold tracking-[-0.05em] text-white sm:text-6xl">Не презентация.<br />Попробуйте кабинет.</h2></div><p className="max-w-md text-xs leading-6 text-white/36">Переключайте обзор, календарь, материалы, статьи, автопостинг и результаты прямо на этой странице.</p></div><DemoWorkspace /></section>
 
@@ -516,7 +512,7 @@ export function AdaptivePresenceDemo() {
 
         <section className="mb-20 overflow-hidden rounded-[36px] bg-[radial-gradient(circle_at_85%_10%,rgba(255,255,255,.9),transparent_30%),linear-gradient(135deg,#ddd4ff,#f4f0ff_55%,#e4ddff)] p-7 text-[#14111b] shadow-[0_40px_130px_rgba(78,54,145,.22)] sm:p-12 lg:p-14">
           <div className="grid gap-10 lg:grid-cols-[1.2fr_.8fr] lg:items-center">
-            <div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-violet-700">Пробный доступ</p><h2 className="mt-5 max-w-4xl font-heading text-4xl font-semibold leading-[.98] tracking-[-0.055em] sm:text-6xl">Попробуйте Adaptive Presence бесплатно</h2><p className="mt-6 max-w-2xl text-sm leading-7 text-black/55">Получите {displayCredits(TRIAL_CREDITS)} пробных кредитов. Заполните бриф, соберите профиль бренда и откройте первые материалы. Подписка и подключение площадок на этом этапе не нужны.</p><div className="mt-8 flex flex-col gap-3 sm:flex-row"><Link href="/start" className="rounded-2xl bg-black px-6 py-3.5 text-center text-sm font-semibold text-white transition hover:bg-violet-700">Попробовать бесплатно →</Link><Link href="/sign-in" className="rounded-2xl border border-black/10 bg-white/45 px-6 py-3.5 text-center text-sm font-semibold text-black/65 transition hover:bg-white/70">Уже есть аккаунт</Link></div></div>
+            <div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-violet-700">Пробный доступ</p><h2 className="mt-5 max-w-4xl font-heading text-4xl font-semibold leading-[.98] tracking-[-0.055em] sm:text-6xl">Попробуйте Ribes бесплатно</h2><p className="mt-6 max-w-2xl text-sm leading-7 text-black/55">Получите {displayCredits(TRIAL_CREDITS)} пробных кредитов. Заполните бриф, соберите профиль бренда и откройте первые материалы. Подписка и подключение площадок на этом этапе не нужны.</p><div className="mt-8 flex flex-col gap-3 sm:flex-row"><Link href="/start" className="rounded-2xl bg-black px-6 py-3.5 text-center text-sm font-semibold text-white transition hover:bg-violet-700">Попробовать бесплатно →</Link><Link href="/sign-in" className="rounded-2xl border border-black/10 bg-white/45 px-6 py-3.5 text-center text-sm font-semibold text-black/65 transition hover:bg-white/70">Уже есть аккаунт</Link></div></div>
             <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">{[[displayCredits(TRIAL_CREDITS),"кредитов на знакомство"],["0 ₽","до выбора подписки"],["3 шага","бриф, профиль, материалы"]].map(([value,label],index)=><div key={label} className={`rounded-[22px] border border-black/[0.07] bg-white/55 p-5 backdrop-blur ${index === 1 ? "lg:ml-8" : index === 2 ? "lg:ml-16" : ""}`}><p className="text-2xl font-semibold tracking-[-0.04em]">{value}</p><p className="mt-2 text-[10px] text-black/42">{label}</p></div>)}</div>
           </div>
         </section>
@@ -527,7 +523,7 @@ export function AdaptivePresenceDemo() {
             <div className="grid grid-cols-2 gap-x-10 gap-y-3 text-[11px] text-white/38"><a href="#product">Продукт</a><a href="#formats">Форматы</a><a href="#pricing">Тарифы</a><a href="#results">Результаты</a><a href="#faq">Вопросы</a><Link href="/sign-in">Войти</Link></div>
             <a href="https://t.me/creative_command" target="_blank" rel="noreferrer" className="group rounded-[24px] border border-violet-400/16 bg-[linear-gradient(135deg,rgba(184,164,255,.16),rgba(255,255,255,.035))] p-5 transition hover:border-violet-300/28 hover:bg-violet-500/[0.1]"><div className="flex items-start justify-between gap-4"><div><p className="text-sm font-semibold text-white">Telegram-канал Creative Command</p><p className="mt-2 max-w-sm text-[10px] leading-5 text-white/32">Кейсы агентства, наблюдения о брендах и новости продукта.</p></div><TelegramMark /></div><span className="mt-5 inline-flex text-[10px] font-semibold text-violet-300 transition group-hover:text-violet-200">Открыть Telegram →</span></a>
           </div>
-          <div className="mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.05] pt-6 text-[9px] text-white/20"><p>© 2026 Creative Command · Adaptive Presence</p><p>Создано в России для российских площадок</p></div>
+          <div className="mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.05] pt-6 text-[9px] text-white/20"><p>© 2026 Creative Command · Ribes</p><p>Создано в России для российских площадок</p></div>
         </footer>
       </div>
     </main>

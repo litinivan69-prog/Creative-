@@ -9,7 +9,7 @@ import { claimSelfServiceOnboarding } from "@/lib/self-service/onboarding-action
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Создание кабинета · Adaptive Presence",
+  title: "Создание кабинета · Ribes",
   robots: { index: false, follow: false },
 };
 
