@@ -46,6 +46,18 @@ export type SelfServiceOnboarding = z.infer<typeof SelfServiceOnboardingSchema>;
 export function selfServiceOnboardingFromFormData(formData: FormData) {
   const text = (key: string) => String(formData.get(key) ?? "").trim();
 
+  // The current brief wizard submits compact JSON payloads so React does not
+  // need to render dozens of hidden inputs. Keep the field-by-field parser
+  // below for older forms and saved links.
+  const selectionJson = text("selection");
+  const briefJson = text("brief");
+  if (selectionJson && briefJson) {
+    return SelfServiceOnboardingSchema.parse({
+      selection: JSON.parse(selectionJson) as unknown,
+      brief: JSON.parse(briefJson) as unknown,
+    });
+  }
+
   return SelfServiceOnboardingSchema.parse({
     selection: {
       formatIds: text("formatIds").split(",").map((value) => value.trim()).filter(Boolean),
