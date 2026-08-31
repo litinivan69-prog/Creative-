@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useFormStatus } from "react-dom";
 import type { SelfServiceSelection } from "@/lib/self-service/product";
 import { stageSelfServiceOnboarding } from "@/lib/self-service/onboarding-actions";
 import { RibesBrand } from "@/app/(self-service)/ribes-brand";
@@ -44,6 +45,20 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 
 function SummaryItem({ label, value }: { label: string; value: string }) {
   return <div className="rounded-2xl border border-white/[.08] bg-white/[.035] px-4 py-3.5"><p className="text-[10px] font-bold uppercase tracking-[.12em] text-slate-600">{label}</p><p className="mt-1.5 whitespace-pre-line text-sm font-medium leading-6 text-slate-200">{value || "Не указано"}</p></div>;
+}
+
+function CreateCabinetButton({ confirmed }: { confirmed: boolean }) {
+  const { pending } = useFormStatus();
+
+  return (
+    <button
+      type="submit"
+      disabled={!confirmed || pending}
+      className="w-full rounded-full bg-violet-500 px-6 py-4 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      {pending ? "Создаём кабинет…" : "Создать кабинет"}
+    </button>
+  );
 }
 
 export function SelfServiceBrief({ selection }: { selection: SelfServiceSelection }) {
@@ -136,7 +151,7 @@ export function SelfServiceBrief({ selection }: { selection: SelfServiceSelectio
               <div className="mt-7 rounded-[24px] bg-violet-500/10 p-5"><p className="text-[10px] font-bold uppercase tracking-[.14em] text-violet-300">{values.brandName}</p><p className="mt-2 text-sm leading-6 text-slate-300">{values.businessDescription}</p></div>
               <div className="mt-4 grid gap-3 sm:grid-cols-2"><SummaryItem label="Продвигаем" value={values.priorityOffer} /><SummaryItem label="Аудитория" value={values.audience} /><SummaryItem label="Тон" value={values.tone} /><SummaryItem label="Визуальный стиль" value={values.visualStyle || "Берём из брендбука"} /><SummaryItem label="Площадки" value={socialFields.filter(([key]) => values[key]).map(([, label]) => label).join(", ")} /><SummaryItem label="Цель месяца" value={values.monthGoal} /></div>
               <label className="mt-6 flex items-start gap-3 rounded-2xl border border-white/[.08] bg-white/[.025] p-4"><input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="mt-0.5 h-4 w-4 accent-violet-500" /><span className="text-sm leading-6 text-slate-400">Данные верны. Я смогу изменить их позже в кабинете.</span></label>
-              <form action={stageSelfServiceOnboarding} className="mt-5"><input type="hidden" name="selection" value={JSON.stringify(selection)} /><input type="hidden" name="brief" value={JSON.stringify(values)} /><button type="submit" disabled={!confirmed} className="w-full rounded-full bg-violet-500 px-6 py-4 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-40">Создать кабинет</button></form>
+              <form action={stageSelfServiceOnboarding} className="mt-5"><input type="hidden" name="selection" value={JSON.stringify(selection)} /><input type="hidden" name="brief" value={JSON.stringify(values)} /><CreateCabinetButton confirmed={confirmed} /></form>
             </> : null}
             <div className="mt-8 flex items-center justify-between border-t border-white/[.08] pt-6"><button type="button" onClick={goBack} disabled={currentStep === 1} className="rounded-full px-5 py-3 text-sm font-semibold text-slate-400 transition hover:text-white disabled:invisible">Назад</button>{currentStep < steps.length ? <button type="button" onClick={goNext} disabled={!canContinue} className="rounded-full bg-violet-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-35">Продолжить</button> : null}</div>
           </div>
