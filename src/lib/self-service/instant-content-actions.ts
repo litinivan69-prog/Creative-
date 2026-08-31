@@ -53,7 +53,7 @@ export async function generateSelfServiceInstantContent(formData: FormData) {
     });
     await prisma.selfServiceInstantContent.update({
       where: { id: item.id },
-      data: { chargedCredits: 1, ledgerTransactionId: transaction.id },
+      data: { chargedCredits: Math.abs(transaction.amount), ledgerTransactionId: transaction.id },
     });
   } catch (error) {
     await prisma.selfServiceInstantContent.deleteMany({ where: { id: item.id, ledgerTransactionId: null } });

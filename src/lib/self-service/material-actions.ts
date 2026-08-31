@@ -12,6 +12,7 @@ import { stripCarouselSlideLabel } from "@/lib/creative-asset-schema";
 import { generateCreativeVisualVariant } from "@/lib/openai";
 import { CREDIT_PRODUCTS } from "@/lib/self-service/credit-catalog";
 import { storeGeneratedVisual } from "@/lib/visual-storage";
+import { clientHasUnlimitedCredits } from "@/lib/self-service/admin-access";
 
 async function currentClientId() {
   const session = await auth();
@@ -32,7 +33,7 @@ export async function regenerateSelfServiceVisual(formData: FormData) {
   if (!clientId) redirect(`/sign-in?callbackUrl=/app/month/${encodeURIComponent(itemId)}`);
   if (!itemId || !creativeAssetId) redirect(`/app/month/${encodeURIComponent(itemId)}?error=visual_missing`);
 
-  const [asset, wallet] = await Promise.all([
+  const [asset, wallet, unlimited] = await Promise.all([
     prisma.creativeAsset.findFirst({
       where: { id: creativeAssetId, plannedContentItemId: itemId, clientId },
       include: {
@@ -42,11 +43,12 @@ export async function regenerateSelfServiceVisual(formData: FormData) {
       },
     }),
     prisma.creditWallet.findUnique({ where: { clientId } }),
+    clientHasUnlimitedCredits(clientId),
   ]);
 
   const revisionCost = CREDIT_PRODUCTS.visual_revision.credits;
   if (!asset) redirect(`/app/month/${encodeURIComponent(itemId)}?error=visual_missing`);
-  if (!wallet || wallet.balance < revisionCost) redirect(`/app/month/${encodeURIComponent(itemId)}?error=credits`);
+  if (!wallet || (!unlimited && wallet.balance < revisionCost)) redirect(`/app/month/${encodeURIComponent(itemId)}?error=credits`);
 
   try {
     const visualBranding = await getClientVisualBranding(clientId);
@@ -90,11 +92,13 @@ export async function regenerateSelfServiceVisual(formData: FormData) {
 
     await prisma.$transaction(async (tx) => {
       const currentWallet = await tx.creditWallet.findUnique({ where: { clientId } });
-      if (!currentWallet || currentWallet.balance < revisionCost) throw new Error("INSUFFICIENT_CREDITS");
-      const updatedWallet = await tx.creditWallet.update({
-        where: { id: currentWallet.id },
-        data: { balance: { decrement: revisionCost }, lifetimeSpent: { increment: revisionCost } },
-      });
+      if (!currentWallet || (!unlimited && currentWallet.balance < revisionCost)) throw new Error("INSUFFICIENT_CREDITS");
+      const updatedWallet = unlimited
+        ? currentWallet
+        : await tx.creditWallet.update({
+            where: { id: currentWallet.id },
+            data: { balance: { decrement: revisionCost }, lifetimeSpent: { increment: revisionCost } },
+          });
       const createdVariant = await tx.generatedCreativeVariant.create({
         data: {
           clientId,
@@ -132,10 +136,10 @@ export async function regenerateSelfServiceVisual(formData: FormData) {
         data: {
           clientId,
           walletId: currentWallet.id,
-          amount: -revisionCost,
+          amount: unlimited ? 0 : -revisionCost,
           balanceAfter: updatedWallet.balance,
-          kind: "spend",
-          description: "Новый вариант визуала",
+          kind: unlimited ? "admin_usage" : "spend",
+          description: unlimited ? "Новый вариант визуала · админский тест без списания" : "Новый вариант визуала",
           referenceType: "generated_creative_variant",
           referenceId: createdVariant.id,
           idempotencyKey: `visual-revision:${createdVariant.id}`,

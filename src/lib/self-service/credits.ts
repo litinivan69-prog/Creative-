@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { TRIAL_CREDITS } from "@/lib/self-service/credit-catalog";
+import { clientHasUnlimitedCredits } from "@/lib/self-service/admin-access";
 
 export * from "@/lib/self-service/credit-catalog";
 
@@ -75,13 +76,34 @@ export async function spendCredits(input: {
   referenceId?: string;
 }) {
   if (!Number.isInteger(input.credits) || input.credits <= 0) throw new Error("INVALID_CREDIT_AMOUNT");
+  const unlimited = await clientHasUnlimitedCredits(input.clientId);
 
   return prisma.$transaction(async (tx) => {
     const existing = await tx.creditTransaction.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
     if (existing) return existing;
 
-    const wallet = await tx.creditWallet.findUnique({ where: { clientId: input.clientId } });
-    if (!wallet || wallet.balance < input.credits) throw new Error("INSUFFICIENT_CREDITS");
+    const wallet = await tx.creditWallet.upsert({
+      where: { clientId: input.clientId },
+      create: { clientId: input.clientId },
+      update: {},
+    });
+    if (!unlimited && wallet.balance < input.credits) throw new Error("INSUFFICIENT_CREDITS");
+
+    if (unlimited) {
+      return tx.creditTransaction.create({
+        data: {
+          clientId: input.clientId,
+          walletId: wallet.id,
+          amount: 0,
+          balanceAfter: wallet.balance,
+          kind: "admin_usage",
+          description: `${input.description} · админский тест без списания`,
+          referenceType: input.referenceType,
+          referenceId: input.referenceId,
+          idempotencyKey: input.idempotencyKey,
+        },
+      });
+    }
 
     const updatedWallet = await tx.creditWallet.update({
       where: { id: wallet.id },

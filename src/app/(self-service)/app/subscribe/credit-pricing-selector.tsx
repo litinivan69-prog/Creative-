@@ -22,7 +22,7 @@ const checkoutErrors: Record<string, string> = {
   payment_verification_failed: "Платёж не прошёл безопасную проверку. Кредиты не начислены — обратитесь в поддержку, если деньги были списаны.",
 };
 
-export function CreditPricingSelector({ currentBalance, checkoutConfigured, testMode, error, payment }: { currentBalance: number; checkoutConfigured: boolean; testMode: boolean; error?: string; payment?: string }) {
+export function CreditPricingSelector({ currentBalance, unlimited = false, checkoutConfigured, testMode, error, payment }: { currentBalance: number; unlimited?: boolean; checkoutConfigured: boolean; testMode: boolean; error?: string; payment?: string }) {
   const [planCode, setPlanCode] = useState<CreditPlanCode>("growth");
   const [months, setMonths] = useState(1);
   const plan = CREDIT_PLANS.find((candidate) => candidate.code === planCode) ?? CREDIT_PLANS[1];
@@ -43,8 +43,8 @@ export function CreditPricingSelector({ currentBalance, checkoutConfigured, test
       {testMode ? <div className="rounded-2xl border border-violet-400/15 bg-violet-500/[0.07] px-5 py-3 text-xs text-violet-100/70">Тестовый режим ЮKassa: можно пройти оплату без настоящего списания.</div> : null}
       <section className="rounded-[24px] border border-violet-400/15 bg-[linear-gradient(145deg,rgba(111,75,255,.13),rgba(255,255,255,.025))] p-5 sm:p-7">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-violet-300">Ваш баланс</p><p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-white">{displayCredits(currentBalance)} кредитов</p></div>
-          <span className="rounded-full border border-white/[0.07] bg-black/15 px-3 py-1.5 text-[10px] text-white/38">не сгорают до использования</span>
+          <div><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-violet-300">Ваш баланс</p><p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-white">{unlimited ? "Безлимит" : `${displayCredits(currentBalance)} кредитов`}</p></div>
+          <span className="rounded-full border border-white/[0.07] bg-black/15 px-3 py-1.5 text-[10px] text-white/38">{unlimited ? "администратор · без списаний" : "не сгорают до использования"}</span>
         </div>
       </section>
 
