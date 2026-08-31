@@ -91,14 +91,19 @@ export async function markSelfServiceMaterialReady(formData: FormData) {
   if (!item) redirect("/app/month?error=material_missing");
 
   const article = item.deliverableKind === "article"
-    ? await prisma.article.findFirst({ where: { plannedContentItemId: item.id, clientId }, select: { bodyMarkdown: true } })
+    ? await prisma.article.findFirst({ where: { plannedContentItemId: item.id, clientId }, select: { bodyMarkdown: true, images: true } })
     : null;
 
   const slides = item.creativeAssets.filter((asset) => asset.assetType === "carousel_slide");
   const requiredAssets = slides.length > 0
     ? slides
     : item.creativeAssets.filter((asset) => !asset.notes?.includes("legacyCombinedCarouselAsset=true"));
-  const visualsReady = requiredAssets.length > 0
+  const articleImages = article
+    ? ((article.images as Array<{ url?: string | null }> | null) ?? []).filter((image) => Boolean(image.url))
+    : [];
+  const visualsReady = article
+    ? articleImages.length > 0
+    : requiredAssets.length > 0
     ? requiredAssets.every((asset) => asset.generatedVariants.length > 0)
     : item.generatedCreativeVariants.length > 0;
 
