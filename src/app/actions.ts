@@ -62,7 +62,7 @@ import { storeGeneratedVisual } from "@/lib/visual-storage";
 import { storeClientBrandAssetFile } from "@/lib/brand-asset-storage";
 import { storeGeoReportFile } from "@/lib/geo-storage";
 import { extractGeoAudit, type GeoAuditExtraction } from "@/lib/geo-pptx-extract";
-import { getClientBrandContext } from "@/lib/brand-context";
+import { getClientBrandContext, getClientVisualBranding } from "@/lib/brand-context";
 import { runArticlePipeline, runArticleForPlannedItem } from "@/lib/article-engine";
 import { hasSelfServicePaidAccess } from "@/lib/self-service/subscription";
 import {
@@ -3894,10 +3894,13 @@ async function generateVisualForCreativeAssetId(creativeAssetId: string) {
 
   try {
     await markGenerationJobRunning(generationJob.id, "Premium Visual Engine создаёт вариант визуала.");
+    const visualBranding = await getClientVisualBranding(asset.clientId);
     const variant = await generateCreativeVisualVariant({
       clientName: asset.client.name,
       clientIndustry: asset.client.industry,
       brandContext: await getClientBrandContext(asset.clientId),
+      brandLogoUrl: visualBranding.logoUrl,
+      brandTypography: visualBranding.typography,
       creativeAsset: {
         assetType: asset.assetType,
         // Slide index («Карточка 1 / 4») is a UI badge only — never send it to the visual engine.
@@ -6322,10 +6325,13 @@ export async function generateCreativeVisualVariantForAsset(formData: FormData) 
 
   try {
     await markGenerationJobRunning(generationJob.id, "Premium Visual Engine создаёт вариант визуала.");
+    const visualBranding = await getClientVisualBranding(asset.clientId);
     const variant = await generateCreativeVisualVariant({
       clientName: asset.client.name,
       clientIndustry: asset.client.industry,
       brandContext: await getClientBrandContext(asset.clientId),
+      brandLogoUrl: visualBranding.logoUrl,
+      brandTypography: visualBranding.typography,
       creativeAsset: {
         assetType: asset.assetType,
         // Slide index («Карточка 1 / 4») is a UI badge only — never send it to the visual engine.

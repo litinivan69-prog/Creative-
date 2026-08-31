@@ -1,4 +1,4 @@
-import OpenAI from "openai";
+import OpenAI, { toFile } from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import { z } from "zod";
 import {
@@ -81,7 +81,10 @@ function configuredValue<T extends string>(value: string | undefined, allowed: r
 }
 
 const visualProvider = configuredValue(process.env.VISUAL_PROVIDER, visualProviders, "openai");
-const visualTextMode = configuredValue(process.env.VISUAL_TEXT_MODE, visualTextModes, "image_text");
+const configuredVisualTextMode = configuredValue(process.env.VISUAL_TEXT_MODE, visualTextModes, "image_text");
+// The previous overlay experiment is intentionally retired: when a creative
+// brief contains copy, the image model composes that copy as part of the visual.
+const visualTextMode: VisualTextMode = configuredVisualTextMode === "overlay_later" ? "image_text" : configuredVisualTextMode;
 const imageQuality = configuredValue(process.env.OPENAI_IMAGE_QUALITY, imageQualities, "high");
 const configuredImageSize = process.env.OPENAI_IMAGE_SIZE
   ? configuredValue(process.env.OPENAI_IMAGE_SIZE, imageSizes, "1024x1024")
@@ -526,21 +529,24 @@ type CreativeVisualVariantInput = {
     approvalRequired: boolean;
   };
   brandContext?: string;
+  brandLogoUrl?: string | null;
+  brandTypography?: string | null;
 };
 
 function textRenderingInstruction(input: CreativeVisualVariantInput, mode: VisualTextMode) {
-  // Image models still distort Cyrillic and may imitate a brand mark. Keep
-  // generated client visuals text-free unless this is explicitly enabled for
-  // a supervised experiment. Exact copy and logos must be applied later from
-  // the client's real brand assets, never recreated by the model.
-  if (process.env.VISUAL_ALLOW_GENERATED_TEXT !== "true") {
-    return "Do not render any text, letters, numbers, captions, labels, watermarks, signatures, brand marks, or logos inside the image. Do not imitate or recreate a logo from the brand context or references.";
+  if (process.env.VISUAL_ALLOW_GENERATED_TEXT === "false") {
+    return "Do not render any text, letters, numbers, captions, labels, watermarks, or signatures inside the image.";
   }
 
   if (mode === "image_text" && input.creativeAsset.textOnAsset) {
+    const typography = input.brandTypography
+      ? `Use the client's typography direction: ${input.brandTypography}.`
+      : "Use one modern neutral geometric grotesk system with the visual character of Manrope, Inter, or Suisse: clean Cyrillic shapes, medium or bold weight, no serif, no script, no decorative display lettering.";
     return [
       `Render only this exact short Russian text inside the image: "${input.creativeAsset.textOnAsset}".`,
-      "Use clean premium typography. Preserve every Cyrillic letter exactly. Add no extra text, labels, captions, or invented words.",
+      typography,
+      "TYPOGRAPHY SYSTEM ID: RIBES-GROTESK-01. Keep this exact same font character, letter construction, weight logic, capitalization, spacing, and hierarchy across every post and every carousel slide for this brand.",
+      "Preserve every Cyrillic letter and punctuation mark exactly. Do not paraphrase, duplicate, split, translate, or add words. Add no extra text, labels, captions, or invented words.",
     ].join(" ");
   }
 
@@ -585,8 +591,10 @@ function premiumVisualPrompt(input: CreativeVisualVariantInput, textMode: Visual
       ? "Carousel guardrail: generate ONLY slide/card X of Y described in this creative asset. Do not include other slides. Do not create a collage, grid, storyboard, or preview of all cards. Do not show multiple cards in one image. The output must be one standalone card."
       : null,
     "Produce a realistic premium advertising photograph or high-end editorial visual appropriate to the asset type. Use an intentional focal point, clean composition, restrained color discipline, thoughtful lighting, and platform-native framing.",
-    "Avoid cheap stock-photo aesthetics, generic AI poster composition, decorative clutter, fake clinic or company names, fake logos, fake text, fake certificates, fake reviews, unsupported medical claims, guarantees, before-and-after comparisons, and unrealistic treatment or business results.",
-    "Never invent, approximate, redraw, imitate, or replace the client's logo. A similar-looking logo is unacceptable. If the exact source logo cannot be composited, show no logo and leave clean space for later placement.",
+    "Avoid cheap stock-photo aesthetics, generic AI poster composition, decorative clutter, fake clinic or company names, fake logos, any unrequested text, fake certificates, fake reviews, unsupported medical claims, guarantees, before-and-after comparisons, and unrealistic treatment or business results.",
+    input.brandLogoUrl
+      ? "The attached input image is the client's exact logo. If the composition uses it, preserve its symbol, wordmark, spelling, proportions, colors, and geometry exactly. Never redraw, reinterpret, replace, or invent any part of it. Keep it small, clean, and naturally integrated. If exact preservation is not possible, omit the logo entirely."
+      : "No verified client logo was supplied. Do not invent, approximate, redraw, imitate, or display any logo, wordmark, company name, watermark, or fake brand mark.",
     "Keep one coherent visual language across the whole client month: the same restrained palette, lighting logic, level of realism, composition discipline, and editorial character. Do not randomly switch design styles between VK, Telegram, articles, or carousel slides.",
     "When people appear, render natural anatomy, credible hands, expressive but realistic faces, and professional context. Do not depict misleading procedures or outcomes.",
     textRenderingInstruction(input, textMode),
@@ -613,29 +621,75 @@ async function generateVisualWithOpenAI(input: CreativeVisualVariantInput) {
   let selectedSize: ImageSize = configuredImageSize ?? platformImageProfile(input).size;
   let response;
 
-  try {
-    response = await openai.images.generate({
+  const generate = async (size: ImageSize) => {
+    if (input.brandLogoUrl) {
+      try {
+        const logoUrl = new URL(input.brandLogoUrl);
+        const hostname = logoUrl.hostname.toLowerCase();
+        const blockedHost = hostname === "localhost"
+          || hostname.endsWith(".local")
+          || /^127\./.test(hostname)
+          || /^10\./.test(hostname)
+          || /^192\.168\./.test(hostname)
+          || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
+        if (!(["http:", "https:"] as string[]).includes(logoUrl.protocol) || blockedHost) {
+          throw new Error("Unsupported logo URL");
+        }
+
+        const logoResponse = await fetch(logoUrl, { signal: AbortSignal.timeout(12_000) });
+        if (!logoResponse.ok) throw new Error(`Logo download failed: ${logoResponse.status}`);
+        const declaredLength = Number(logoResponse.headers.get("content-length") || 0);
+        if (declaredLength > 10 * 1024 * 1024) throw new Error("Logo file is too large");
+
+        let contentType = (logoResponse.headers.get("content-type") || "").split(";")[0].toLowerCase();
+        let logoBuffer = Buffer.from(await logoResponse.arrayBuffer());
+        if (logoBuffer.byteLength > 10 * 1024 * 1024) throw new Error("Logo file is too large");
+
+        if (contentType === "image/svg+xml" || logoUrl.pathname.toLowerCase().endsWith(".svg")) {
+          const { default: sharp } = await import("sharp");
+          logoBuffer = await sharp(logoBuffer, { density: 300 }).png().toBuffer();
+          contentType = "image/png";
+        }
+        if (!new Set(["image/png", "image/jpeg", "image/webp"]).has(contentType)) {
+          throw new Error(`Unsupported logo content type: ${contentType || "unknown"}`);
+        }
+
+        const extension = contentType === "image/jpeg" ? "jpg" : contentType.split("/")[1];
+        const logoFile = await toFile(logoBuffer, `client-logo.${extension}`, { type: contentType });
+        return await openai.images.edit({
+          model: imageModel,
+          image: logoFile,
+          prompt,
+          n: 1,
+          size,
+          quality: imageQuality,
+        });
+      } catch (error) {
+        console.error("Exact logo reference could not be supplied to the image model", error);
+      }
+    }
+
+    return openai.images.generate({
       model: imageModel,
-      prompt,
+      prompt: input.brandLogoUrl
+        ? `${prompt}\nThe verified logo reference was unavailable for this request. Do not render any logo or brand mark.`
+        : prompt,
       n: 1,
-      size: selectedSize,
+      size,
       quality: imageQuality,
       output_format: "png",
     });
+  };
+
+  try {
+    response = await generate(selectedSize);
   } catch (error) {
     if (selectedSize !== "auto") {
       throw error;
     }
 
     selectedSize = "1024x1024";
-    response = await openai.images.generate({
-      model: imageModel,
-      prompt,
-      n: 1,
-      size: selectedSize,
-      quality: imageQuality,
-      output_format: "png",
-    });
+    response = await generate(selectedSize);
   }
 
   const image = response.data?.[0];

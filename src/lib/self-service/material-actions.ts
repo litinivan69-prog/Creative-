@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { scheduledAutopublishDefaults } from "@/lib/scheduled-autopublish";
 import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 import { cleanVisibleContentText } from "@/lib/content-draft-schema";
-import { getClientBrandContext } from "@/lib/brand-context";
+import { getClientBrandContext, getClientVisualBranding } from "@/lib/brand-context";
 import { stripCarouselSlideLabel } from "@/lib/creative-asset-schema";
 import { generateCreativeVisualVariant } from "@/lib/openai";
 import { CREDIT_PRODUCTS } from "@/lib/self-service/credit-catalog";
@@ -49,20 +49,21 @@ export async function regenerateSelfServiceVisual(formData: FormData) {
   if (!wallet || wallet.balance < revisionCost) redirect(`/app/month/${encodeURIComponent(itemId)}?error=credits`);
 
   try {
+    const visualBranding = await getClientVisualBranding(clientId);
     const generated = await generateCreativeVisualVariant({
       clientName: asset.client.name,
       clientIndustry: asset.client.industry,
       brandContext: await getClientBrandContext(clientId),
+      brandLogoUrl: visualBranding.logoUrl,
+      brandTypography: visualBranding.typography,
       creativeAsset: {
         assetType: asset.assetType,
         title: stripCarouselSlideLabel(asset.title),
         brief: asset.brief,
         formatRequirements: asset.formatRequirements,
-        // Client-facing regeneration is deliberately text-free: exact brand
-        // copy and logos must never be hallucinated by the image model.
-        textOnAsset: null,
+        textOnAsset: asset.textOnAsset ? stripCarouselSlideLabel(asset.textOnAsset) || null : asset.textOnAsset,
         references: asset.references,
-        notes: [asset.notes, "Новый вариант по запросу клиента. Не использовать логотипы и текст внутри изображения."].filter(Boolean).join("\n"),
+        notes: [asset.notes, "Новый вариант по запросу клиента. Сохранить единую типографическую систему бренда и точный текст из ТЗ."].filter(Boolean).join("\n"),
       },
       scheduledPublication: {
         platformName: asset.scheduledPublication.platformName,
@@ -124,7 +125,7 @@ export async function regenerateSelfServiceVisual(formData: FormData) {
           totalTokens: generated.totalTokens,
           estimatedCostUsd: generated.estimatedCostUsd,
           qualityStatus: "needs_manual_review",
-          qualityNotes: "Новый вариант создан по запросу клиента без сгенерированных логотипов и текста.",
+          qualityNotes: "Новый вариант создан по запросу клиента с единым типографическим профилем. Логотип допускается только из подтверждённого бренд-ассета.",
         },
       });
       await tx.creditTransaction.create({

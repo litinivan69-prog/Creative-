@@ -11,7 +11,7 @@ type BriefValues = {
   audience: string; tone: string; keyMessage: string; restrictions: string; monthGoal: string; monthTopics: string;
   telegramUrl: string; vkUrl: string; okUrl: string; instagramUrl: string; dzenUrl: string; vcruUrl: string; otherSocialUrls: string;
   starterKitPlatformIds: string[]; brandColors: string; fonts: string; visualStyle: string;
-  likedVisualReferences: string; dislikedVisualReferences: string; logoUrl: string; brandbookUrl: string;
+  likedVisualReferences: string; dislikedVisualReferences: string; logoMode: "upload" | "url" | "none"; logoUrl: string; brandbookUrl: string;
 };
 
 const EMPTY_BRIEF: BriefValues = {
@@ -19,7 +19,7 @@ const EMPTY_BRIEF: BriefValues = {
   tone: "Спокойно и экспертно", keyMessage: "", restrictions: "", monthGoal: "", monthTopics: "",
   telegramUrl: "", vkUrl: "", okUrl: "", instagramUrl: "", dzenUrl: "", vcruUrl: "", otherSocialUrls: "",
   starterKitPlatformIds: [], brandColors: "", fonts: "", visualStyle: "", likedVisualReferences: "",
-  dislikedVisualReferences: "", logoUrl: "", brandbookUrl: "",
+  dislikedVisualReferences: "", logoMode: "none", logoUrl: "", brandbookUrl: "",
 };
 
 const BRIEF_STORAGE_KEY = "adaptive-presence:brief-draft:v1";
@@ -76,6 +76,8 @@ export function SelfServiceBrief({ selection }: { selection: SelfServiceSelectio
         for (const key of Object.keys(EMPTY_BRIEF) as Array<keyof BriefValues>) {
           if (key === "starterKitPlatformIds") {
             if (Array.isArray(parsed[key])) restored[key] = parsed[key].filter((value): value is string => typeof value === "string");
+          } else if (key === "logoMode") {
+            if (parsed[key] === "upload" || parsed[key] === "url" || parsed[key] === "none") restored[key] = parsed[key];
           } else if (typeof parsed[key] === "string") restored[key] = parsed[key];
         }
         setValues(restored);
@@ -136,7 +138,12 @@ export function SelfServiceBrief({ selection }: { selection: SelfServiceSelectio
               <h1 className="font-heading text-3xl font-semibold tracking-[-.035em] sm:text-4xl">Как должен выглядеть бренд</h1><p className="mt-3 text-sm leading-6 text-slate-400">Можно дать ссылку на брендбук или коротко описать визуальное направление.</p>
               <div className="mt-7 grid gap-5 sm:grid-cols-2">
                 <Field label="Визуальный стиль"><textarea className={`${inputClass} min-h-28 resize-y`} value={values.visualStyle} onChange={(e) => update("visualStyle", e.target.value)} placeholder="Цвета, настроение, композиция, характер изображений" /></Field>
-                <Field label="Ссылка на брендбук"><input className={inputClass} value={values.brandbookUrl} onChange={(e) => update("brandbookUrl", e.target.value)} placeholder="https://..." /><input className={`${inputClass} mt-3`} value={values.logoUrl} onChange={(e) => update("logoUrl", e.target.value)} placeholder="Ссылка на логотип" /></Field>
+                <Field label="Ссылка на брендбук"><input className={inputClass} value={values.brandbookUrl} onChange={(e) => update("brandbookUrl", e.target.value)} placeholder="https://..." /></Field>
+                <div className="sm:col-span-2"><Field label="Логотип" hint="необязательно"><div className="grid gap-3 sm:grid-cols-3">{([
+                  ["upload", "Загрузить файл", "PNG, JPG, WEBP или SVG"],
+                  ["url", "Указать ссылку", "Если файл уже опубликован"],
+                  ["none", "Без логотипа", "Система ничего не выдумает"],
+                ] as const).map(([mode, title, description]) => <button type="button" key={mode} onClick={() => { update("logoMode", mode); if (mode === "none") update("logoUrl", ""); }} className={`rounded-2xl border p-4 text-left transition ${values.logoMode === mode ? "border-violet-400/70 bg-violet-500/10" : "border-white/[.08] bg-white/[.025] hover:bg-white/[.045]"}`}><span className="block text-sm font-semibold text-slate-100">{title}</span><span className="mt-1 block text-xs leading-5 text-slate-500">{description}</span></button>)}</div>{values.logoMode === "url" ? <input className={`${inputClass} mt-3`} value={values.logoUrl} onChange={(e) => update("logoUrl", e.target.value)} placeholder="Прямая ссылка на файл логотипа" /> : null}{values.logoMode === "upload" ? <p className="mt-3 text-xs leading-5 text-slate-500">Файл выберете на последнем шаге. Он будет передаваться в генерацию как оригинал, а не как текстовое описание.</p> : null}</Field></div>
                 <Field label="Фирменные цвета" hint="необязательно"><input className={inputClass} value={values.brandColors} onChange={(e) => update("brandColors", e.target.value)} placeholder="#6D4AFF, белый, графит" /></Field><Field label="Шрифты" hint="необязательно"><input className={inputClass} value={values.fonts} onChange={(e) => update("fonts", e.target.value)} placeholder="Названия шрифтов или ссылка" /></Field>
                 <Field label="Что нравится" hint="необязательно"><textarea className={`${inputClass} min-h-24 resize-y`} value={values.likedVisualReferences} onChange={(e) => update("likedVisualReferences", e.target.value)} placeholder="Ссылки или описание удачных примеров" /></Field><Field label="Чего избегать" hint="необязательно"><textarea className={`${inputClass} min-h-24 resize-y`} value={values.dislikedVisualReferences} onChange={(e) => update("dislikedVisualReferences", e.target.value)} placeholder="Стили и приёмы, которые не подходят" /></Field>
               </div>
@@ -151,7 +158,7 @@ export function SelfServiceBrief({ selection }: { selection: SelfServiceSelectio
               <div className="mt-7 rounded-[24px] bg-violet-500/10 p-5"><p className="text-[10px] font-bold uppercase tracking-[.14em] text-violet-300">{values.brandName}</p><p className="mt-2 text-sm leading-6 text-slate-300">{values.businessDescription}</p></div>
               <div className="mt-4 grid gap-3 sm:grid-cols-2"><SummaryItem label="Продвигаем" value={values.priorityOffer} /><SummaryItem label="Аудитория" value={values.audience} /><SummaryItem label="Тон" value={values.tone} /><SummaryItem label="Визуальный стиль" value={values.visualStyle || "Берём из брендбука"} /><SummaryItem label="Площадки" value={socialFields.filter(([key]) => values[key]).map(([, label]) => label).join(", ")} /><SummaryItem label="Цель месяца" value={values.monthGoal} /></div>
               <label className="mt-6 flex items-start gap-3 rounded-2xl border border-white/[.08] bg-white/[.025] p-4"><input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="mt-0.5 h-4 w-4 accent-violet-500" /><span className="text-sm leading-6 text-slate-400">Данные верны. Я смогу изменить их позже в кабинете.</span></label>
-              <form action={stageSelfServiceOnboarding} className="mt-5"><input type="hidden" name="selection" value={JSON.stringify(selection)} /><input type="hidden" name="brief" value={JSON.stringify(values)} /><CreateCabinetButton confirmed={confirmed} /></form>
+              <form action={stageSelfServiceOnboarding} className="mt-5"><input type="hidden" name="selection" value={JSON.stringify(selection)} /><input type="hidden" name="brief" value={JSON.stringify(values)} />{values.logoMode === "upload" ? <label className="mb-4 grid gap-2 rounded-2xl border border-violet-400/30 bg-violet-500/[.07] p-4"><span className="text-sm font-semibold text-slate-200">Загрузите оригинал логотипа</span><span className="text-xs leading-5 text-slate-500">До 8 МБ. PNG с прозрачным фоном предпочтительнее.</span><input required name="logoFile" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="text-sm text-slate-400 file:mr-4 file:rounded-full file:border-0 file:bg-violet-500 file:px-4 file:py-2 file:font-semibold file:text-white" /></label> : null}<CreateCabinetButton confirmed={confirmed} /></form>
             </> : null}
             <div className="mt-8 flex items-center justify-between border-t border-white/[.08] pt-6"><button type="button" onClick={goBack} disabled={currentStep === 1} className="rounded-full px-5 py-3 text-sm font-semibold text-slate-400 transition hover:text-white disabled:invisible">Назад</button>{currentStep < steps.length ? <button type="button" onClick={goNext} disabled={!canContinue} className="rounded-full bg-violet-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-35">Продолжить</button> : null}</div>
           </div>
