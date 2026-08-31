@@ -77,7 +77,7 @@ export async function launchSelfServiceContentOrder(formData: FormData) {
     });
     await prisma.selfServiceContentOrder.update({
       where: { id: order.id },
-      data: { status: "confirmed", chargedCredits: order.estimatedCredits, ledgerTransactionId: transaction.id },
+      data: { status: "confirmed", chargedCredits: Math.abs(transaction.amount), ledgerTransactionId: transaction.id },
     });
   } catch (error) {
     if (error instanceof Error && error.message === "INSUFFICIENT_CREDITS") {

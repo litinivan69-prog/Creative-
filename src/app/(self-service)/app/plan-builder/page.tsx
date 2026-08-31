@@ -6,6 +6,7 @@ import { grantTrialCredits } from "@/lib/self-service/credits";
 import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 import { SelfServiceAppShell } from "@/app/(self-service)/app/self-service-app-shell";
 import { ContentMixBuilder } from "@/app/(self-service)/app/plan-builder/content-mix-builder";
+import { isRibesAdminEmail } from "@/lib/self-service/admin-access";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Собрать месяц · Ribes", robots: { index: false, follow: false } };
@@ -29,5 +30,5 @@ export default async function SelfServicePlanBuilderPage({ searchParams }: { sea
     ? { ...defaultConfiguration, ...(draft.configuration as typeof defaultConfiguration) }
     : defaultConfiguration;
 
-  return <SelfServiceAppShell brandName={membership.client.name} active="builder" eyebrow="Конструктор месяца" title="Выберите только то, что нужно." description="Любое количество постов, статей и дополнительных материалов. Стоимость в кредитах видна сразу — без скрытых лимитов."><ContentMixBuilder balance={wallet?.balance ?? 0} initial={initial} notice={query.notice} error={query.error} /></SelfServiceAppShell>;
+  return <SelfServiceAppShell brandName={membership.client.name} active="builder" eyebrow="Конструктор месяца" title="Выберите только то, что нужно." description="Любое количество постов, статей и дополнительных материалов. Стоимость в кредитах видна сразу — без скрытых лимитов."><ContentMixBuilder balance={wallet?.balance ?? 0} unlimited={isRibesAdminEmail(email)} initial={initial} notice={query.notice} error={query.error} /></SelfServiceAppShell>;
 }

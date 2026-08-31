@@ -8,6 +8,7 @@ import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 import { SelfServiceAppShell } from "@/app/(self-service)/app/self-service-app-shell";
 import { CreditPricingSelector } from "@/app/(self-service)/app/subscribe/credit-pricing-selector";
 import { isYooKassaConfigured } from "@/lib/yookassa";
+import { isRibesAdminEmail } from "@/lib/self-service/admin-access";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +43,7 @@ export default async function SelfServiceSubscribePage({ searchParams }: { searc
     >
       <CreditPricingSelector
         currentBalance={wallet?.balance ?? 0}
+        unlimited={isRibesAdminEmail(email)}
         checkoutConfigured={isYooKassaConfigured()}
         testMode={process.env.YOOKASSA_TEST_MODE === "true"}
         error={query.error}
