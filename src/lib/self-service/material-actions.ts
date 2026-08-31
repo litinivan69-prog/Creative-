@@ -7,6 +7,11 @@ import { prisma } from "@/lib/prisma";
 import { scheduledAutopublishDefaults } from "@/lib/scheduled-autopublish";
 import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 import { cleanVisibleContentText } from "@/lib/content-draft-schema";
+import { getClientBrandContext } from "@/lib/brand-context";
+import { stripCarouselSlideLabel } from "@/lib/creative-asset-schema";
+import { generateCreativeVisualVariant } from "@/lib/openai";
+import { CREDIT_PRODUCTS } from "@/lib/self-service/credit-catalog";
+import { storeGeneratedVisual } from "@/lib/visual-storage";
 
 async function currentClientId() {
   const session = await auth();
@@ -17,6 +22,137 @@ async function currentClientId() {
     select: { clientId: true },
   });
   return membership?.clientId ?? null;
+}
+
+export async function regenerateSelfServiceVisual(formData: FormData) {
+  const itemId = String(formData.get("itemId") ?? "").trim();
+  const creativeAssetId = String(formData.get("creativeAssetId") ?? "").trim();
+  const clientId = await currentClientId();
+
+  if (!clientId) redirect(`/sign-in?callbackUrl=/app/month/${encodeURIComponent(itemId)}`);
+  if (!itemId || !creativeAssetId) redirect(`/app/month/${encodeURIComponent(itemId)}?error=visual_missing`);
+
+  const [asset, wallet] = await Promise.all([
+    prisma.creativeAsset.findFirst({
+      where: { id: creativeAssetId, plannedContentItemId: itemId, clientId },
+      include: {
+        client: true,
+        contentDraft: true,
+        scheduledPublication: true,
+      },
+    }),
+    prisma.creditWallet.findUnique({ where: { clientId } }),
+  ]);
+
+  const revisionCost = CREDIT_PRODUCTS.visual_revision.credits;
+  if (!asset) redirect(`/app/month/${encodeURIComponent(itemId)}?error=visual_missing`);
+  if (!wallet || wallet.balance < revisionCost) redirect(`/app/month/${encodeURIComponent(itemId)}?error=credits`);
+
+  try {
+    const generated = await generateCreativeVisualVariant({
+      clientName: asset.client.name,
+      clientIndustry: asset.client.industry,
+      brandContext: await getClientBrandContext(clientId),
+      creativeAsset: {
+        assetType: asset.assetType,
+        title: stripCarouselSlideLabel(asset.title),
+        brief: asset.brief,
+        formatRequirements: asset.formatRequirements,
+        // Client-facing regeneration is deliberately text-free: exact brand
+        // copy and logos must never be hallucinated by the image model.
+        textOnAsset: null,
+        references: asset.references,
+        notes: [asset.notes, "Новый вариант по запросу клиента. Не использовать логотипы и текст внутри изображения."].filter(Boolean).join("\n"),
+      },
+      scheduledPublication: {
+        platformName: asset.scheduledPublication.platformName,
+        format: asset.scheduledPublication.format,
+        topic: asset.scheduledPublication.topic,
+        scheduledDate: asset.scheduledPublication.scheduledDate,
+        scheduledTime: asset.scheduledPublication.scheduledTime,
+      },
+      contentDraft: {
+        draftTitle: asset.contentDraft.draftTitle,
+        draftBody: asset.contentDraft.draftBody,
+        riskLevel: asset.contentDraft.riskLevel,
+        approvalRequired: asset.contentDraft.approvalRequired,
+      },
+    });
+
+    const stored = await storeGeneratedVisual({
+      imageBase64: generated.imageBase64,
+      mimeType: generated.mimeType,
+      clientId,
+      monthlyPlanId: asset.monthlyPlanId,
+      creativeAssetId: asset.id,
+    });
+
+    await prisma.$transaction(async (tx) => {
+      const currentWallet = await tx.creditWallet.findUnique({ where: { clientId } });
+      if (!currentWallet || currentWallet.balance < revisionCost) throw new Error("INSUFFICIENT_CREDITS");
+      const updatedWallet = await tx.creditWallet.update({
+        where: { id: currentWallet.id },
+        data: { balance: { decrement: revisionCost }, lifetimeSpent: { increment: revisionCost } },
+      });
+      const createdVariant = await tx.generatedCreativeVariant.create({
+        data: {
+          clientId,
+          blueprintId: asset.blueprintId,
+          monthlyPlanId: asset.monthlyPlanId,
+          plannedContentItemId: asset.plannedContentItemId,
+          contentDraftId: asset.contentDraftId,
+          scheduledPublicationId: asset.scheduledPublicationId,
+          creativeAssetId: asset.id,
+          variantTitle: `Исправленный вариант: ${asset.title}`,
+          prompt: generated.prompt,
+          revisedPrompt: generated.revisedPrompt,
+          imageBase64: stored.storageProvider === "database_base64" ? stored.imageBase64 : null,
+          imageUrl: stored.storageProvider === "vercel_blob" ? stored.imageUrl : null,
+          storageKey: stored.storageProvider === "vercel_blob" ? stored.storageKey : null,
+          storageProvider: stored.storageProvider,
+          fileSize: stored.fileSize,
+          mimeType: generated.mimeType,
+          status: "generated",
+          source: generated.provider,
+          provider: generated.provider,
+          model: generated.model,
+          quality: generated.quality,
+          size: generated.size,
+          textMode: generated.textMode,
+          inputTokens: generated.inputTokens,
+          outputTokens: generated.outputTokens,
+          totalTokens: generated.totalTokens,
+          estimatedCostUsd: generated.estimatedCostUsd,
+          qualityStatus: "needs_manual_review",
+          qualityNotes: "Новый вариант создан по запросу клиента без сгенерированных логотипов и текста.",
+        },
+      });
+      await tx.creditTransaction.create({
+        data: {
+          clientId,
+          walletId: currentWallet.id,
+          amount: -revisionCost,
+          balanceAfter: updatedWallet.balance,
+          kind: "spend",
+          description: "Новый вариант визуала",
+          referenceType: "generated_creative_variant",
+          referenceId: createdVariant.id,
+          idempotencyKey: `visual-revision:${createdVariant.id}`,
+        },
+      });
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "INSUFFICIENT_CREDITS") {
+      redirect(`/app/month/${encodeURIComponent(itemId)}?error=credits`);
+    }
+    console.error("Self-service visual regeneration failed", error);
+    redirect(`/app/month/${encodeURIComponent(itemId)}?error=visual_revision_failed`);
+  }
+
+  revalidatePath("/app");
+  revalidatePath("/app/month");
+  revalidatePath(`/app/month/${itemId}`);
+  redirect(`/app/month/${itemId}?notice=visual_revised`);
 }
 
 export async function saveSelfServiceMaterialText(formData: FormData) {

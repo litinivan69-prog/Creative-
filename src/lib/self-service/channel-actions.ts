@@ -192,16 +192,19 @@ export async function publishSelfServiceMaterialNow(formData: FormData) {
     redirect(`/app/month/${encodeURIComponent(itemId)}?error=confirm_first`);
   }
 
-  const targetPlatform = /vc\.ru|виси/i.test(item.platformName)
-    ? "vcru" as const
-    : /vk|вконтакт/i.test(item.platformName)
-    ? "vk" as const
-    : /telegram|телеграм|\btg\b/i.test(item.platformName)
-      ? "telegram" as const
-      : null;
-  if (!targetPlatform) redirect(`/app/month/${encodeURIComponent(itemId)}?error=manual_export_only`);
+  const combinedCarousel = /vk|вконтакт/i.test(item.platformName) && /telegram|телеграм|\btg\b/i.test(item.platformName);
+  const targetPlatforms: Array<"vk" | "telegram" | "vcru"> = combinedCarousel
+    ? ["vk", "telegram"]
+    : /vc\.ru|виси/i.test(item.platformName)
+      ? ["vcru"]
+      : /vk|вконтакт/i.test(item.platformName)
+        ? ["vk"]
+        : /telegram|телеграм|\btg\b/i.test(item.platformName)
+          ? ["telegram"]
+          : [];
+  if (!targetPlatforms.length) redirect(`/app/month/${encodeURIComponent(itemId)}?error=manual_export_only`);
 
-  const outcome = await publishScheduledPublication(publication.id, { platforms: [targetPlatform] });
+  const outcome = await publishScheduledPublication(publication.id, { platforms: targetPlatforms });
   revalidatePath("/app");
   revalidatePath("/app/month");
   revalidatePath(`/app/month/${itemId}`);
