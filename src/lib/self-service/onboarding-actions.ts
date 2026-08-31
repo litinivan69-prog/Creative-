@@ -14,6 +14,10 @@ import {
   type SelfServiceOnboarding,
 } from "@/lib/self-service/onboarding";
 import { rememberActiveSelfServiceClient } from "@/lib/self-service/workspace";
+import { storeClientBrandAssetFile } from "@/lib/brand-asset-storage";
+
+const MAX_ONBOARDING_LOGO_SIZE = 8 * 1024 * 1024;
+const ONBOARDING_LOGO_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]);
 
 function tokenHash(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -133,6 +137,31 @@ export async function stageSelfServiceOnboarding(formData: FormData) {
     input = selfServiceOnboardingFromFormData(formData);
   } catch {
     redirect("/start?error=brief_invalid");
+  }
+
+  if (input.brief.logoMode === "none") {
+    input.brief.logoUrl = "";
+  }
+
+  if (input.brief.logoMode === "upload") {
+    const logoFile = formData.get("logoFile");
+    if (!(logoFile instanceof File) || logoFile.size === 0) redirect("/start/brief?error=logo_required");
+    if (logoFile.size > MAX_ONBOARDING_LOGO_SIZE || !ONBOARDING_LOGO_TYPES.has(logoFile.type)) {
+      redirect("/start/brief?error=logo_invalid");
+    }
+
+    try {
+      const uploaded = await storeClientBrandAssetFile({
+        file: logoFile,
+        clientId: `onboarding-${randomBytes(10).toString("hex")}`,
+        assetType: "logo",
+      });
+      if (!uploaded) redirect("/start/brief?error=logo_storage");
+      input.brief.logoUrl = uploaded.fileUrl;
+    } catch (error) {
+      console.error("Onboarding logo upload failed", error);
+      redirect("/start/brief?error=logo_upload");
+    }
   }
 
   const session = await auth();

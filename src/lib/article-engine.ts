@@ -9,7 +9,7 @@ import {
   type ArticleGeoPass,
   type ArticleImage,
 } from "@/lib/article-schema";
-import { getClientBrandContext } from "@/lib/brand-context";
+import { getClientBrandContext, getClientVisualBranding } from "@/lib/brand-context";
 import { generateCreativeVisualVariant } from "@/lib/openai";
 import { prisma } from "@/lib/prisma";
 import { storeGeneratedVisual } from "@/lib/visual-storage";
@@ -192,6 +192,7 @@ async function generateArticleImages(input: {
 }): Promise<ArticleImage[]> {
   const plan = input.brief.imagePlan.slice(0, 5);
   const images: ArticleImage[] = [];
+  const visualBranding = await getClientVisualBranding(input.clientId);
 
   for (const item of plan) {
     const base: ArticleImage = {
@@ -229,6 +230,8 @@ async function generateArticleImages(input: {
           approvalRequired: false,
         },
         brandContext: input.context.brandContext || undefined,
+        brandLogoUrl: visualBranding.logoUrl,
+        brandTypography: visualBranding.typography,
       });
 
       const stored = await storeGeneratedVisual({

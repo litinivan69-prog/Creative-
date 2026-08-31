@@ -41,3 +41,29 @@ export async function getClientBrandContext(clientId: string) {
     return "";
   }
 }
+
+export async function getClientVisualBranding(clientId: string) {
+  try {
+    const client = await prisma.client.findUnique({
+      where: { id: clientId },
+      select: {
+        brandProfile: { select: { fonts: true } },
+        brandAssets: {
+          where: { status: "active", assetType: "logo" },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { fileUrl: true, sourceUrl: true },
+        },
+      },
+    });
+
+    const logo = client?.brandAssets[0];
+    return {
+      logoUrl: logo?.fileUrl || logo?.sourceUrl || null,
+      typography: client?.brandProfile?.fonts?.trim() || null,
+    };
+  } catch (error) {
+    console.error("Failed to load visual branding", error);
+    return { logoUrl: null, typography: null };
+  }
+}
