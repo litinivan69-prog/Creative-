@@ -529,6 +529,14 @@ type CreativeVisualVariantInput = {
 };
 
 function textRenderingInstruction(input: CreativeVisualVariantInput, mode: VisualTextMode) {
+  // Image models still distort Cyrillic and may imitate a brand mark. Keep
+  // generated client visuals text-free unless this is explicitly enabled for
+  // a supervised experiment. Exact copy and logos must be applied later from
+  // the client's real brand assets, never recreated by the model.
+  if (process.env.VISUAL_ALLOW_GENERATED_TEXT !== "true") {
+    return "Do not render any text, letters, numbers, captions, labels, watermarks, signatures, brand marks, or logos inside the image. Do not imitate or recreate a logo from the brand context or references.";
+  }
+
   if (mode === "image_text" && input.creativeAsset.textOnAsset) {
     return [
       `Render only this exact short Russian text inside the image: "${input.creativeAsset.textOnAsset}".`,
@@ -578,7 +586,8 @@ function premiumVisualPrompt(input: CreativeVisualVariantInput, textMode: Visual
       : null,
     "Produce a realistic premium advertising photograph or high-end editorial visual appropriate to the asset type. Use an intentional focal point, clean composition, restrained color discipline, thoughtful lighting, and platform-native framing.",
     "Avoid cheap stock-photo aesthetics, generic AI poster composition, decorative clutter, fake clinic or company names, fake logos, fake text, fake certificates, fake reviews, unsupported medical claims, guarantees, before-and-after comparisons, and unrealistic treatment or business results.",
-    "Do not invent a logo. If logo is needed, leave clean space for logo placement unless real logo integration is available.",
+    "Never invent, approximate, redraw, imitate, or replace the client's logo. A similar-looking logo is unacceptable. If the exact source logo cannot be composited, show no logo and leave clean space for later placement.",
+    "Keep one coherent visual language across the whole client month: the same restrained palette, lighting logic, level of realism, composition discipline, and editorial character. Do not randomly switch design styles between VK, Telegram, articles, or carousel slides.",
     "When people appear, render natural anatomy, credible hands, expressive but realistic faces, and professional context. Do not depict misleading procedures or outcomes.",
     textRenderingInstruction(input, textMode),
     input.contentDraft.riskLevel !== "low" || input.contentDraft.approvalRequired

@@ -29,6 +29,11 @@ function stageLabel(stage: string, status: string) {
   return ARTICLE_STAGE_LABELS[stage as ArticleStage] ?? "Готовится";
 }
 
+function stageProgress(stage: string, status: string) {
+  if (status === "failed") return 0;
+  return ({ brief: 12, draft: 32, humanize: 52, geo: 70, images: 86, done: 100 } as Record<string, number>)[stage] ?? 8;
+}
+
 function formatDate(value: Date) {
   return new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", year: "numeric" }).format(value);
 }
@@ -83,6 +88,7 @@ export default async function SelfServiceArticlesPage() {
             const cover = articleHeroUrl(article.images);
             const imageCount = ((article.images as ArticleImage[] | null) ?? []).filter((image) => image.url).length;
             const done = article.stage === "done" && article.status !== "failed";
+            const progress = stageProgress(article.stage, article.status);
             const editorHref = article.plannedContentItemId ? `/app/month/${article.plannedContentItemId}` : null;
             const platform = platformBrandFromName(article.platformTarget);
             return <article key={article.id} className={`${darkCardClass} group overflow-hidden transition hover:-translate-y-0.5 hover:border-violet-400/20`}>
@@ -96,6 +102,7 @@ export default async function SelfServiceArticlesPage() {
                 <div className="flex items-center justify-between gap-3 text-[9px]"><span className="text-white/28">{imageCount ? `Обложка · ${imageCount} изображения` : "Визуалы готовятся"}</span><span className="text-white/20">{formatDate(article.createdAt)}</span></div>
                 <h2 className="mt-3 line-clamp-3 min-h-[3.75rem] text-lg font-semibold leading-5 tracking-[-0.025em] text-white/82">{article.title}</h2>
                 <div className="mt-4 flex items-center gap-3 text-[9px] text-white/25"><span>{article.wordCount ? `${article.wordCount.toLocaleString("ru-RU")} слов` : "объём уточняется"}</span><span>·</span><span>{imageCount ? `${imageCount} ${imageCount === 1 ? "изображение" : "изображения"}` : "визуалы готовятся"}</span></div>
+                {!done ? <div className="mt-4"><div className="flex items-center justify-between text-[9px]"><span className="text-white/30">{stageLabel(article.stage, article.status)}</span><span className="font-semibold text-violet-300">{progress}%</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.06]"><div className="h-full rounded-full bg-violet-500 transition-all" style={{ width: `${progress}%` }} /></div><p className="mt-2 text-[9px] leading-4 text-white/22">Подготовка статьи обычно занимает дольше поста. Процент обновится при следующем открытии страницы.</p></div> : null}
                 <div className="mt-5 grid grid-cols-2 gap-2">
                   {editorHref ? <Link href={`/app/articles/${article.id}`} className="rounded-xl bg-violet-500 px-3 py-2.5 text-center text-[10px] font-semibold text-white transition hover:bg-violet-400">Проверить</Link> : <span className="rounded-xl bg-white/[0.04] px-3 py-2.5 text-center text-[10px] text-white/25">Архивная статья</span>}
                   {done ? <a href={`/api/self-service/articles/${article.id}/docx`} className="rounded-xl border border-white/[0.07] bg-white/[0.035] px-3 py-2.5 text-center text-[10px] font-semibold text-white/55 transition hover:bg-white/[0.06]">DOCX ↓</a> : <span className="rounded-xl border border-white/[0.05] px-3 py-2.5 text-center text-[10px] text-white/20">Документ готовится</span>}

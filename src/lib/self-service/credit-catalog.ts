@@ -13,6 +13,7 @@ export const CREDIT_PRODUCTS = {
   article_with_cover: { label: "Статья с обложкой", credits: 5 },
   carousel: { label: "Карусель из 4 слайдов", credits: 5 },
   carousel_extra_slide: { label: "Дополнительный слайд", credits: 1 },
+  visual_revision: { label: "Новый вариант визуала", credits: 1 },
   quick_announcement: { label: "Быстрый анонс", credits: 1 },
   review_reply: { label: "Ответ на отзыв", credits: 1 },
 } as const;

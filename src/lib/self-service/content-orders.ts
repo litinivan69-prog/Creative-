@@ -19,7 +19,7 @@ export const SelfServiceContentOrderConfigurationSchema = z.object({
   dzenArticles: z.number().int().min(0).max(20),
   vcruArticles: z.number().int().min(0).max(20),
   carousels: z.number().int().min(0).max(30),
-  carouselPlatform: z.enum(["vk", "telegram"]).default("vk"),
+  carouselPlatform: z.enum(["vk", "telegram", "both"]).default("vk"),
   quickAnnouncements: z.number().int().min(0).max(100),
   reviewReplies: z.number().int().min(0).max(100),
 });
@@ -50,8 +50,8 @@ export function estimateContentOrderCredits(configuration: SelfServiceContentOrd
 
 export function contentOrderFormatIds(configuration: SelfServiceContentOrderConfiguration) {
   return [
-    configuration.vkPosts > 0 || (configuration.carousels > 0 && configuration.carouselPlatform === "vk") ? "vk_post" : null,
-    configuration.telegramPosts > 0 || configuration.quickAnnouncements > 0 || configuration.reviewReplies > 0 || (configuration.carousels > 0 && configuration.carouselPlatform === "telegram") ? "telegram_post" : null,
+    configuration.vkPosts > 0 || (configuration.carousels > 0 && ["vk", "both"].includes(configuration.carouselPlatform)) ? "vk_post" : null,
+    configuration.telegramPosts > 0 || configuration.quickAnnouncements > 0 || configuration.reviewReplies > 0 || (configuration.carousels > 0 && ["telegram", "both"].includes(configuration.carouselPlatform)) ? "telegram_post" : null,
     configuration.okPosts > 0 ? "ok_post" : null,
     configuration.dzenArticles > 0 ? "dzen_article" : null,
     configuration.vcruArticles > 0 ? "vcru_article" : null,
