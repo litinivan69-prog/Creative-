@@ -590,6 +590,9 @@ function premiumVisualPrompt(input: CreativeVisualVariantInput, textMode: Visual
     isCarouselSlide
       ? "Carousel guardrail: generate ONLY slide/card X of Y described in this creative asset. Do not include other slides. Do not create a collage, grid, storyboard, or preview of all cards. Do not show multiple cards in one image. The output must be one standalone card."
       : null,
+    isCarouselSlide
+      ? "CAROUSEL SCENE DIVERSITY IS MANDATORY: treat this slide as a new chapter, not as another interpretation of the previous image. Use a clearly different central subject, physical scene, camera angle, action and background layout. Preserve only the brand palette, typography and art direction. Never repeat the same hero object or composition across all slides."
+      : null,
     "Produce a realistic premium advertising photograph or high-end editorial visual appropriate to the asset type. Use an intentional focal point, clean composition, restrained color discipline, thoughtful lighting, and platform-native framing.",
     "Avoid cheap stock-photo aesthetics, generic AI poster composition, decorative clutter, fake clinic or company names, fake logos, any unrequested text, fake certificates, fake reviews, unsupported medical claims, guarantees, before-and-after comparisons, and unrealistic treatment or business results.",
     input.brandLogoUrl

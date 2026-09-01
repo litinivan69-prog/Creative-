@@ -28,10 +28,14 @@ async function currentClientId() {
 export async function regenerateSelfServiceVisual(formData: FormData) {
   const itemId = String(formData.get("itemId") ?? "").trim();
   const creativeAssetId = String(formData.get("creativeAssetId") ?? "").trim();
+  const revisionInstruction = String(formData.get("revisionInstruction") ?? "").trim();
   const clientId = await currentClientId();
 
   if (!clientId) redirect(`/sign-in?callbackUrl=/app/month/${encodeURIComponent(itemId)}`);
   if (!itemId || !creativeAssetId) redirect(`/app/month/${encodeURIComponent(itemId)}?error=visual_missing`);
+  if (revisionInstruction.length < 5 || revisionInstruction.length > 1_000) {
+    redirect(`/app/month/${encodeURIComponent(itemId)}?error=revision_instruction`);
+  }
 
   const [asset, wallet, unlimited] = await Promise.all([
     prisma.creativeAsset.findFirst({
@@ -65,7 +69,12 @@ export async function regenerateSelfServiceVisual(formData: FormData) {
         formatRequirements: asset.formatRequirements,
         textOnAsset: asset.textOnAsset ? stripCarouselSlideLabel(asset.textOnAsset) || null : asset.textOnAsset,
         references: asset.references,
-        notes: [asset.notes, "Новый вариант по запросу клиента. Сохранить единую типографическую систему бренда и точный текст из ТЗ."].filter(Boolean).join("\n"),
+        notes: [
+          asset.notes,
+          "Это не случайная перегенерация, а адресная правка по комментарию клиента.",
+          `ОБЯЗАТЕЛЬНАЯ ПРАВКА КЛИЕНТА: ${revisionInstruction}`,
+          "Измени только то, о чём попросил клиент. Остальные удачные решения, единую типографическую систему бренда и точный текст из ТЗ сохрани.",
+        ].filter(Boolean).join("\n"),
       },
       scheduledPublication: {
         platformName: asset.scheduledPublication.platformName,
@@ -129,7 +138,7 @@ export async function regenerateSelfServiceVisual(formData: FormData) {
           totalTokens: generated.totalTokens,
           estimatedCostUsd: generated.estimatedCostUsd,
           qualityStatus: "needs_manual_review",
-          qualityNotes: "Новый вариант создан по запросу клиента с единым типографическим профилем. Логотип допускается только из подтверждённого бренд-ассета.",
+          qualityNotes: `Вариант создан по правке клиента: ${revisionInstruction}. Логотип допускается только из подтверждённого бренд-ассета.`,
         },
       });
       await tx.creditTransaction.create({
@@ -139,7 +148,7 @@ export async function regenerateSelfServiceVisual(formData: FormData) {
           amount: unlimited ? 0 : -revisionCost,
           balanceAfter: updatedWallet.balance,
           kind: unlimited ? "admin_usage" : "spend",
-          description: unlimited ? "Новый вариант визуала · админский тест без списания" : "Новый вариант визуала",
+          description: unlimited ? "Правка визуала · админский тест без списания" : "Правка визуала по комментарию клиента",
           referenceType: "generated_creative_variant",
           referenceId: createdVariant.id,
           idempotencyKey: `visual-revision:${createdVariant.id}`,

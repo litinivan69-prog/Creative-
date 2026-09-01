@@ -66,10 +66,13 @@ import { getClientBrandContext, getClientVisualBranding } from "@/lib/brand-cont
 import { runArticlePipeline, runArticleForPlannedItem } from "@/lib/article-engine";
 import { hasSelfServicePaidAccess } from "@/lib/self-service/subscription";
 import {
+  contentOrderConfigurationFromFormData,
   contentOrderFormatIds,
+  estimateContentOrderCredits,
   parseSelfServiceContentOrderConfiguration,
   type SelfServiceContentOrderConfiguration,
 } from "@/lib/self-service/content-orders";
+import { spendCredits } from "@/lib/self-service/credits";
 import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 
 function formText(formData: FormData, key: string) {
@@ -446,6 +449,15 @@ function creativeAssetCreateInputsFromBrief(
 
   return Array.from({ length: slideCount }, (_, index) => {
     const slideNumber = index + 1;
+    const narrativeRoles = [
+      "обложка-зацепка: один сильный главный образ, который вводит тему",
+      "проблема или контекст: новая сцена, показывающая исходную ситуацию",
+      "решение или процесс: другая сцена с конкретным действием, деталью или примером",
+      "вывод и следующий шаг: финальная сцена с ощущением результата",
+      "доказательство: отдельная сцена с фактом, деталью или наглядным сравнением",
+      "завершение: самостоятельная финальная сцена и ясный призыв",
+    ];
+    const narrativeRole = narrativeRoles[index] ?? `самостоятельный смысловой шаг ${slideNumber}`;
 
     return {
       ...base,
@@ -453,14 +465,16 @@ function creativeAssetCreateInputsFromBrief(
       title: `Карточка ${slideNumber} / ${slideCount}: ${brief.title}`,
       brief: [
         `Это отдельная карточка ${slideNumber} из ${slideCount} для карусели.`,
+        `Смысловая роль этой карточки: ${narrativeRole}.`,
         "Сгенерируй только эту карточку, не весь набор и не коллаж.",
+        "Композиция, центральный объект, ракурс и действие должны заметно отличаться от остальных карточек. Повторяется только стиль бренда, палитра и типографика.",
         brief.brief,
       ].join("\n"),
-      formatRequirements: `${brief.formatRequirements}\nКарусель: отдельная карточка ${slideNumber}/${slideCount}. Не объединять карточки в один визуал. Номер карточки — служебная метадата: не наносить его на визуал и не добавлять в текст.`,
+      formatRequirements: `${brief.formatRequirements}\nКарусель: отдельная карточка ${slideNumber}/${slideCount}. Не объединять карточки в один визуал. Номер карточки — служебная метадата: не наносить его на визуал и не добавлять в текст. Запрещено повторять один центральный объект, одну сцену, один ракурс или один фон на всех карточках.`,
       // Slide index is service metadata — the visible text carries only real content.
       textOnAsset: stripCarouselSlideLabel(brief.textOnAsset) || null,
       references: brief.references,
-      notes: `${brief.notes}\nslideNumber=${slideNumber}; slideCount=${slideCount}`,
+      notes: `${brief.notes}\nslideNumber=${slideNumber}; slideCount=${slideCount}; narrativeRole=${narrativeRole}`,
     };
   });
 }
@@ -1593,6 +1607,42 @@ function exactSelfServiceContentMix<T extends PairablePlanItem>(
   });
 }
 
+function distributeAddedContentDates<T extends { plannedDate: string; week?: string | null }>(
+  additions: T[],
+  existingItems: Array<{ plannedDate: string }>,
+  month: string,
+) {
+  const match = month.match(/^(\d{4})-(\d{2})$/);
+  if (!match || additions.length === 0) return additions;
+  const year = Number(match[1]);
+  const monthIndex = Number(match[2]) - 1;
+  const lastDay = new Date(year, monthIndex + 1, 0).getDate();
+  const weekdays = Array.from({ length: lastDay }, (_, index) => index + 1).filter((day) => {
+    const weekday = new Date(year, monthIndex, day).getDay();
+    return weekday !== 0 && weekday !== 6;
+  });
+  const candidates = weekdays.length >= additions.length ? weekdays : Array.from({ length: lastDay }, (_, index) => index + 1);
+  const load = new Map<number, number>();
+  for (const item of existingItems) {
+    const itemMatch = item.plannedDate.match(new RegExp(`^${month}-(\\d{2})`));
+    if (!itemMatch) continue;
+    const day = Number(itemMatch[1]);
+    load.set(day, (load.get(day) ?? 0) + 1);
+  }
+
+  additions.forEach((item, index) => {
+    const idealDay = Math.round(((index + 1) * (lastDay + 1)) / (additions.length + 1));
+    const day = [...candidates].sort((left, right) => {
+      const loadDifference = (load.get(left) ?? 0) - (load.get(right) ?? 0);
+      return loadDifference || Math.abs(left - idealDay) - Math.abs(right - idealDay) || left - right;
+    })[0];
+    item.plannedDate = `${month}-${String(day).padStart(2, "0")}`;
+    item.week = `Неделя ${Math.min(5, Math.floor((day - 1) / 7) + 1)}`;
+    load.set(day, (load.get(day) ?? 0) + 1);
+  });
+  return additions;
+}
+
 /**
  * Detects article deliverables the plan model produced on its own (Дзен/blog
  * items with an article format). They must go through the full article engine,
@@ -2252,6 +2302,183 @@ export async function continueSelfServiceMonth() {
       message: "Не удалось собрать месяц с первого раза. Ваш бриф сохранён — можно безопасно повторить.",
     };
   }
+}
+
+async function appendContentOrderToMonthlyPlan(
+  monthlyPlanId: string,
+  configuration: SelfServiceContentOrderConfiguration,
+  orderId: string,
+) {
+  const plan = await prisma.monthlyOperatingPlan.findUnique({
+    where: { id: monthlyPlanId },
+    select: {
+      id: true,
+      clientId: true,
+      blueprintId: true,
+      month: true,
+      totalPlannedUnits: true,
+      rawPlanJson: true,
+      plannedContentItems: {
+        orderBy: [{ plannedDate: "asc" }, { id: "asc" }],
+        select: {
+          moduleType: true,
+          platformName: true,
+          format: true,
+          topic: true,
+          goal: true,
+          plannedDate: true,
+          week: true,
+          campaignTheme: true,
+          contentPillar: true,
+          channelRole: true,
+          sequenceReason: true,
+          approvalRequired: true,
+          autopublishEligible: true,
+          requiredInputs: true,
+          status: true,
+        },
+      },
+    },
+  });
+  if (!plan) throw new Error("MONTH_NOT_FOUND");
+
+  const existingAddition = await prisma.plannedContentItem.count({
+    where: { monthlyPlanId, pairGroupId: { startsWith: `addition:${orderId}:` } },
+  });
+  if (existingAddition > 0) return createMonthProductionRun(monthlyPlanId);
+
+  const formatIds = contentOrderFormatIds(configuration);
+  const allowedPlatforms = await ensureSelfServicePlatformRecommendations(plan.blueprintId, formatIds);
+  const scope = productionScopeFromRawPlanJson(plan.rawPlanJson);
+  const usedTopics = new Set(plan.plannedContentItems.map((item) => item.topic.trim().toLowerCase()));
+  const additionItems = exactSelfServiceContentMix(
+    plan.plannedContentItems,
+    configuration,
+    allowedPlatforms,
+    plan.month,
+    scope?.strategicThemes ?? [],
+  ).map((item, index) => {
+    let topic = item.topic.trim();
+    if (usedTopics.has(topic.toLowerCase())) {
+      topic = `${topic} — новый практический ракурс${index > 0 ? ` №${index + 1}` : ""}`;
+    }
+    usedTopics.add(topic.toLowerCase());
+    return { ...item, topic };
+  });
+  const generatedItems = distributeAddedContentDates(additionItems, plan.plannedContentItems, plan.month);
+  if (generatedItems.length === 0) throw new Error("EMPTY_ADDITION");
+
+  await prisma.$transaction(async (tx) => {
+    for (const [index, item] of generatedItems.entries()) {
+      await tx.plannedContentItem.create({
+        data: {
+          monthlyPlanId: plan.id,
+          moduleType: item.moduleType,
+          platformName: item.platformName,
+          format: item.format,
+          topic: item.topic,
+          goal: item.goal,
+          plannedDate: item.plannedDate,
+          week: item.week,
+          campaignTheme: item.campaignTheme,
+          contentPillar: item.contentPillar,
+          channelRole: item.channelRole,
+          sequenceReason: item.sequenceReason ?? "Материал добавлен в текущий месяц.",
+          approvalRequired: item.approvalRequired,
+          autopublishEligible: item.autopublishEligible,
+          requiredInputs: (item.requiredInputs ?? []) as Prisma.InputJsonValue,
+          status: "planned",
+          pairGroupId: `addition:${orderId}:${index + 1}`,
+          deliverableKind: isArticleLikePlanItem(item) ? "article" : "post",
+        },
+      });
+    }
+    await tx.monthlyOperatingPlan.update({
+      where: { id: plan.id },
+      data: { totalPlannedUnits: plan.totalPlannedUnits + generatedItems.length },
+    });
+  });
+
+  await normalizeDatesForMonthlyPlan(monthlyPlanId);
+  let run = await createMonthProductionRun(monthlyPlanId);
+  const queuedTasks = await prisma.monthProductionTask.count({
+    where: { productionRunId: run.id, status: "queued" },
+  });
+  if (queuedTasks > 0 && ["completed", "completed_with_errors", "paused"].includes(run.status)) {
+    run = await prisma.monthProductionRun.update({
+      where: { id: run.id },
+      data: { status: "queued", currentStage: "texts", errorMessage: null, completedAt: null },
+    });
+  }
+  return run;
+}
+
+export async function addSelfServiceContentToCurrentMonth(formData: FormData) {
+  const session = await auth();
+  const email = session?.user?.email?.trim().toLowerCase();
+  if (!email) redirect("/sign-in?callbackUrl=/app/plan-builder");
+
+  const membership = await prisma.workspaceMembership.findFirst({
+    where: await selfServiceMembershipWhere(email),
+    select: {
+      clientId: true,
+      client: {
+        select: {
+          monthlyPlans: {
+            where: { month: currentMonth(), status: { notIn: ["archived", "replaced"] } },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            select: { id: true },
+          },
+        },
+      },
+    },
+  });
+  if (!membership) redirect("/start");
+  const monthlyPlanId = membership.client.monthlyPlans[0]?.id;
+  if (!monthlyPlanId) redirect("/app/plan-builder?error=month_missing");
+
+  const configuration = contentOrderConfigurationFromFormData(formData);
+  const estimatedCredits = estimateContentOrderCredits(configuration);
+  if (estimatedCredits <= 0) redirect("/app/plan-builder?error=empty");
+
+  const order = await prisma.selfServiceContentOrder.create({
+    data: {
+      clientId: membership.clientId,
+      month: currentMonth(),
+      status: "draft",
+      configuration,
+      estimatedCredits,
+    },
+  });
+
+  try {
+    const transaction = await spendCredits({
+      clientId: membership.clientId,
+      credits: estimatedCredits,
+      description: `Дополнительные материалы на ${currentMonth()}`,
+      idempotencyKey: `content-addition:${order.id}`,
+      referenceType: "self_service_content_order",
+      referenceId: order.id,
+    });
+    await prisma.selfServiceContentOrder.update({
+      where: { id: order.id },
+      data: { status: "confirmed", chargedCredits: Math.abs(transaction.amount), ledgerTransactionId: transaction.id },
+    });
+    await appendContentOrderToMonthlyPlan(monthlyPlanId, configuration, order.id);
+    await prisma.selfServiceContentOrder.update({ where: { id: order.id }, data: { status: "processing" } });
+  } catch (error) {
+    if (error instanceof Error && error.message === "INSUFFICIENT_CREDITS") {
+      await prisma.selfServiceContentOrder.deleteMany({ where: { id: order.id, status: "draft" } });
+      redirect("/app/plan-builder?error=credits");
+    }
+    console.error("Failed to add content to current month", error);
+    redirect("/app/plan-builder?error=addition_failed");
+  }
+
+  revalidatePath("/app");
+  revalidatePath("/app/month");
+  redirect("/app/month?autostart=1&notice=content_added");
 }
 
 export async function autoScheduleMonthlyPlanDates(formData: FormData) {

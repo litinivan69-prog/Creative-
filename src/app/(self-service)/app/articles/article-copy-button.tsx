@@ -10,7 +10,15 @@ export function ArticleCopyButton({ targetId }: { targetId: string }) {
     if (!article) return;
 
     const plainText = article.innerText.trim();
-    const html = article.innerHTML.trim();
+    const clone = article.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll("img").forEach((image) => {
+      image.src = new URL(image.getAttribute("src") || image.src, window.location.href).href;
+      image.setAttribute("style", "display:block;max-width:100%;height:auto;margin:24px auto;border-radius:12px;");
+    });
+    clone.querySelectorAll("h1,h2,h3,h4").forEach((heading) => heading.setAttribute("style", "font-family:Arial,sans-serif;font-weight:700;line-height:1.2;margin:28px 0 12px;"));
+    clone.querySelectorAll("p,li").forEach((paragraph) => paragraph.setAttribute("style", "font-family:Arial,sans-serif;font-size:16px;line-height:1.65;margin:0 0 14px;"));
+    clone.querySelectorAll("ul,ol").forEach((list) => list.setAttribute("style", "font-family:Arial,sans-serif;margin:14px 0 20px;padding-left:24px;"));
+    const html = `<article style="font-family:Arial,sans-serif;color:#111;max-width:760px;">${clone.innerHTML.trim()}</article>`;
 
     try {
       if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {

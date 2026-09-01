@@ -280,6 +280,7 @@ export default async function SelfServiceMonthPage({
             {query.notice === "channels_saved" ? (
               <div className="mt-5 rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm font-medium text-violet-900">Площадки сохранены. Теперь собирайте месяц — материалы сразу лягут в календарь.</div>
             ) : null}
+            {query.notice === "content_added" ? <div className="mt-5 rounded-2xl border border-violet-400/15 bg-violet-500/10 px-4 py-3 text-sm font-medium text-violet-100">Новые материалы добавлены в текущий месяц и поставлены в подготовку. Готовые публикации не изменялись.</div> : null}
 
             <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-stretch">
               <div className="rounded-[20px] border border-white/[0.07] bg-white/[0.025] px-5 py-4"><p className="text-xs font-semibold text-white/75">Нужно опубликовать что-то сегодня?</p><p className="mt-1 text-[10px] leading-4 text-white/30">Создайте отдельный материал — он появится в календаре, не меняя план месяца.</p></div>
