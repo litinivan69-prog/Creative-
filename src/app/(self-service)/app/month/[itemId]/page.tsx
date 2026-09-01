@@ -11,6 +11,8 @@ import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 import type { ArticleImage } from "@/lib/article-schema";
 import { cleanVisibleContentText } from "@/lib/content-draft-schema";
 import { isRibesAdminEmail } from "@/lib/self-service/admin-access";
+import { ArticleImageRunner } from "@/app/(self-service)/app/articles/article-image-runner";
+import { articleImageProgress } from "@/lib/article-engine";
 
 export const dynamic = "force-dynamic";
 
@@ -102,6 +104,7 @@ export default async function SelfServiceMaterialPage({
   const articleImages = ((article?.images as ArticleImage[] | null) ?? [])
     .map((image, sourceIndex) => ({ image, sourceIndex }))
     .filter((entry) => Boolean(entry.image.url));
+  const articleProgress = article ? articleImageProgress(article.briefJson, article.images) : null;
   const visualVariants = slides.length > 0
     ? slides.flatMap((asset) => asset.generatedVariants)
     : item.generatedCreativeVariants.slice(0, 1);
@@ -137,6 +140,7 @@ export default async function SelfServiceMaterialPage({
       headerAction={<Link href="/app/month#materials" className="rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-xs font-semibold text-white/65 transition hover:bg-white/[0.07]">← Все материалы</Link>}
     >
       <div>
+        {article && articleProgress && !articleProgress.complete ? <ArticleImageRunner articleId={article.id} initialReady={articleProgress.ready} total={articleProgress.total} /> : null}
         <div className="mb-5 flex flex-wrap items-center gap-2 text-[10px]">
           <span className={`rounded-full px-3 py-1.5 font-semibold ${isReady ? "bg-violet-500/15 text-violet-200" : "bg-white/[0.05] text-white/45"}`}>{isReady ? "Готов к публикации" : body && visualReady ? "Можно подтвердить" : "Материал готовится"}</span>
           <span className="rounded-full bg-white/[0.035] px-3 py-1.5 text-white/30">{publication?.scheduledDate ?? item.plannedDate}{publication?.scheduledTime ? ` · ${publication.scheduledTime}` : ""}</span>

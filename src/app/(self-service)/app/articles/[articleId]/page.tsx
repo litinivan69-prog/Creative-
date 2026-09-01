@@ -3,9 +3,11 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArticleReader } from "@/app/article-reader";
 import { ArticleCopyButton } from "@/app/(self-service)/app/articles/article-copy-button";
+import { ArticleImageRunner } from "@/app/(self-service)/app/articles/article-image-runner";
 import { SelfServiceAppShell, darkCardClass } from "@/app/(self-service)/app/self-service-app-shell";
 import { auth } from "@/auth";
 import { countWords, type ArticleCallout, type ArticleFaqItem, type ArticleImage, type ArticleSource } from "@/lib/article-schema";
+import { articleImageProgress } from "@/lib/article-engine";
 import { parseArticleMarkdown } from "@/lib/article-markdown";
 import { prisma } from "@/lib/prisma";
 import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
@@ -53,6 +55,7 @@ export default async function SelfServiceArticlePreviewPage({
   const blocks = parseArticleMarkdown(article.bodyMarkdown);
   const words = article.wordCount ?? countWords(article.bodyMarkdown);
   const readyImages = images.filter((image) => image.url);
+  const imageProgress = articleImageProgress(article.briefJson, article.images);
   const checks = [
     { label: "Полный текст", detail: `${words.toLocaleString("ru-RU")} слов`, ok: words >= 900 },
     { label: "Структура", detail: `${blocks.filter((block) => block.type === "h2").length} разделов`, ok: blocks.filter((block) => block.type === "h2").length >= 4 },
@@ -73,6 +76,7 @@ export default async function SelfServiceArticlePreviewPage({
       description="Здесь нет технической разметки: заголовки, текст и изображения стоят так, как должны выглядеть в готовом материале."
       headerAction={<Link href={itemHref} className="rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-xs font-semibold text-white/65 transition hover:bg-white/[0.07]">← Редактировать</Link>}
     >
+      {!imageProgress.complete ? <ArticleImageRunner articleId={article.id} initialReady={imageProgress.ready} total={imageProgress.total} /> : null}
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
         <section className="overflow-hidden rounded-[28px] border border-white/[0.08] bg-[#f8f7fb] shadow-[0_30px_90px_rgba(0,0,0,.28)]">
           <div className="flex items-center justify-between gap-4 border-b border-black/[0.06] bg-white/75 px-5 py-3 text-[10px] text-slate-500 backdrop-blur sm:px-8">

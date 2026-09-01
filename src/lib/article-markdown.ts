@@ -73,25 +73,19 @@ export function parseArticleMarkdown(markdown: string): ArticleBlock[] {
       continue;
     }
 
-    const h3 = trimmed.match(/^###\s+(.*)$/);
-    const h2 = trimmed.match(/^##\s+(.*)$/);
-    const h1 = trimmed.match(/^#\s+(.*)$/);
+    // Models occasionally return H4-H6 headings even when the prompt asks for H2.
+    // Treat every Markdown heading as a heading so raw `####` markers never leak
+    // into the reader or copied article.
+    const heading = trimmed.match(/^#{1,6}\s*(.+)$/);
     const quote = trimmed.match(/^>\s?(.*)$/);
     const bullet = trimmed.match(/^[-*]\s+(.*)$/);
     const numbered = trimmed.match(/^\d+[.)]\s+(.*)$/);
 
-    if (h3) {
+    if (heading) {
       flushParagraph();
       flushList();
-      blocks.push({ type: "h3", spans: parseInline(h3[1]) });
-    } else if (h2) {
-      flushParagraph();
-      flushList();
-      blocks.push({ type: "h2", spans: parseInline(h2[1]) });
-    } else if (h1) {
-      flushParagraph();
-      flushList();
-      blocks.push({ type: "h2", spans: parseInline(h1[1]) });
+      const level = trimmed.match(/^#+/)?.[0].length ?? 2;
+      blocks.push({ type: level >= 3 ? "h3" : "h2", spans: parseInline(heading[1]) });
     } else if (quote) {
       flushParagraph();
       flushList();
