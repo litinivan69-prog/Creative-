@@ -22,13 +22,14 @@ export default async function SelfServicePlanBuilderPage({ searchParams }: { sea
   if (!membership) redirect("/start");
 
   await grantTrialCredits(membership.client.id);
-  const [wallet, draft] = await Promise.all([
+  const [wallet, draft, currentPlan] = await Promise.all([
     prisma.creditWallet.findUnique({ where: { clientId: membership.client.id } }),
     prisma.selfServiceContentOrder.findFirst({ where: { clientId: membership.client.id, status: "draft" }, orderBy: { updatedAt: "desc" } }),
+    prisma.monthlyOperatingPlan.findFirst({ where: { clientId: membership.client.id, month: new Date().toISOString().slice(0, 7), status: { notIn: ["archived", "replaced"] } }, select: { id: true } }),
   ]);
   const initial = draft?.configuration && typeof draft.configuration === "object" && !Array.isArray(draft.configuration)
     ? { ...defaultConfiguration, ...(draft.configuration as typeof defaultConfiguration) }
     : defaultConfiguration;
 
-  return <SelfServiceAppShell brandName={membership.client.name} active="builder" eyebrow="Конструктор месяца" title="Выберите только то, что нужно." description="Любое количество постов, статей и дополнительных материалов. Стоимость в кредитах видна сразу — без скрытых лимитов."><ContentMixBuilder balance={wallet?.balance ?? 0} unlimited={isRibesAdminEmail(email)} initial={initial} notice={query.notice} error={query.error} /></SelfServiceAppShell>;
+  return <SelfServiceAppShell brandName={membership.client.name} active="builder" eyebrow={currentPlan ? "Дополнить текущий месяц" : "Конструктор месяца"} title={currentPlan ? "Добавьте только новые материалы." : "Выберите только то, что нужно."} description={currentPlan ? "Готовый месяц останется без изменений. Новые посты или статьи добавятся в свободные даты и будут посчитаны отдельно." : "Любое количество постов, статей и дополнительных материалов. Стоимость в кредитах видна сразу — без скрытых лимитов."}><ContentMixBuilder balance={wallet?.balance ?? 0} unlimited={isRibesAdminEmail(email)} initial={currentPlan ? { ...defaultConfiguration, vkPosts: 0, telegramPosts: 0, dzenArticles: 0 } : initial} notice={query.notice} error={query.error} hasExistingPlan={Boolean(currentPlan)} /></SelfServiceAppShell>;
 }
