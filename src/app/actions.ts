@@ -4663,6 +4663,13 @@ async function processMonthProductionTask(taskId: string) {
       if (!task.plannedContentItemId) throw new Error("Материал для статьи не найден.");
       const result = await runArticleForPlannedItem(task.plannedContentItemId);
       if (!result.ok) throw new Error(result.error);
+      if (!result.done) {
+        await prisma.monthProductionTask.update({
+          where: { id: task.id },
+          data: { status: "queued", startedAt: null, completedAt: null, errorMessage: null },
+        });
+        return;
+      }
       await prisma.monthProductionTask.update({
         where: { id: task.id },
         data: { status: "completed", completedAt: new Date() },

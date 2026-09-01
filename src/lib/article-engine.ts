@@ -40,6 +40,17 @@ type ArticleContext = {
   angle: string;
 };
 
+export function normalizeArticleMarkdown(value: string) {
+  return value
+    .replace(/^\s*```(?:markdown|md)?\s*$/gim, "")
+    .replace(/^\s*#{1,6}\s*$/gm, "")
+    .replace(/^\s*(#{1,6})\s*(.+)$/gm, (_line, hashes: string, title: string) =>
+      `${hashes.length >= 3 ? "###" : "##"} ${title.trim()}`,
+    )
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function brandVoiceBlock(context: ArticleContext) {
   return [
     `Клиент (бренд): ${context.clientName}`,
@@ -182,79 +193,85 @@ function buildJsonLd(input: {
   return faqPage ? [article, faqPage] : [article];
 }
 
-async function generateArticleImages(input: {
+function articleImageSlots(brief: ArticleBrief, existing: unknown): ArticleImage[] {
+  const stored = Array.isArray(existing) ? existing as ArticleImage[] : [];
+  return brief.imagePlan.slice(0, 5).map((item, index) => ({
+    role: item.role,
+    sectionIndex: Math.max(0, item.sectionIndex),
+    url: stored[index]?.url ?? null,
+    caption: item.caption,
+    prompt: item.prompt,
+  }));
+}
+
+export function articleImageProgress(brief: unknown, images: unknown) {
+  const parsedBrief = ArticleBriefSchema.safeParse(brief);
+  if (!parsedBrief.success) return { ready: 0, total: 0, complete: false };
+  const slots = articleImageSlots(parsedBrief.data, images);
+  const ready = slots.filter((image) => Boolean(image.url)).length;
+  return { ready, total: slots.length, complete: slots.length > 0 && ready === slots.length };
+}
+
+async function generateNextArticleImage(input: {
   articleId: string;
   clientId: string;
   monthlyPlanId: string | null;
   context: ArticleContext;
   brief: ArticleBrief;
   title: string;
-}): Promise<ArticleImage[]> {
+  existingImages: unknown;
+}): Promise<{ images: ArticleImage[]; complete: boolean }> {
   const plan = input.brief.imagePlan.slice(0, 5);
-  const images: ArticleImage[] = [];
+  const images = articleImageSlots(input.brief, input.existingImages);
+  const nextIndex = images.findIndex((image) => !image.url);
+  if (nextIndex < 0) return { images, complete: images.length > 0 };
+
+  const item = plan[nextIndex];
   const visualBranding = await getClientVisualBranding(input.clientId);
 
-  for (const item of plan) {
-    const base: ArticleImage = {
-      role: item.role,
-      sectionIndex: Math.max(0, item.sectionIndex),
-      url: null,
-      caption: item.caption,
-      prompt: item.prompt,
-    };
+  const generated = await generateCreativeVisualVariant({
+    clientName: input.context.clientName,
+    clientIndustry: input.context.clientIndustry || null,
+    creativeAsset: {
+      assetType: item.role === "hero" ? "article_hero" : "article_inline",
+      title: input.title,
+      brief: item.prompt,
+      formatRequirements: "Wide editorial illustration for a long-form article, 3:2 landscape.",
+      textOnAsset: "",
+      references: null,
+      notes: "Editorial article illustration. Calm, premium, realistic. No text inside the image.",
+    },
+    scheduledPublication: {
+      platformName: input.context.platformTarget || "site_blog",
+      format: "article",
+      topic: input.context.topic,
+      scheduledDate: new Date().toISOString().slice(0, 10),
+      scheduledTime: null,
+    },
+    contentDraft: {
+      draftTitle: input.title,
+      draftBody: item.caption,
+      riskLevel: "low",
+      approvalRequired: false,
+    },
+    brandContext: input.context.brandContext || undefined,
+    brandLogoUrl: visualBranding.logoUrl,
+    brandTypography: visualBranding.typography,
+  });
 
-    try {
-      const generated = await generateCreativeVisualVariant({
-        clientName: input.context.clientName,
-        clientIndustry: input.context.clientIndustry || null,
-        creativeAsset: {
-          assetType: item.role === "hero" ? "article_hero" : "article_inline",
-          title: input.title,
-          brief: item.prompt,
-          formatRequirements: "Wide editorial illustration for a long-form article, 3:2 landscape.",
-          textOnAsset: "",
-          references: null,
-          notes: "Editorial article illustration. Calm, premium, realistic. No text inside the image.",
-        },
-        scheduledPublication: {
-          platformName: input.context.platformTarget || "site_blog",
-          format: "article",
-          topic: input.context.topic,
-          scheduledDate: new Date().toISOString().slice(0, 10),
-          scheduledTime: null,
-        },
-        contentDraft: {
-          draftTitle: input.title,
-          draftBody: item.caption,
-          riskLevel: "low",
-          approvalRequired: false,
-        },
-        brandContext: input.context.brandContext || undefined,
-        brandLogoUrl: visualBranding.logoUrl,
-        brandTypography: visualBranding.typography,
-      });
-
-      const stored = await storeGeneratedVisual({
-        imageBase64: generated.imageBase64,
-        mimeType: generated.mimeType,
-        clientId: input.clientId,
-        monthlyPlanId: input.monthlyPlanId ?? "articles",
-        creativeAssetId: input.articleId,
-      });
-
-      if (stored.storageProvider === "vercel_blob") {
-        images.push({ ...base, url: stored.imageUrl });
-      } else {
-        // No blob storage configured: keep the placeholder + prompt instead of heavy base64 in the Article row.
-        images.push(base);
-      }
-    } catch (error) {
-      console.error("Article image generation failed", error);
-      images.push(base);
-    }
+  const stored = await storeGeneratedVisual({
+    imageBase64: generated.imageBase64,
+    mimeType: generated.mimeType,
+    clientId: input.clientId,
+    monthlyPlanId: input.monthlyPlanId ?? "articles",
+    creativeAssetId: input.articleId,
+  });
+  if (stored.storageProvider !== "vercel_blob" || !stored.imageUrl) {
+    throw new Error("Изображение создано, но не сохранилось в хранилище.");
   }
 
-  return images;
+  images[nextIndex] = { ...images[nextIndex], url: stored.imageUrl };
+  return { images, complete: images.length > 0 && images.every((image) => Boolean(image.url)) };
 }
 
 function friendlyPipelineError(error: unknown) {
@@ -315,12 +332,9 @@ export async function runArticleForPlannedItem(plannedContentItemId: string) {
   if (!article) {
     return { ok: false as const, error: "Запланированный материал для статьи не найден." };
   }
-  if (article.stage === "done" && article.status !== "failed") {
-    return { ok: true as const, articleId: article.id };
-  }
-  const outcome = await runArticlePipeline(article.id);
+  const outcome = await runArticlePipeline(article.id, { singleStep: true });
   return outcome.ok
-    ? { ok: true as const, articleId: article.id }
+    ? { ok: true as const, articleId: article.id, done: outcome.done }
     : { ok: false as const, error: outcome.error, articleId: article.id };
 }
 
@@ -330,7 +344,7 @@ export function articleHeroUrl(images: unknown): string | null {
   return list.find((image) => image.role === "hero" && image.url)?.url ?? list.find((image) => image.url)?.url ?? null;
 }
 
-export async function runArticlePipeline(articleId: string) {
+export async function runArticlePipeline(articleId: string, options: { singleStep?: boolean } = {}) {
   const article = await prisma.article.findUnique({
     where: { id: articleId },
     include: { client: { select: { name: true, industry: true } } },
@@ -338,6 +352,24 @@ export async function runArticlePipeline(articleId: string) {
 
   if (!article) {
     return { ok: false as const, error: "Статья не найдена." };
+  }
+
+  let stage = (ARTICLE_STAGES as readonly string[]).includes(article.stage)
+    ? (article.stage as ArticleStage)
+    : "brief";
+  let brief = (article.briefJson as ArticleBrief | null) ?? null;
+  let body = article.bodyMarkdown;
+
+  if (stage === "done") {
+    const progress = articleImageProgress(brief, article.images);
+    if (progress.complete) return { ok: true as const, done: true as const, stage: "done" as const };
+    if (brief) {
+      stage = "images";
+      await prisma.article.update({
+        where: { id: articleId },
+        data: { stage, status: "generating", errorMessage: null },
+      });
+    }
   }
 
   const brandContext = await getClientBrandContext(article.clientId);
@@ -368,12 +400,6 @@ export async function runArticlePipeline(articleId: string) {
     data: { status: "generating", errorMessage: null, provider: writer.provider, model: writer.model },
   });
 
-  let stage = (ARTICLE_STAGES as readonly string[]).includes(article.stage)
-    ? (article.stage as ArticleStage)
-    : "brief";
-  let brief = (article.briefJson as ArticleBrief | null) ?? null;
-  let body = article.bodyMarkdown;
-
   try {
     if (stage === "brief") {
       brief = await runBriefStage(writer, context);
@@ -389,6 +415,7 @@ export async function runArticlePipeline(articleId: string) {
           sources: brief.sources as Prisma.InputJsonValue,
         },
       });
+      if (options.singleStep) return { ok: true as const, done: false as const, stage };
     }
 
     if (!brief) {
@@ -396,34 +423,36 @@ export async function runArticlePipeline(articleId: string) {
     }
 
     if (stage === "draft") {
-      body = await runDraftStage(writer, context, brief);
+      body = normalizeArticleMarkdown(await runDraftStage(writer, context, brief));
       stage = "humanize";
       await prisma.article.update({
         where: { id: articleId },
         data: { stage, bodyMarkdown: body, wordCount: countWords(body) },
       });
+      if (options.singleStep) return { ok: true as const, done: false as const, stage };
     }
 
     if (stage === "humanize") {
-      body = await runHumanizeStage(writer, context, body);
+      body = normalizeArticleMarkdown(await runHumanizeStage(writer, context, body));
       stage = "geo";
       await prisma.article.update({
         where: { id: articleId },
         data: { stage, bodyMarkdown: body, wordCount: countWords(body) },
       });
+      if (options.singleStep) return { ok: true as const, done: false as const, stage };
     }
 
     if (stage === "geo") {
       const geo = await runGeoStage(writer, context, brief, body);
-      body = geo.bodyMarkdown;
+      body = normalizeArticleMarkdown(geo.bodyMarkdown);
       stage = "images";
       await prisma.article.update({
         where: { id: articleId },
         data: {
           stage,
           title: geo.title,
-          bodyMarkdown: geo.bodyMarkdown,
-          wordCount: countWords(geo.bodyMarkdown),
+          bodyMarkdown: body,
+          wordCount: countWords(body),
           faq: geo.faq as Prisma.InputJsonValue,
           metaTitle: geo.metaTitle,
           metaDescription: geo.metaDescription,
@@ -431,22 +460,24 @@ export async function runArticlePipeline(articleId: string) {
           calloutNotes: geo.calloutNotes as Prisma.InputJsonValue,
         },
       });
+      if (options.singleStep) return { ok: true as const, done: false as const, stage };
     }
 
     if (stage === "images") {
       const fresh = await prisma.article.findUniqueOrThrow({
         where: { id: articleId },
-        select: { title: true, metaDescription: true, faq: true, monthlyPlanId: true },
+        select: { title: true, metaDescription: true, faq: true, monthlyPlanId: true, images: true },
       });
-      const images = await generateArticleImages({
+      const imageResult = await generateNextArticleImage({
         articleId,
         clientId: article.clientId,
         monthlyPlanId: fresh.monthlyPlanId,
         context,
         brief,
         title: fresh.title,
+        existingImages: fresh.images,
       });
-      const heroUrl = images.find((image) => image.role === "hero")?.url ?? null;
+      const heroUrl = imageResult.images.find((image) => image.role === "hero")?.url ?? null;
       const jsonLd = buildJsonLd({
         title: fresh.title,
         metaDescription: fresh.metaDescription ?? "",
@@ -457,17 +488,25 @@ export async function runArticlePipeline(articleId: string) {
 
       await prisma.article.update({
         where: { id: articleId },
-        data: {
-          stage: "done",
-          status: "draft",
-          errorMessage: null,
-          images: images as unknown as Prisma.InputJsonValue,
-          schemaJsonLd: jsonLd as Prisma.InputJsonValue,
-        },
+        data: imageResult.complete
+          ? {
+              stage: "done",
+              status: "draft",
+              errorMessage: null,
+              images: imageResult.images as unknown as Prisma.InputJsonValue,
+              schemaJsonLd: jsonLd as Prisma.InputJsonValue,
+            }
+          : {
+              stage: "images",
+              status: "generating",
+              errorMessage: null,
+              images: imageResult.images as unknown as Prisma.InputJsonValue,
+            },
       });
+      return { ok: true as const, done: imageResult.complete, stage: imageResult.complete ? "done" as const : "images" as const };
     }
 
-    return { ok: true as const };
+    return { ok: true as const, done: stage === "done", stage };
   } catch (error) {
     console.error("Article pipeline failed", error);
     const message = friendlyPipelineError(error);
