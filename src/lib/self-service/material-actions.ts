@@ -44,6 +44,7 @@ export async function regenerateSelfServiceVisual(formData: FormData) {
         client: true,
         contentDraft: true,
         scheduledPublication: true,
+        generatedVariants: { orderBy: { createdAt: "desc" }, take: 1 },
       },
     }),
     prisma.creditWallet.findUnique({ where: { clientId } }),
@@ -56,11 +57,15 @@ export async function regenerateSelfServiceVisual(formData: FormData) {
 
   try {
     const visualBranding = await getClientVisualBranding(clientId);
+    const sourceVariant = asset.generatedVariants[0] ?? null;
+    const sourceVisualUrl = sourceVariant?.imageUrl
+      ?? (sourceVariant?.imageBase64 ? `data:${sourceVariant.mimeType};base64,${sourceVariant.imageBase64}` : null);
     const generated = await generateCreativeVisualVariant({
       clientName: asset.client.name,
       clientIndustry: asset.client.industry,
       brandContext: await getClientBrandContext(clientId),
       brandLogoUrl: visualBranding.logoUrl,
+      sourceVisualUrl,
       brandTypography: visualBranding.typography,
       creativeAsset: {
         assetType: asset.assetType,

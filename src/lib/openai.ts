@@ -530,6 +530,7 @@ type CreativeVisualVariantInput = {
   };
   brandContext?: string;
   brandLogoUrl?: string | null;
+  sourceVisualUrl?: string | null;
   brandTypography?: string | null;
 };
 
@@ -584,6 +585,9 @@ function premiumVisualPrompt(input: CreativeVisualVariantInput, textMode: Visual
       ? `Brand and safety notes: ${input.creativeAsset.notes}`
       : null,
     input.brandContext ? `Brand context / Контекст бренда клиента:\n${input.brandContext}` : null,
+    input.sourceVisualUrl
+      ? "The first attached image is the current client-approved visual. Apply the requested revision to that image instead of creating an unrelated replacement. Preserve every element that the client did not ask to change."
+      : null,
     `Platform-native canvas: ${profile.instruction}`,
     `Draft title: ${input.contentDraft.draftTitle}.`,
     `Draft context: ${input.contentDraft.draftBody}`,
@@ -624,58 +628,72 @@ async function generateVisualWithOpenAI(input: CreativeVisualVariantInput) {
   let selectedSize: ImageSize = configuredImageSize ?? platformImageProfile(input).size;
   let response;
 
+  const loadReferenceImage = async (source: string, filename: string) => {
+    let contentType = "";
+    let imageBuffer: Buffer;
+
+    if (source.startsWith("data:")) {
+      const match = source.match(/^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/);
+      if (!match) throw new Error("Unsupported inline image reference");
+      contentType = match[1];
+      imageBuffer = Buffer.from(match[2], "base64");
+    } else {
+      const referenceUrl = new URL(source);
+      const hostname = referenceUrl.hostname.toLowerCase();
+      const blockedHost = hostname === "localhost"
+        || hostname.endsWith(".local")
+        || /^127\./.test(hostname)
+        || /^10\./.test(hostname)
+        || /^192\.168\./.test(hostname)
+        || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
+      if (!(["http:", "https:"] as string[]).includes(referenceUrl.protocol) || blockedHost) {
+        throw new Error("Unsupported image URL");
+      }
+
+      const referenceResponse = await fetch(referenceUrl, { signal: AbortSignal.timeout(12_000) });
+      if (!referenceResponse.ok) throw new Error(`Image download failed: ${referenceResponse.status}`);
+      const declaredLength = Number(referenceResponse.headers.get("content-length") || 0);
+      if (declaredLength > 10 * 1024 * 1024) throw new Error("Image file is too large");
+      contentType = (referenceResponse.headers.get("content-type") || "").split(";")[0].toLowerCase();
+      imageBuffer = Buffer.from(await referenceResponse.arrayBuffer());
+      if (contentType === "image/svg+xml" || referenceUrl.pathname.toLowerCase().endsWith(".svg")) {
+        const { default: sharp } = await import("sharp");
+        imageBuffer = await sharp(imageBuffer, { density: 300 }).png().toBuffer();
+        contentType = "image/png";
+      }
+    }
+
+    if (imageBuffer.byteLength > 10 * 1024 * 1024) throw new Error("Image file is too large");
+    if (!new Set(["image/png", "image/jpeg", "image/webp"]).has(contentType)) {
+      throw new Error(`Unsupported image content type: ${contentType || "unknown"}`);
+    }
+    const extension = contentType === "image/jpeg" ? "jpg" : contentType.split("/")[1];
+    return toFile(imageBuffer, `${filename}.${extension}`, { type: contentType });
+  };
+
   const generate = async (size: ImageSize) => {
-    if (input.brandLogoUrl) {
+    if (input.sourceVisualUrl || input.brandLogoUrl) {
       try {
-        const logoUrl = new URL(input.brandLogoUrl);
-        const hostname = logoUrl.hostname.toLowerCase();
-        const blockedHost = hostname === "localhost"
-          || hostname.endsWith(".local")
-          || /^127\./.test(hostname)
-          || /^10\./.test(hostname)
-          || /^192\.168\./.test(hostname)
-          || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
-        if (!(["http:", "https:"] as string[]).includes(logoUrl.protocol) || blockedHost) {
-          throw new Error("Unsupported logo URL");
-        }
-
-        const logoResponse = await fetch(logoUrl, { signal: AbortSignal.timeout(12_000) });
-        if (!logoResponse.ok) throw new Error(`Logo download failed: ${logoResponse.status}`);
-        const declaredLength = Number(logoResponse.headers.get("content-length") || 0);
-        if (declaredLength > 10 * 1024 * 1024) throw new Error("Logo file is too large");
-
-        let contentType = (logoResponse.headers.get("content-type") || "").split(";")[0].toLowerCase();
-        let logoBuffer = Buffer.from(await logoResponse.arrayBuffer());
-        if (logoBuffer.byteLength > 10 * 1024 * 1024) throw new Error("Logo file is too large");
-
-        if (contentType === "image/svg+xml" || logoUrl.pathname.toLowerCase().endsWith(".svg")) {
-          const { default: sharp } = await import("sharp");
-          logoBuffer = await sharp(logoBuffer, { density: 300 }).png().toBuffer();
-          contentType = "image/png";
-        }
-        if (!new Set(["image/png", "image/jpeg", "image/webp"]).has(contentType)) {
-          throw new Error(`Unsupported logo content type: ${contentType || "unknown"}`);
-        }
-
-        const extension = contentType === "image/jpeg" ? "jpg" : contentType.split("/")[1];
-        const logoFile = await toFile(logoBuffer, `client-logo.${extension}`, { type: contentType });
+        const referenceFiles: Array<Awaited<ReturnType<typeof toFile>>> = [];
+        if (input.sourceVisualUrl) referenceFiles.push(await loadReferenceImage(input.sourceVisualUrl, "current-visual"));
+        if (input.brandLogoUrl) referenceFiles.push(await loadReferenceImage(input.brandLogoUrl, "client-logo"));
         return await openai.images.edit({
           model: imageModel,
-          image: logoFile,
+          image: referenceFiles.length === 1 ? referenceFiles[0] : referenceFiles,
           prompt,
           n: 1,
           size,
           quality: imageQuality,
         });
       } catch (error) {
-        console.error("Exact logo reference could not be supplied to the image model", error);
+        console.error("Visual reference could not be supplied to the image model", error);
       }
     }
 
     return openai.images.generate({
       model: imageModel,
-      prompt: input.brandLogoUrl
-        ? `${prompt}\nThe verified logo reference was unavailable for this request. Do not render any logo or brand mark.`
+      prompt: input.sourceVisualUrl || input.brandLogoUrl
+        ? `${prompt}\nThe requested image references were unavailable for this request. Do not invent a logo or brand mark.`
         : prompt,
       n: 1,
       size,

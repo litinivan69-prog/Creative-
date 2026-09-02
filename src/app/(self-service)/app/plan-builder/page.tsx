@@ -22,14 +22,21 @@ export default async function SelfServicePlanBuilderPage({ searchParams }: { sea
   if (!membership) redirect("/start");
 
   await grantTrialCredits(membership.client.id);
+  const currentMonth = new Date().toISOString().slice(0, 7);
   const [wallet, draft, currentPlan] = await Promise.all([
     prisma.creditWallet.findUnique({ where: { clientId: membership.client.id } }),
-    prisma.selfServiceContentOrder.findFirst({ where: { clientId: membership.client.id, status: "draft" }, orderBy: { updatedAt: "desc" } }),
-    prisma.monthlyOperatingPlan.findFirst({ where: { clientId: membership.client.id, month: new Date().toISOString().slice(0, 7), status: { notIn: ["archived", "replaced"] } }, select: { id: true } }),
+    prisma.selfServiceContentOrder.findFirst({ where: { clientId: membership.client.id, month: currentMonth, status: "draft" }, orderBy: { updatedAt: "desc" } }),
+    prisma.monthlyOperatingPlan.findFirst({
+      where: { clientId: membership.client.id, status: { notIn: ["archived", "replaced"] } },
+      orderBy: [{ month: "desc" }, { createdAt: "desc" }],
+      select: { id: true, month: true },
+    }),
   ]);
   const initial = draft?.configuration && typeof draft.configuration === "object" && !Array.isArray(draft.configuration)
     ? { ...defaultConfiguration, ...(draft.configuration as typeof defaultConfiguration) }
     : defaultConfiguration;
 
-  return <SelfServiceAppShell brandName={membership.client.name} active="builder" eyebrow={currentPlan ? "Дополнить текущий месяц" : "Конструктор месяца"} title={currentPlan ? "Добавьте только новые материалы." : "Выберите только то, что нужно."} description={currentPlan ? "Готовый месяц останется без изменений. Новые посты или статьи добавятся в свободные даты и будут посчитаны отдельно." : "Любое количество постов, статей и дополнительных материалов. Стоимость в кредитах видна сразу — без скрытых лимитов."}><ContentMixBuilder balance={wallet?.balance ?? 0} unlimited={isRibesAdminEmail(email)} initial={currentPlan ? { ...defaultConfiguration, vkPosts: 0, telegramPosts: 0, dzenArticles: 0 } : initial} notice={query.notice} error={query.error} hasExistingPlan={Boolean(currentPlan)} /></SelfServiceAppShell>;
+  const emptyAddition = { ...defaultConfiguration, vkPosts: 0, telegramPosts: 0, dzenArticles: 0 };
+
+  return <SelfServiceAppShell brandName={membership.client.name} active="builder" eyebrow={currentPlan ? `Дополнить план ${currentPlan.month}` : "Конструктор месяца"} title={currentPlan ? "Добавьте только новые материалы." : "Выберите только то, что нужно."} description={currentPlan ? "Готовый месяц останется без изменений. Новые посты, статьи или карусели добавятся в свободные даты и будут посчитаны отдельно." : "Любое количество постов, статей и дополнительных материалов. Стоимость в кредитах видна сразу — без скрытых лимитов."}><ContentMixBuilder balance={wallet?.balance ?? 0} unlimited={isRibesAdminEmail(email)} initial={currentPlan ? emptyAddition : initial} notice={query.notice} error={query.error} hasExistingPlan={Boolean(currentPlan)} /></SelfServiceAppShell>;
 }
