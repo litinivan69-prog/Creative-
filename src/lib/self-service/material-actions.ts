@@ -113,6 +113,10 @@ export async function regenerateSelfServiceVisual(formData: FormData) {
             where: { id: currentWallet.id },
             data: { balance: { decrement: revisionCost }, lifetimeSpent: { increment: revisionCost } },
           });
+      await tx.generatedCreativeVariant.updateMany({
+        where: { creativeAssetId: asset.id, status: "approved" },
+        data: { status: "generated" },
+      });
       const createdVariant = await tx.generatedCreativeVariant.create({
         data: {
           clientId,
@@ -131,7 +135,7 @@ export async function regenerateSelfServiceVisual(formData: FormData) {
           storageProvider: stored.storageProvider,
           fileSize: stored.fileSize,
           mimeType: generated.mimeType,
-          status: "generated",
+          status: "approved",
           source: generated.provider,
           provider: generated.provider,
           model: generated.model,
@@ -172,6 +176,35 @@ export async function regenerateSelfServiceVisual(formData: FormData) {
   revalidatePath("/app/month");
   revalidatePath(`/app/month/${itemId}`);
   redirect(`/app/month/${itemId}?notice=visual_revised`);
+}
+
+export async function selectSelfServiceVisualVariant(formData: FormData) {
+  const itemId = String(formData.get("itemId") ?? "").trim();
+  const creativeAssetId = String(formData.get("creativeAssetId") ?? "").trim();
+  const variantId = String(formData.get("variantId") ?? "").trim();
+  const clientId = await currentClientId();
+
+  if (!clientId) redirect(`/sign-in?callbackUrl=/app/month/${encodeURIComponent(itemId)}`);
+  const variant = await prisma.generatedCreativeVariant.findFirst({
+    where: { id: variantId, creativeAssetId, plannedContentItemId: itemId, clientId },
+    select: { id: true },
+  });
+  if (!variant) redirect(`/app/month/${encodeURIComponent(itemId)}?error=visual_missing`);
+
+  await prisma.$transaction([
+    prisma.generatedCreativeVariant.updateMany({
+      where: { creativeAssetId, status: "approved" },
+      data: { status: "generated" },
+    }),
+    prisma.generatedCreativeVariant.update({
+      where: { id: variant.id },
+      data: { status: "approved", qualityStatus: "approved" },
+    }),
+  ]);
+
+  revalidatePath("/app/month");
+  revalidatePath(`/app/month/${itemId}`);
+  redirect(`/app/month/${itemId}?notice=visual_selected`);
 }
 
 export async function saveSelfServiceMaterialText(formData: FormData) {

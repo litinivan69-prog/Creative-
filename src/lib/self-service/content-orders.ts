@@ -8,6 +8,7 @@ export const SELF_SERVICE_CONTENT_ORDER_FIELDS = [
   "dzenArticles",
   "vcruArticles",
   "carousels",
+  "carouselSlides",
   "quickAnnouncements",
   "reviewReplies",
 ] as const;
@@ -19,6 +20,7 @@ export const SelfServiceContentOrderConfigurationSchema = z.object({
   dzenArticles: z.number().int().min(0).max(20),
   vcruArticles: z.number().int().min(0).max(20),
   carousels: z.number().int().min(0).max(30),
+  carouselSlides: z.number().int().min(1).max(4).default(4),
   carouselPlatform: z.enum(["vk", "telegram", "both"]).default("vk"),
   quickAnnouncements: z.number().int().min(0).max(100),
   reviewReplies: z.number().int().min(0).max(100),

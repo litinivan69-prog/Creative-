@@ -15,6 +15,7 @@ import { ArticleImageRunner } from "@/app/(self-service)/app/articles/article-im
 import { articleImageProgress } from "@/lib/article-engine";
 import { VisualRevisionForm } from "@/app/(self-service)/app/month/[itemId]/visual-revision-form";
 import { CREDIT_PRODUCTS, displayCredits } from "@/lib/self-service/credit-catalog";
+import { VisualGallery, type VisualGalleryGroup } from "@/app/(self-service)/app/month/[itemId]/visual-gallery";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -86,7 +87,7 @@ export default async function SelfServiceMaterialPage({
       generatedCreativeVariants: { orderBy: { createdAt: "desc" } },
       creativeAssets: {
         orderBy: { createdAt: "asc" },
-        include: { generatedVariants: { orderBy: { createdAt: "desc" }, take: 1 } },
+        include: { generatedVariants: { orderBy: { createdAt: "desc" } } },
       },
       scheduledPublications: {
         orderBy: { createdAt: "desc" },
@@ -109,12 +110,21 @@ export default async function SelfServiceMaterialPage({
     .map((image, sourceIndex) => ({ image, sourceIndex }))
     .filter((entry) => Boolean(entry.image.url));
   const articleProgress = article ? articleImageProgress(article.briefJson, article.images) : null;
-  const visualVariants = slides.length > 0
-    ? slides.flatMap((asset) => asset.generatedVariants)
-    : item.generatedCreativeVariants.slice(0, 1);
-  const generatedVisuals = visualVariants
-    .map((variant, index) => ({ id: variant.id, creativeAssetId: variant.creativeAssetId, src: variantSource(variant), downloadHref: `/api/self-service/materials/${item.id}/visuals?variant=${variant.id}`, label: slides.length ? `Слайд ${index + 1}` : "Визуал" }))
-    .filter((visual): visual is { id: string; creativeAssetId: string; src: string; downloadHref: string; label: string } => Boolean(visual.src));
+  const visualGroups: VisualGalleryGroup[] = (slides.length > 0
+    ? slides.map((asset, index) => ({ creativeAssetId: asset.id, label: `Слайд ${index + 1}`, variants: asset.generatedVariants }))
+    : item.creativeAssets.slice(0, 1).map((asset) => ({ creativeAssetId: asset.id, label: "Визуал", variants: item.generatedCreativeVariants.filter((variant) => variant.creativeAssetId === asset.id) })))
+    .map((group) => ({
+      creativeAssetId: group.creativeAssetId,
+      label: group.label,
+      variants: group.variants.map((variant) => ({ id: variant.id, src: variantSource(variant), status: variant.status, downloadHref: `/api/self-service/materials/${item.id}/visuals?variant=${variant.id}` })).filter((variant): variant is { id: string; src: string; status: string; downloadHref: string } => Boolean(variant.src)),
+    }))
+    .filter((group) => group.variants.length > 0);
+  const generatedVisuals = visualGroups
+    .map((group) => {
+      const variant = group.variants.find((candidate) => candidate.status === "approved") ?? group.variants[0];
+      return variant ? { ...variant, creativeAssetId: group.creativeAssetId, label: group.label } : null;
+    })
+    .filter((visual): visual is { id: string; creativeAssetId: string; src: string; downloadHref: string; label: string; status: string } => Boolean(visual));
   const visuals = isArticle
     ? articleImages.map(({ image, sourceIndex }, index) => ({
         id: `article-image-${sourceIndex}`,
@@ -157,6 +167,7 @@ export default async function SelfServiceMaterialPage({
         {query.notice === "published" ? <div className="mb-5 rounded-2xl border border-violet-400/15 bg-violet-500/10 px-4 py-3 text-xs font-semibold text-violet-100">Материал опубликован.</div> : null}
         {query.notice === "schedule_saved" ? <div className="mb-5 rounded-2xl border border-violet-400/15 bg-violet-500/10 px-4 py-3 text-xs font-semibold text-violet-100">Дата и время сохранены.</div> : null}
         {query.notice === "visual_revised" ? <div className="mb-5 rounded-2xl border border-violet-400/15 bg-violet-500/10 px-4 py-3 text-xs font-semibold text-violet-100">Правки внесены. Предыдущий вариант сохранён в истории.</div> : null}
+        {query.notice === "visual_selected" ? <div className="mb-5 rounded-2xl border border-violet-400/15 bg-violet-500/10 px-4 py-3 text-xs font-semibold text-violet-100">Вариант выбран. Именно он будет использован при публикации.</div> : null}
         {query.notice === "already_published" ? <div className="mb-5 rounded-2xl border border-violet-400/15 bg-violet-500/10 px-4 py-3 text-xs font-semibold text-violet-100">Материал уже был опубликован — повтор не создавался.</div> : null}
         {query.error ? <div className="mb-5 rounded-2xl border border-rose-400/15 bg-rose-500/10 px-4 py-3 text-xs text-rose-100">{query.error === "text_not_ready" ? "Текст пока готовится." : query.error === "material_not_ready" ? "Сначала дождитесь текста и всех изображений." : query.error === "credits" ? "Не хватает кредитов для внесения правок в визуал." : query.error === "revision_instruction" ? "Напишите, что именно нужно исправить — от 5 до 1000 символов." : query.error === "visual_missing" ? "Не удалось найти исходный визуал." : query.error === "visual_revision_failed" ? "Не удалось внести правки. Кредиты не списаны — попробуйте ещё раз позже." : query.error === "confirm_first" ? "Сначала подтвердите готовность материала." : query.error === "publication_missing" ? "Публикация ещё не добавлена в календарь." : query.error === "publication_url_invalid" ? "Проверьте ссылку на опубликованный материал." : query.error === "manual_export_only" ? "Для статей Дзен и VC.ru пока используйте скачивание и ручное размещение." : query.error === "schedule_invalid" ? "Проверьте дату и время публикации." : query.error === "already_published" ? "Опубликованный материал уже нельзя перепланировать." : "Не удалось опубликовать. Проверьте подключение площадки и попробуйте ещё раз."}</div> : null}
 
@@ -171,8 +182,7 @@ export default async function SelfServiceMaterialPage({
               <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] px-5 py-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-violet-300">{isArticle ? "Визуалы статьи" : "Визуал"}</p><p className="mt-1 text-xs font-medium text-white/55">{slides.length > 0 ? `Карусель · ${visuals.length}/${slides.length}` : isArticle ? `${visuals.length} ${visuals.length === 1 ? "изображение" : "изображения"}: обложка и иллюстрации` : "Изображение поста"}</p></div>{visuals[0] ? <a href={visuals[0].downloadHref} className="rounded-xl border border-white/[0.07] bg-white/[0.035] px-3 py-2 text-[10px] font-semibold text-white/55 transition hover:bg-white/[0.06] hover:text-white">Скачать {isArticle ? "обложку" : visuals.length > 1 ? "первый" : ""}</a> : null}</div>
               {visuals.length > 0 ? (
                 <div className="p-3">
-                  <a href={visuals[0].src} target="_blank" rel="noreferrer" className="relative block overflow-hidden rounded-[18px] bg-black/25" aria-label="Открыть изображение"><img src={visuals[0].src} alt={isArticle ? "Обложка статьи" : "Основной визуал"} className={`${isArticle ? "aspect-[16/9]" : "aspect-square"} h-full w-full object-cover`} />{visuals.length > 1 ? <span className="absolute bottom-3 right-3 rounded-full bg-black/65 px-2.5 py-1 text-[9px] font-semibold text-white/75 backdrop-blur">1 / {visuals.length}</span> : null}<span className="absolute bottom-3 left-3 rounded-full bg-black/65 px-2.5 py-1 text-[9px] text-white/70 backdrop-blur">Открыть крупнее</span></a>
-                  {visuals.length > 1 ? <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">{visuals.slice(1, 5).map((visual, index) => <a key={visual.id} href={visual.src} target="_blank" rel="noreferrer" aria-label={`Открыть: ${visual.label}`} className="group relative overflow-hidden rounded-xl border border-white/[0.06] bg-black/20"><img src={visual.src} alt={visual.label} className={`${isArticle ? "aspect-[3/2]" : "aspect-square"} h-full w-full object-cover opacity-75 transition group-hover:opacity-100`} /><span className="absolute inset-x-1.5 bottom-1.5 truncate rounded-md bg-black/65 px-1.5 py-1 text-[8px] text-white/70 backdrop-blur">{visual.label}</span>{index === 3 && visuals.length > 5 ? <span className="absolute inset-0 grid place-items-center bg-black/65 text-xs font-semibold text-white">+{visuals.length - 5}</span> : null}</a>)}</div> : null}
+                  {!isArticle ? <VisualGallery itemId={item.id} groups={visualGroups} /> : <><a href={visuals[0].src} target="_blank" rel="noreferrer" className="relative block overflow-hidden rounded-[18px] bg-black/25" aria-label="Открыть изображение"><img src={visuals[0].src} alt="Обложка статьи" className="aspect-[16/9] h-full w-full object-cover" />{visuals.length > 1 ? <span className="absolute bottom-3 right-3 rounded-full bg-black/65 px-2.5 py-1 text-[9px] font-semibold text-white/75 backdrop-blur">1 / {visuals.length}</span> : null}<span className="absolute bottom-3 left-3 rounded-full bg-black/65 px-2.5 py-1 text-[9px] text-white/70 backdrop-blur">Открыть крупнее</span></a>{visuals.length > 1 ? <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">{visuals.slice(1, 5).map((visual, index) => <a key={visual.id} href={visual.src} target="_blank" rel="noreferrer" aria-label={`Открыть: ${visual.label}`} className="group relative overflow-hidden rounded-xl border border-white/[0.06] bg-black/20"><img src={visual.src} alt={visual.label} className="aspect-[3/2] h-full w-full object-cover opacity-75 transition group-hover:opacity-100" /><span className="absolute inset-x-1.5 bottom-1.5 truncate rounded-md bg-black/65 px-1.5 py-1 text-[8px] text-white/70 backdrop-blur">{visual.label}</span>{index === 3 && visuals.length > 5 ? <span className="absolute inset-0 grid place-items-center bg-black/65 text-xs font-semibold text-white">+{visuals.length - 5}</span> : null}</a>)}</div> : null}</>}
                   {!isArticle && generatedVisuals.length > 0 ? <div className="mt-3 grid gap-2">{generatedVisuals.map((visual) => <VisualRevisionForm key={`revision-${visual.id}`} itemId={item.id} creativeAssetId={visual.creativeAssetId} label={slides.length ? visual.label.toLowerCase() : "визуал"} costLabel={unlimited ? "без списания" : `${displayCredits(revisionCost)} кредитов`} availabilityLabel={unlimited ? "Для администратора количество правок не ограничено" : `По текущему балансу доступно правок: ${availableRevisions}`} />)}</div> : null}
                 </div>
               ) : (

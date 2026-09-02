@@ -53,7 +53,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ ite
     include: {
       creativeAssets: {
         orderBy: { createdAt: "asc" },
-        include: { generatedVariants: { orderBy: { createdAt: "desc" }, take: 1 } },
+        include: { generatedVariants: { orderBy: { createdAt: "desc" } } },
       },
       generatedCreativeVariants: { orderBy: { createdAt: "desc" } },
     },
@@ -61,14 +61,17 @@ export async function GET(request: NextRequest, context: { params: Promise<{ ite
   if (!item) return new Response("Материал не найден", { status: 404 });
 
   const slides = item.creativeAssets.filter((asset) => asset.assetType === "carousel_slide");
-  const visuals: VisualFile[] = slides.length > 0
+  const allVisuals: VisualFile[] = slides.length > 0
     ? slides.flatMap((asset) => asset.generatedVariants)
-    : item.generatedCreativeVariants.slice(0, 1);
+    : item.generatedCreativeVariants;
+  const visuals: VisualFile[] = slides.length > 0
+    ? slides.flatMap((asset) => asset.generatedVariants.find((variant) => variant.status === "approved") ?? asset.generatedVariants[0] ?? [])
+    : [item.generatedCreativeVariants.find((variant) => variant.status === "approved") ?? item.generatedCreativeVariants[0]].filter((visual): visual is NonNullable<typeof visual> => Boolean(visual));
   const requestedId = request.nextUrl.searchParams.get("variant");
   const inline = request.nextUrl.searchParams.get("inline") === "1";
 
   if (requestedId) {
-    const visual = visuals.find((candidate) => candidate.id === requestedId);
+    const visual = allVisuals.find((candidate) => candidate.id === requestedId);
     if (!visual) return new Response("Визуал не найден", { status: 404 });
     const bytes = await visualBytes(visual);
     if (!bytes) return new Response("Файл визуала недоступен", { status: 404 });
