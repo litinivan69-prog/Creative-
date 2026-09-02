@@ -21,15 +21,36 @@ export function ArticleCopyButton({ targetId }: { targetId: string }) {
     const html = `<article style="font-family:Arial,sans-serif;color:#111;max-width:760px;">${clone.innerHTML.trim()}</article>`;
 
     try {
-      if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
-        await navigator.clipboard.write([
-          new ClipboardItem({
-            "text/plain": new Blob([plainText], { type: "text/plain" }),
-            "text/html": new Blob([html], { type: "text/html" }),
-          }),
-        ]);
-      } else {
-        await navigator.clipboard.writeText(plainText);
+      const richCopyHost = document.createElement("div");
+      richCopyHost.setAttribute("contenteditable", "true");
+      richCopyHost.setAttribute("aria-hidden", "true");
+      richCopyHost.style.position = "fixed";
+      richCopyHost.style.left = "-10000px";
+      richCopyHost.style.top = "0";
+      richCopyHost.style.width = "760px";
+      richCopyHost.innerHTML = html;
+      document.body.appendChild(richCopyHost);
+
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(richCopyHost);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      const copiedAsRichContent = document.execCommand("copy");
+      selection?.removeAllRanges();
+      richCopyHost.remove();
+
+      if (!copiedAsRichContent) {
+        if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              "text/plain": new Blob([plainText], { type: "text/plain" }),
+              "text/html": new Blob([html], { type: "text/html" }),
+            }),
+          ]);
+        } else {
+          await navigator.clipboard.writeText(plainText);
+        }
       }
       setState("copied");
       window.setTimeout(() => setState("idle"), 2200);
@@ -45,7 +66,7 @@ export function ArticleCopyButton({ targetId }: { targetId: string }) {
       onClick={copyArticle}
       className="rounded-xl bg-violet-500 px-4 py-3 text-xs font-semibold text-white transition hover:bg-violet-400"
     >
-      {state === "copied" ? "Статья скопирована" : state === "failed" ? "Не удалось скопировать" : "Скопировать с форматированием"}
+      {state === "copied" ? "Скопировано для вставки" : state === "failed" ? "Не удалось скопировать" : "Скопировать с форматированием"}
     </button>
   );
 }

@@ -2187,8 +2187,8 @@ async function currentSelfServiceWorkspace() {
           },
           briefs: { orderBy: { createdAt: "desc" }, take: 1, include: { blueprint: true } },
           monthlyPlans: {
-            where: { month: currentMonth(), status: { notIn: ["archived", "replaced"] } },
-            orderBy: { createdAt: "desc" },
+            where: { status: { notIn: ["archived", "replaced"] } },
+            orderBy: [{ month: "desc" }, { createdAt: "desc" }],
             take: 1,
           },
         },
@@ -2425,10 +2425,10 @@ export async function addSelfServiceContentToCurrentMonth(formData: FormData) {
       client: {
         select: {
           monthlyPlans: {
-            where: { month: currentMonth(), status: { notIn: ["archived", "replaced"] } },
-            orderBy: { createdAt: "desc" },
+            where: { status: { notIn: ["archived", "replaced"] } },
+            orderBy: [{ month: "desc" }, { createdAt: "desc" }],
             take: 1,
-            select: { id: true },
+            select: { id: true, month: true },
           },
         },
       },
@@ -2437,6 +2437,7 @@ export async function addSelfServiceContentToCurrentMonth(formData: FormData) {
   if (!membership) redirect("/start");
   const monthlyPlanId = membership.client.monthlyPlans[0]?.id;
   if (!monthlyPlanId) redirect("/app/plan-builder?error=month_missing");
+  const planMonth = membership.client.monthlyPlans[0].month;
 
   const configuration = contentOrderConfigurationFromFormData(formData);
   const estimatedCredits = estimateContentOrderCredits(configuration);
@@ -2445,7 +2446,7 @@ export async function addSelfServiceContentToCurrentMonth(formData: FormData) {
   const order = await prisma.selfServiceContentOrder.create({
     data: {
       clientId: membership.clientId,
-      month: currentMonth(),
+      month: planMonth,
       status: "draft",
       configuration,
       estimatedCredits,
@@ -2456,7 +2457,7 @@ export async function addSelfServiceContentToCurrentMonth(formData: FormData) {
     const transaction = await spendCredits({
       clientId: membership.clientId,
       credits: estimatedCredits,
-      description: `Дополнительные материалы на ${currentMonth()}`,
+      description: `Дополнительные материалы на ${planMonth}`,
       idempotencyKey: `content-addition:${order.id}`,
       referenceType: "self_service_content_order",
       referenceId: order.id,
