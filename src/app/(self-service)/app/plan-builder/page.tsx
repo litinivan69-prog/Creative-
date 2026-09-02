@@ -11,7 +11,7 @@ import { isRibesAdminEmail } from "@/lib/self-service/admin-access";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Собрать месяц · Ribes", robots: { index: false, follow: false } };
 
-const defaultConfiguration = { vkPosts: 1, telegramPosts: 1, okPosts: 0, dzenArticles: 1, vcruArticles: 0, carousels: 0, carouselPlatform: "vk" as const, quickAnnouncements: 0, reviewReplies: 0 };
+const defaultConfiguration = { vkPosts: 1, telegramPosts: 1, okPosts: 0, dzenArticles: 1, vcruArticles: 0, carousels: 0, carouselSlides: 4, carouselPlatform: "vk" as const, quickAnnouncements: 0, reviewReplies: 0 };
 
 export default async function SelfServicePlanBuilderPage({ searchParams }: { searchParams: Promise<{ notice?: string; error?: string }> }) {
   const query = await searchParams;

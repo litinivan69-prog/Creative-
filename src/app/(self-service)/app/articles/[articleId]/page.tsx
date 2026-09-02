@@ -11,6 +11,7 @@ import { articleImageProgress } from "@/lib/article-engine";
 import { parseArticleMarkdown } from "@/lib/article-markdown";
 import { prisma } from "@/lib/prisma";
 import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
+import { publishSelfServiceMaterialNow } from "@/lib/self-service/channel-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -20,11 +21,11 @@ export const metadata: Metadata = {
 };
 
 function platformLabel(value: string | null) {
-  return /vc\.ru|виси/i.test(value ?? "") ? "VC.ru" : "Дзен";
+  return /vc\.?ru|vcru|виси/i.test(value ?? "") ? "VC.ru" : "Дзен";
 }
 
 function editorUrl(value: string | null) {
-  return /vc\.ru|виси/i.test(value ?? "") ? "https://vc.ru/new" : "https://dzen.ru/profile/editor";
+  return /vc\.?ru|vcru|виси/i.test(value ?? "") ? "https://vc.ru/new" : "https://dzen.ru/profile/editor";
 }
 
 export default async function SelfServiceArticlePreviewPage({
@@ -39,7 +40,7 @@ export default async function SelfServiceArticlePreviewPage({
 
   const membership = await prisma.workspaceMembership.findFirst({
     where: await selfServiceMembershipWhere(email),
-    select: { clientId: true, client: { select: { name: true } } },
+    select: { clientId: true, client: { select: { name: true, channels: { where: { platform: "vcru", status: "active" }, select: { id: true, autopublishEnabled: true } } } } },
   });
   if (!membership) redirect("/start");
 
@@ -47,6 +48,10 @@ export default async function SelfServiceArticlePreviewPage({
     where: { id: articleId, clientId: membership.clientId, status: { not: "archived" } },
   });
   if (!article) notFound();
+  const plannedItem = article.plannedContentItemId ? await prisma.plannedContentItem.findFirst({
+    where: { id: article.plannedContentItemId, monthlyPlan: { clientId: membership.clientId } },
+    select: { platformName: true, contentDraft: { select: { status: true } }, scheduledPublications: { orderBy: { createdAt: "desc" }, take: 1, select: { scheduledDate: true, scheduledTime: true, publishStatus: true } } },
+  }) : null;
 
   const images = (article.images as ArticleImage[] | null) ?? [];
   const callouts = (article.calloutNotes as ArticleCallout[] | null) ?? [];
@@ -64,7 +69,12 @@ export default async function SelfServiceArticlePreviewPage({
     { label: "Частые вопросы", detail: `${faq.length} вопросов`, ok: faq.length >= 4 },
   ];
   const readyChecks = checks.filter((check) => check.ok).length;
-  const platform = platformLabel(article.platformTarget);
+  const effectivePlatform = plannedItem?.platformName || article.platformTarget;
+  const platform = platformLabel(effectivePlatform);
+  const isVc = platform === "VC.ru";
+  const vcChannel = membership.client.channels[0] ?? null;
+  const publication = plannedItem?.scheduledPublications[0] ?? null;
+  const canPublishVc = Boolean(vcChannel && article.plannedContentItemId && ["approved", "ready_to_schedule"].includes(plannedItem?.contentDraft?.status ?? ""));
   const itemHref = article.plannedContentItemId ? `/app/month/${article.plannedContentItemId}` : "/app/articles";
 
   return (
@@ -112,13 +122,8 @@ export default async function SelfServiceArticlePreviewPage({
           </section>
 
           <section className={`${darkCardClass} p-5`}>
-            <p className="text-sm font-semibold text-white/75">Размещение на {platform}</p>
-            <p className="mt-2 text-[10px] leading-4 text-white/30">Скопируйте материал с форматированием. Изображения можно открыть и скачать прямо из предпросмотра или получить вместе с документом.</p>
-            <div className="mt-4 grid gap-2">
-              <ArticleCopyButton targetId="article-publication-preview" />
-              <a href={`/api/self-service/articles/${article.id}/docx`} className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-center text-xs font-semibold text-white/60 transition hover:bg-white/[0.07]">Скачать документ</a>
-              <a href={editorUrl(article.platformTarget)} target="_blank" rel="noreferrer" className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-center text-xs font-semibold text-white/60 transition hover:bg-white/[0.07]">Открыть редактор {platform} ↗</a>
-            </div>
+            <p className="text-sm font-semibold text-white/75">{isVc ? "Автопубликация на VC.ru" : `Размещение в ${platform}`}</p>
+            {isVc ? <><p className="mt-2 text-[10px] leading-4 text-white/30">{vcChannel ? publication ? `Дата установлена: ${publication.scheduledDate}${publication.scheduledTime ? ` · ${publication.scheduledTime}` : ""}. ${vcChannel.autopublishEnabled ? "После подтверждения система опубликует статью автоматически." : "Автопубликацию можно включить в настройках площадки."}` : "VC.ru подключён. Вернитесь в материал, чтобы установить дату и подтвердить публикацию." : "Подключите API VC.ru один раз. После этого статья, изображения и установленная дата будут передаваться автоматически."}</p><div className="mt-4 grid gap-2">{!vcChannel ? <Link href="/app/channels" className="rounded-xl bg-violet-500 px-4 py-3 text-center text-xs font-semibold text-white">Подключить API VC.ru</Link> : canPublishVc ? <form action={publishSelfServiceMaterialNow}><input type="hidden" name="itemId" value={article.plannedContentItemId ?? ""} /><button className="w-full rounded-xl bg-violet-500 px-4 py-3 text-xs font-semibold text-white">Опубликовать сейчас</button></form> : <Link href={itemHref} className="rounded-xl bg-violet-500 px-4 py-3 text-center text-xs font-semibold text-white">Подтвердить и назначить дату</Link>}<a href={`/api/self-service/articles/${article.id}/docx`} className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-center text-xs font-semibold text-white/60 transition hover:bg-white/[0.07]">Скачать резервную копию</a></div></> : <><p className="mt-2 text-[10px] leading-4 text-white/30">Скопируйте материал с форматированием. Изображения можно открыть и скачать прямо из предпросмотра или получить вместе с документом.</p><div className="mt-4 grid gap-2"><ArticleCopyButton targetId="article-publication-preview" /><a href={`/api/self-service/articles/${article.id}/docx`} className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-center text-xs font-semibold text-white/60 transition hover:bg-white/[0.07]">Скачать документ</a><a href={editorUrl(effectivePlatform)} target="_blank" rel="noreferrer" className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-center text-xs font-semibold text-white/60 transition hover:bg-white/[0.07]">Открыть редактор {platform} ↗</a></div></>}
           </section>
 
           <section className={`${darkCardClass} p-5`}>
