@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { saveSelfServiceMaterialText } from "@/lib/self-service/material-actions";
+import { regenerateSelfServicePublicationText } from "@/app/actions";
 
-export function MaterialEditor(props: { itemId: string; initialBody: string; ready: boolean; article?: boolean }) {
+export function MaterialEditor(props: { itemId: string; initialBody: string; ready: boolean; article?: boolean; carousel?: boolean }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [body, setBody] = useState(props.initialBody);
   const [copied, setCopied] = useState(false);
@@ -44,7 +45,7 @@ export function MaterialEditor(props: { itemId: string; initialBody: string; rea
         className={`${props.article ? "min-h-[720px]" : "min-h-[420px]"} w-full resize-none overflow-hidden rounded-[20px] border border-white/[0.07] bg-black/20 px-5 py-5 text-[15px] leading-7 text-white/72 outline-none transition placeholder:text-white/20 focus:border-violet-400/35 focus:bg-black/30 focus:ring-4 focus:ring-violet-500/[0.06]`}
       />
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3"><button type="button" onClick={copyText} className="rounded-xl border border-white/[0.07] bg-white/[0.035] px-4 py-2.5 text-xs font-semibold text-white/52 transition hover:bg-white/[0.06] hover:text-white/80">{copied ? "Скопировано" : "Скопировать"}</button>{props.article ? <span className="text-[10px] text-white/25">{wordCount.toLocaleString("ru-RU")} слов · ≈ {readingMinutes} мин</span> : null}</div>
+        <div className="flex flex-wrap items-center gap-3"><button type="button" onClick={copyText} className="rounded-xl border border-white/[0.07] bg-white/[0.035] px-4 py-2.5 text-xs font-semibold text-white/52 transition hover:bg-white/[0.06] hover:text-white/80">{copied ? "Скопировано" : "Скопировать"}</button>{props.carousel ? <button formAction={regenerateSelfServicePublicationText} className="rounded-xl border border-violet-400/15 bg-violet-500/[0.08] px-4 py-2.5 text-xs font-semibold text-violet-200 transition hover:bg-violet-500/15">Переписать как текст публикации</button> : null}{props.article ? <span className="text-[10px] text-white/25">{wordCount.toLocaleString("ru-RU")} слов · ≈ {readingMinutes} мин</span> : null}</div>
         <div className="flex items-center gap-3"><span className="text-[10px] text-white/22">{changed ? "есть изменения" : "сохранено"}</span><button disabled={!changed} className="rounded-xl bg-violet-500 px-5 py-2.5 text-xs font-semibold text-white shadow-[0_12px_30px_rgba(124,92,255,.18)] transition hover:bg-violet-400 disabled:cursor-default disabled:bg-white/[0.06] disabled:text-white/25 disabled:shadow-none">Сохранить</button></div>
       </div>
     </form>

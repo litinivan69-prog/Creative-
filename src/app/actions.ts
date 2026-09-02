@@ -3668,6 +3668,33 @@ export async function regenerateContentDraftForItem(formData: FormData) {
   await generateContentTextForItem(formData, true);
 }
 
+export async function regenerateSelfServicePublicationText(formData: FormData) {
+  const plannedContentItemId = formText(formData, "itemId");
+  const session = await auth();
+  const email = session?.user?.email?.trim().toLowerCase();
+  if (!email) redirect(`/sign-in?callbackUrl=/app/month/${encodeURIComponent(plannedContentItemId)}`);
+
+  const membership = await prisma.workspaceMembership.findFirst({
+    where: await selfServiceMembershipWhere(email),
+    select: { clientId: true },
+  });
+  if (!membership) redirect("/start");
+  const ownedItem = await prisma.plannedContentItem.findFirst({
+    where: { id: plannedContentItemId, monthlyPlan: { clientId: membership.clientId } },
+    select: { id: true, deliverableKind: true },
+  });
+  if (!ownedItem || ownedItem.deliverableKind === "article") redirect(`/app/month/${encodeURIComponent(plannedContentItemId)}?error=text_not_ready`);
+
+  const result = await generateContentTextForPlannedItem(plannedContentItemId, {
+    replaceExisting: true,
+    createReviewEvent: true,
+    generationJobType: "regenerate_publication_text",
+  });
+  revalidatePath("/app/month");
+  revalidatePath(`/app/month/${plannedContentItemId}`);
+  redirect(`/app/month/${plannedContentItemId}?${result.status === "failed" ? "error=text_rewrite_failed" : "notice=text_rewritten"}`);
+}
+
 export async function clearLegacyBase64ForBlobVariants() {
   const result = await prisma.generatedCreativeVariant.updateMany({
     where: {
