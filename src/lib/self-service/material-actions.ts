@@ -264,6 +264,7 @@ export async function markSelfServiceMaterialReady(formData: FormData) {
   const item = await prisma.plannedContentItem.findFirst({
     where: { id: itemId, monthlyPlan: { clientId } },
     include: {
+      monthlyPlan: { select: { blueprintId: true } },
       contentDraft: { select: { id: true, draftBody: true } },
       creativeAssets: {
         select: {
@@ -279,7 +280,7 @@ export async function markSelfServiceMaterialReady(formData: FormData) {
   if (!item) redirect("/app/month?error=material_missing");
 
   const article = item.deliverableKind === "article"
-    ? await prisma.article.findFirst({ where: { plannedContentItemId: item.id, clientId }, select: { bodyMarkdown: true, images: true } })
+    ? await prisma.article.findFirst({ where: { plannedContentItemId: item.id, clientId }, select: { title: true, bodyMarkdown: true, images: true } })
     : null;
 
   const slides = item.creativeAssets.filter((asset) => asset.assetType === "carousel_slide");
@@ -296,18 +297,41 @@ export async function markSelfServiceMaterialReady(formData: FormData) {
     : item.generatedCreativeVariants.length > 0;
 
   const textReady = Boolean(article?.bodyMarkdown.trim() || item.contentDraft?.draftBody.trim());
-  if (!item.contentDraft || !textReady || !visualsReady) {
+  if (!textReady || !visualsReady) {
     redirect(`/app/month/${encodeURIComponent(item.id)}?error=material_not_ready`);
   }
 
   await prisma.$transaction(async (transaction) => {
-    await transaction.contentDraft.update({
-      where: { id: item.contentDraft!.id },
-      data: { status: "ready_to_schedule" },
-    });
+    // Some articles created by the lightweight article pipeline predate the
+    // content-draft link used by scheduling. Recover it here so an otherwise
+    // complete article can be confirmed without regeneration.
+    const contentDraft = item.contentDraft
+      ? await transaction.contentDraft.update({
+          where: { id: item.contentDraft.id },
+          data: { status: "ready_to_schedule" },
+        })
+      : await transaction.contentDraft.create({
+          data: {
+            clientId,
+            blueprintId: item.monthlyPlan.blueprintId,
+            monthlyPlanId: item.monthlyPlanId,
+            plannedContentItemId: item.id,
+            platformName: item.platformName,
+            format: item.format,
+            topic: item.topic,
+            goal: item.goal,
+            draftTitle: article?.title?.trim() || item.topic,
+            draftBody: article?.bodyMarkdown ?? "",
+            draftNotes: [],
+            status: "ready_to_schedule",
+            approvalRequired: item.approvalRequired,
+            autopublishEligible: item.autopublishEligible,
+            riskLevel: "low",
+          },
+        });
     await transaction.contentDraftReviewEvent.create({
       data: {
-        contentDraftId: item.contentDraft!.id,
+        contentDraftId: contentDraft.id,
         actorType: "client",
         action: "marked_ready_to_schedule",
         comment: "Материал подтверждён в личном кабинете.",
@@ -322,6 +346,26 @@ export async function markSelfServiceMaterialReady(formData: FormData) {
           timezone: item.scheduledPublications[0]?.timezone || scheduledAutopublishDefaults.timezone,
           publishStatus: "queued",
           publishErrorMessage: null,
+        },
+      });
+    } else {
+      await transaction.scheduledPublication.create({
+        data: {
+          clientId,
+          blueprintId: item.monthlyPlan.blueprintId,
+          monthlyPlanId: item.monthlyPlanId,
+          plannedContentItemId: item.id,
+          contentDraftId: contentDraft.id,
+          platformName: item.platformName,
+          format: item.format,
+          topic: item.topic,
+          scheduledDate: item.plannedDate,
+          scheduledTime: scheduledAutopublishDefaults.time,
+          timezone: scheduledAutopublishDefaults.timezone,
+          status: "ready",
+          publishMode: "manual",
+          publishStatus: "queued",
+          notes: "Публикация создана при подтверждении готовой статьи.",
         },
       });
     }
