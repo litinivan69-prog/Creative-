@@ -31,6 +31,19 @@ const toneOptions = [
   ["Смело и энергично", "Быстрый темп и больше характера"],
   ["Сдержанно и премиально", "Коротко, точно и уверенно"],
 ] as const;
+const audienceOptions = [
+  "Частные покупатели",
+  "Владельцы малого бизнеса",
+  "Компании и команды",
+  "Профессионалы отрасли",
+  "Текущие клиенты",
+] as const;
+const visualOptions = [
+  "Чисто и минималистично",
+  "Живо и по-человечески",
+  "Сдержанно и премиально",
+  "Современно и технологично",
+] as const;
 const socialFields = [
   ["telegramUrl", "Telegram", "https://t.me/..."], ["vkUrl", "VK", "https://vk.com/..."],
   ["okUrl", "Одноклассники", "https://ok.ru/..."], ["dzenUrl", "Дзен", "https://dzen.ru/..."],
@@ -66,6 +79,8 @@ export function SelfServiceBrief({ selection }: { selection: SelfServiceSelectio
   const [values, setValues] = useState<BriefValues>(EMPTY_BRIEF);
   const [currentStep, setCurrentStep] = useState(1);
   const [confirmed, setConfirmed] = useState(false);
+  const [importState, setImportState] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [importMessage, setImportMessage] = useState("");
 
   useEffect(() => {
     try {
@@ -106,6 +121,22 @@ export function SelfServiceBrief({ selection }: { selection: SelfServiceSelectio
   const update = <Key extends keyof BriefValues>(key: Key, value: BriefValues[Key]) => { setValues((current) => ({ ...current, [key]: value })); setConfirmed(false); };
   const goNext = () => { if (canContinue) setCurrentStep((step) => Math.min(steps.length, step + 1)); };
   const goBack = () => setCurrentStep((step) => Math.max(1, step - 1));
+  const importWebsite = async () => {
+    if (!values.website.trim()) return;
+    setImportState("loading");
+    setImportMessage("");
+    try {
+      const response = await fetch("/api/self-service/brief/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ website: values.website }) });
+      const data = await response.json() as { ok?: boolean; error?: string; website?: string; brandName?: string; businessDescription?: string; priorityOffer?: string };
+      if (!response.ok || !data.ok) throw new Error(data.error || "Не удалось прочитать сайт.");
+      setValues((current) => ({ ...current, website: data.website || current.website, brandName: data.brandName || current.brandName, businessDescription: data.businessDescription || current.businessDescription, priorityOffer: data.priorityOffer || current.priorityOffer }));
+      setImportState("done");
+      setImportMessage("Основа заполнена. Проверьте три поля ниже.");
+    } catch (error) {
+      setImportState("error");
+      setImportMessage(error instanceof Error ? error.message : "Не удалось прочитать сайт.");
+    }
+  };
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-[#09090d] px-4 py-5 text-white sm:px-7 sm:py-7 lg:px-10">
@@ -120,7 +151,7 @@ export function SelfServiceBrief({ selection }: { selection: SelfServiceSelectio
               <h1 className="font-heading text-3xl font-semibold tracking-[-.035em] sm:text-4xl">Сначала — о вашем бренде</h1><p className="mt-3 text-sm leading-6 text-slate-400">Этой основы хватит, чтобы система поняла бизнес и не писала обезличенные материалы.</p>
               <div className="mt-7 grid gap-5 sm:grid-cols-2">
                 <Field label="Название бренда"><input className={inputClass} value={values.brandName} onChange={(e) => update("brandName", e.target.value)} placeholder="Например, Северная студия" /></Field>
-                <Field label="Сайт" hint="если есть"><input className={inputClass} value={values.website} onChange={(e) => update("website", e.target.value)} placeholder="https://..." /></Field>
+                <Field label="Сайт" hint="если есть"><div className="flex gap-2"><input className={inputClass} value={values.website} onChange={(e) => { update("website", e.target.value); setImportState("idle"); }} placeholder="https://..." /><button type="button" onClick={importWebsite} disabled={!values.website.trim() || importState === "loading"} className="shrink-0 rounded-2xl border border-violet-400/30 bg-violet-500/10 px-4 text-xs font-semibold text-violet-200 transition hover:bg-violet-500/20 disabled:opacity-35">{importState === "loading" ? "Читаю…" : "Заполнить"}</button></div>{importMessage ? <span className={`text-[11px] ${importState === "error" ? "text-rose-300" : "text-emerald-300"}`}>{importMessage}</span> : null}</Field>
                 <div className="sm:col-span-2"><Field label="Чем занимается компания"><textarea className={`${inputClass} min-h-28 resize-y`} value={values.businessDescription} onChange={(e) => update("businessDescription", e.target.value)} placeholder="Что вы делаете и какую задачу клиента решаете" /></Field></div>
                 <div className="sm:col-span-2"><Field label="Что продвигаем в первую очередь"><textarea className={`${inputClass} min-h-24 resize-y`} value={values.priorityOffer} onChange={(e) => update("priorityOffer", e.target.value)} placeholder="Главный продукт, услуга или направление" /></Field></div>
               </div>
@@ -128,7 +159,7 @@ export function SelfServiceBrief({ selection }: { selection: SelfServiceSelectio
             {currentStep === 2 ? <>
               <h1 className="font-heading text-3xl font-semibold tracking-[-.035em] sm:text-4xl">Кому и как мы говорим</h1><p className="mt-3 text-sm leading-6 text-slate-400">Опишите клиента своими словами. Профессиональная формулировка не нужна.</p>
               <div className="mt-7 grid gap-5">
-                <Field label="Кто ваш клиент"><textarea className={`${inputClass} min-h-28 resize-y`} value={values.audience} onChange={(e) => update("audience", e.target.value)} placeholder="Кто покупает, что для него важно и чего он опасается" /></Field>
+                <Field label="Кто ваш клиент"><div className="flex flex-wrap gap-2">{audienceOptions.map((option) => <button key={option} type="button" onClick={() => update("audience", option)} className={`rounded-full border px-4 py-2 text-xs font-semibold transition ${values.audience === option ? "border-violet-400/70 bg-violet-500/15 text-violet-200" : "border-white/10 text-slate-400 hover:text-white"}`}>{option}</button>)}</div><textarea className={`${inputClass} min-h-24 resize-y`} value={values.audience} onChange={(e) => update("audience", e.target.value)} placeholder="Выберите вариант выше или опишите своими словами" /></Field>
                 <Field label="Тон общения"><div className="grid gap-3 sm:grid-cols-2">{toneOptions.map(([title, description]) => <button type="button" key={title} onClick={() => update("tone", title)} className={`rounded-2xl border p-4 text-left transition ${values.tone === title ? "border-violet-400/70 bg-violet-500/10" : "border-white/[.08] bg-white/[.025] hover:bg-white/[.045]"}`}><span className="block text-sm font-semibold text-slate-100">{title}</span><span className="mt-1 block text-xs leading-5 text-slate-500">{description}</span></button>)}</div></Field>
                 <div className="grid gap-5 sm:grid-cols-2"><Field label="Главная мысль" hint="необязательно"><textarea className={`${inputClass} min-h-24 resize-y`} value={values.keyMessage} onChange={(e) => update("keyMessage", e.target.value)} placeholder="Что аудитория должна запомнить" /></Field><Field label="Что нельзя писать" hint="необязательно"><textarea className={`${inputClass} min-h-24 resize-y`} value={values.restrictions} onChange={(e) => update("restrictions", e.target.value)} placeholder="Запреты, обещания, темы" /></Field></div>
                 <div className="grid gap-5 sm:grid-cols-2"><Field label="Цель на месяц" hint="необязательно"><input className={inputClass} value={values.monthGoal} onChange={(e) => update("monthGoal", e.target.value)} placeholder="Например, рассказать о новом направлении" /></Field><Field label="Темы месяца" hint="необязательно"><input className={inputClass} value={values.monthTopics} onChange={(e) => update("monthTopics", e.target.value)} placeholder="Запуск, кейсы, команда" /></Field></div>
@@ -137,7 +168,7 @@ export function SelfServiceBrief({ selection }: { selection: SelfServiceSelectio
             {currentStep === 3 ? <>
               <h1 className="font-heading text-3xl font-semibold tracking-[-.035em] sm:text-4xl">Как должен выглядеть бренд</h1><p className="mt-3 text-sm leading-6 text-slate-400">Можно дать ссылку на брендбук или коротко описать визуальное направление.</p>
               <div className="mt-7 grid gap-5 sm:grid-cols-2">
-                <Field label="Визуальный стиль"><textarea className={`${inputClass} min-h-28 resize-y`} value={values.visualStyle} onChange={(e) => update("visualStyle", e.target.value)} placeholder="Цвета, настроение, композиция, характер изображений" /></Field>
+                <Field label="Визуальный стиль"><div className="grid gap-2 sm:grid-cols-2">{visualOptions.map((option) => <button key={option} type="button" onClick={() => update("visualStyle", option)} className={`rounded-xl border px-3 py-3 text-left text-xs font-semibold transition ${values.visualStyle === option ? "border-violet-400/70 bg-violet-500/15 text-violet-200" : "border-white/[.08] bg-white/[.025] text-slate-400 hover:text-white"}`}>{option}</button>)}</div><textarea className={`${inputClass} min-h-20 resize-y`} value={values.visualStyle} onChange={(e) => update("visualStyle", e.target.value)} placeholder="Или опишите своими словами" /></Field>
                 <Field label="Ссылка на брендбук"><input className={inputClass} value={values.brandbookUrl} onChange={(e) => update("brandbookUrl", e.target.value)} placeholder="https://..." /></Field>
                 <div className="sm:col-span-2"><Field label="Логотип" hint="необязательно"><div className="grid gap-3 sm:grid-cols-3">{([
                   ["upload", "Загрузить файл", "PNG, JPG, WEBP или SVG"],
