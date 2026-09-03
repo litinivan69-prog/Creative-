@@ -210,7 +210,13 @@ function articleBlocks(body: string, attachments: VcAttachment[]) {
   };
   const pushList = () => {
     if (!list.length) return;
-    blocks.push({ type: "list", cover: false, hidden: false, anchor: "", data: { style: "unordered", items: list.map(inlineMarkdown) } });
+    blocks.push({
+      type: "text",
+      cover: false,
+      hidden: false,
+      anchor: "",
+      data: { text: list.map((item) => `<p>• ${inlineMarkdown(item)}</p>`).join("") },
+    });
     list = [];
   };
   const pushImage = () => {
