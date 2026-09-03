@@ -3,7 +3,7 @@ import { stripCarouselSlideLabel } from "@/lib/creative-asset-schema";
 import { prisma } from "@/lib/prisma";
 import { getIntegrationSetting, getTelegramBotToken, sendTelegramPost } from "@/lib/telegram";
 import { VK_ACCESS_TOKEN_KEY, sendVkPost } from "@/lib/vk";
-import { decryptChannelCredential } from "@/lib/channel-credentials";
+import { decryptChannelCredential, encryptChannelCredential } from "@/lib/channel-credentials";
 import { sendVcArticle } from "@/lib/vc";
 import type { ArticleImage } from "@/lib/article-schema";
 import { cleanVisibleContentText } from "@/lib/content-draft-schema";
@@ -222,9 +222,9 @@ export async function publishScheduledPublication(
     }
 
     if (channel.platform === "vcru") {
-      const token = decryptChannelCredential(channel.credentialEncrypted);
-      const subsiteId = Number(channel.channelId);
-      if (!token || !Number.isInteger(subsiteId) || subsiteId <= 0) {
+      const credential = decryptChannelCredential(channel.credentialEncrypted);
+      const authorId = Number(channel.channelId);
+      if (!credential || !Number.isInteger(authorId) || authorId <= 0) {
         results.push({ platform: "vcru", ok: false, error: "VC.ru не подключён в настройках." });
         continue;
       }
@@ -232,8 +232,14 @@ export async function publishScheduledPublication(
         results.push({ platform: "vcru", ok: false, error: "Статья ещё не готова к публикации." });
         continue;
       }
-      const vc = await sendVcArticle({ token, subsiteId, ...vcArticle });
+      const vc = await sendVcArticle({ credential, authorId, ...vcArticle });
       if (vc.ok) {
+        if (vc.credential !== credential) {
+          await prisma.clientChannel.update({
+            where: { id: channel.id },
+            data: { credentialEncrypted: encryptChannelCredential(vc.credential) },
+          }).catch(() => {});
+        }
         results.push({ platform: "vcru", ok: true, url: vc.url, externalId: String(vc.entryId), imagesSent: vc.imagesSent });
       } else {
         results.push({ platform: "vcru", ok: false, error: vc.error });
@@ -241,7 +247,7 @@ export async function publishScheduledPublication(
       await logIntegrationEvent({
         eventType: "vcru_publish",
         relatedId: publication.id,
-        payload: vc.ok ? { subsiteId, url: vc.url, imagesSent: vc.imagesSent } : { subsiteId, error: vc.error },
+        payload: vc.ok ? { authorId, url: vc.url, imagesSent: vc.imagesSent } : { authorId, error: vc.error },
         ok: vc.ok,
         errorMessage: vc.ok ? undefined : vc.error,
       });

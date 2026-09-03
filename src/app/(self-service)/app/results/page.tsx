@@ -170,7 +170,7 @@ export default async function SelfServiceResultsPage() {
               <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-violet-300">Что означает отчёт</p>
               <h2 className="mt-2 text-xl font-semibold tracking-[-0.03em]">Без декоративных цифр</h2>
               <div className="mt-6 space-y-4 text-xs leading-5 text-white/38">
-                <p><span className="mr-2 text-violet-300">01</span>Статьи Дзен и VC.ru учитываются после того, как вы отметили их опубликованными.</p>
+                <p><span className="mr-2 text-violet-300">01</span>Публикации VC.ru учитываются автоматически, а материалы Дзена — после подтверждения размещения.</p>
                 <p><span className="mr-2 text-violet-300">02</span>VK и Telegram учитываются автоматически при публикации через кабинет.</p>
                 <p><span className="mr-2 text-violet-300">03</span>Просмотры и реакции не рассчитываются приблизительно — только по данным интеграций.</p>
               </div>

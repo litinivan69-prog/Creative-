@@ -14,7 +14,7 @@ import {
 } from "@/lib/telegram";
 import { publishScheduledPublication } from "@/lib/telegram-publish";
 import { VK_ACCESS_TOKEN_KEY, verifyVkGroup, verifyVkToken } from "@/lib/vk";
-import { verifyVcSubsite, verifyVcToken } from "@/lib/vc";
+import { connectVcAccount, verifyVcCredential } from "@/lib/vc";
 
 const platforms = ["vk", "telegram", "dzen", "vcru"] as const;
 
@@ -56,6 +56,8 @@ export async function connectSelfServiceSocialChannel(formData: FormData) {
   const platform = requestedPlatform === "vk" ? "vk" : requestedPlatform === "vcru" ? "vcru" : "telegram";
   const reference = String(formData.get("reference") ?? "").trim();
   const suppliedToken = String(formData.get("token") ?? "").trim();
+  const vcEmail = String(formData.get("vcEmail") ?? "").trim();
+  const vcPassword = String(formData.get("vcPassword") ?? "");
   const autopublishEnabled = formData.get("autopublishEnabled") === "on";
   const fromBrief = formData.get("onboarding") === "1";
   function connectRedirect(params: { notice?: string; error?: string }): never {
@@ -74,18 +76,27 @@ export async function connectSelfServiceSocialChannel(formData: FormData) {
   let credentialEncrypted = existing?.credentialEncrypted ?? null;
 
   if (platform === "vcru") {
-    const token = suppliedToken || decryptChannelCredential(existing?.credentialEncrypted);
-    if (!token) connectRedirect({ error: "Нужен API-токен VC.ru из настроек профиля." });
-    const account = await verifyVcToken(token);
-    if (!account.ok) connectRedirect({ error: account.error });
-    const requestedSubsiteId = reference ? Number(reference) : account.accountId;
-    if (!Number.isInteger(requestedSubsiteId) || requestedSubsiteId <= 0) connectRedirect({ error: "Укажите числовой ID блога VC.ru." });
-    const subsite = await verifyVcSubsite(token, requestedSubsiteId);
-    if (!subsite.ok) connectRedirect({ error: subsite.error });
-    channelId = String(subsite.subsiteId);
-    title = subsite.title;
-    credentialHint = account.label;
-    if (suppliedToken) credentialEncrypted = encryptChannelCredential(token);
+    const savedCredential = decryptChannelCredential(existing?.credentialEncrypted);
+    const requestedAuthorId = reference ? Number(reference) : undefined;
+    if (reference && (!Number.isInteger(requestedAuthorId) || (requestedAuthorId ?? 0) <= 0)) {
+      connectRedirect({ error: "Проверьте номер блога VC.ru или оставьте поле пустым." });
+    }
+    if (vcEmail || vcPassword) {
+      if (!vcEmail || !vcPassword) connectRedirect({ error: "Введите почту и пароль от VC.ru." });
+      const account = await connectVcAccount(vcEmail, vcPassword, requestedAuthorId);
+      if (!account.ok) connectRedirect({ error: account.error });
+      channelId = String(account.authorId);
+      title = account.title;
+      credentialHint = account.accountLabel;
+      credentialEncrypted = encryptChannelCredential(account.credential);
+    } else {
+      if (!savedCredential || !existing?.channelId) connectRedirect({ error: "Введите почту и пароль от VC.ru для первого подключения." });
+      const account = await verifyVcCredential(savedCredential, requestedAuthorId ?? Number(existing.channelId));
+      if (!account.ok) connectRedirect({ error: account.error });
+      channelId = String(account.authorId);
+      title = account.title;
+      credentialEncrypted = encryptChannelCredential(account.credential);
+    }
   } else if (platform === "telegram") {
     const token = suppliedToken || decryptChannelCredential(existing?.credentialEncrypted) || await getTelegramBotToken();
     if (!token) connectRedirect({ error: "Нужен токен Telegram-бота. Получите его у @BotFather и вставьте один раз." });
