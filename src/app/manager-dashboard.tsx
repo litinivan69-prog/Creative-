@@ -2401,7 +2401,7 @@ function GeneratedVisualImage({
 
   return imageSrc ? (
     <img src={imageSrc} alt={alt} className={className} />
-  ) : variant.storageProvider !== "vercel_blob" ? (
+  ) : variant.storageProvider === "database_base64" ? (
     <div className={`flex items-center justify-center bg-amber-50 px-4 text-center text-xs font-semibold leading-5 text-amber-900 ${className}`}>
       Старый визуал хранится в базе. Откройте полную карточку или сгенерируйте новый вариант.
     </div>
@@ -2911,8 +2911,8 @@ function MonthlyClientReport({
   const failedJobs = jobs.filter((job) => job.status === "failed");
   const runningJobs = jobs.filter((job) => job.status === "running");
   const generatedVariants = assets.flatMap((asset) => asset.generatedVariants);
-  const blobVisuals = generatedVariants.filter((variant) => variant.storageProvider === "vercel_blob").length;
-  const base64Visuals = generatedVariants.filter((variant) => variant.storageProvider !== "vercel_blob").length;
+  const blobVisuals = generatedVariants.filter((variant) => variant.storageProvider !== "database_base64").length;
+  const base64Visuals = generatedVariants.filter((variant) => variant.storageProvider === "database_base64").length;
   const attentionItems = [
     ...materials
       .filter(({ nextAction }) => nextAction !== "Готово")
@@ -3075,7 +3075,7 @@ function MonthlyClientReport({
             <p>Производственных задач: <span className="font-semibold text-stone-900">{jobs.length}</span></p>
             <p>Выполняются сейчас: <span className="font-semibold text-stone-900">{runningJobs.length}</span></p>
             <p>Завершились ошибкой: <span className="font-semibold text-stone-900">{failedJobs.length}</span></p>
-            <p>Визуалы в Vercel Blob: <span className="font-semibold text-stone-900">{blobVisuals}</span></p>
+            <p>Визуалы в файловом хранилище: <span className="font-semibold text-stone-900">{blobVisuals}</span></p>
             <p>Визуалы в Base64 MVP: <span className="font-semibold text-stone-900">{base64Visuals}</span></p>
           </div>
         </article>

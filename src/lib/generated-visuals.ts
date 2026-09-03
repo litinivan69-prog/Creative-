@@ -13,7 +13,9 @@ export function getGeneratedVariantImageSrc(variant: GeneratedVisualSource) {
 }
 
 export function formatGeneratedVisualStorage(storageProvider?: string | null) {
-  return storageProvider === "vercel_blob" ? "Vercel Blob" : "Base64 MVP";
+  if (storageProvider === "s3") return "S3";
+  if (storageProvider === "vercel_blob") return "Vercel Blob";
+  return "Base64 MVP";
 }
 
 export function formatGeneratedVisualFileSize(fileSize?: number | null) {

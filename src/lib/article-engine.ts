@@ -266,7 +266,7 @@ async function generateNextArticleImage(input: {
     monthlyPlanId: input.monthlyPlanId ?? "articles",
     creativeAssetId: input.articleId,
   });
-  if (stored.storageProvider !== "vercel_blob" || !stored.imageUrl) {
+  if (stored.storageProvider === "database_base64" || !stored.imageUrl) {
     throw new Error("Изображение создано, но не сохранилось в хранилище.");
   }
 

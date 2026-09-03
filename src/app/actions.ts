@@ -4201,8 +4201,8 @@ async function generateVisualForCreativeAssetId(creativeAssetId: string) {
         prompt: variant.prompt,
         revisedPrompt: variant.revisedPrompt,
         imageBase64: storedVisual.storageProvider === "database_base64" ? storedVisual.imageBase64 : null,
-        imageUrl: storedVisual.storageProvider === "vercel_blob" ? storedVisual.imageUrl : null,
-        storageKey: storedVisual.storageProvider === "vercel_blob" ? storedVisual.storageKey : null,
+        imageUrl: storedVisual.storageProvider !== "database_base64" ? storedVisual.imageUrl : null,
+        storageKey: storedVisual.storageProvider !== "database_base64" ? storedVisual.storageKey : null,
         storageProvider: storedVisual.storageProvider,
         fileSize: storedVisual.fileSize,
         mimeType: variant.mimeType,
@@ -4225,7 +4225,7 @@ async function generateVisualForCreativeAssetId(creativeAssetId: string) {
 
     await markGenerationJobCompleted(
       generationJob.id,
-      storedVisual.storageProvider === "vercel_blob"
+      storedVisual.storageProvider !== "database_base64"
         ? "Визуал сгенерирован и сохранён в хранилище."
         : "Визуал сгенерирован и временно сохранён в базе.",
       {
@@ -6639,8 +6639,8 @@ export async function generateCreativeVisualVariantForAsset(formData: FormData) 
         prompt: variant.prompt,
         revisedPrompt: variant.revisedPrompt,
         imageBase64: storedVisual.storageProvider === "database_base64" ? storedVisual.imageBase64 : null,
-        imageUrl: storedVisual.storageProvider === "vercel_blob" ? storedVisual.imageUrl : null,
-        storageKey: storedVisual.storageProvider === "vercel_blob" ? storedVisual.storageKey : null,
+        imageUrl: storedVisual.storageProvider !== "database_base64" ? storedVisual.imageUrl : null,
+        storageKey: storedVisual.storageProvider !== "database_base64" ? storedVisual.storageKey : null,
         storageProvider: storedVisual.storageProvider,
         fileSize: storedVisual.fileSize,
         mimeType: variant.mimeType,
@@ -6663,7 +6663,7 @@ export async function generateCreativeVisualVariantForAsset(formData: FormData) 
 
     await markGenerationJobCompleted(
       generationJob.id,
-      storedVisual.storageProvider === "vercel_blob"
+      storedVisual.storageProvider !== "database_base64"
         ? "Визуал сгенерирован и сохранён в хранилище."
         : "Визуал сгенерирован и временно сохранён в базе.",
       {

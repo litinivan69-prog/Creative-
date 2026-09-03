@@ -1,5 +1,5 @@
-import { put } from "@vercel/blob";
 import { randomUUID } from "node:crypto";
+import { putPublicObject } from "@/lib/object-storage";
 
 type StoreGeneratedVisualInput = {
   imageBase64: string;
@@ -23,14 +23,6 @@ export async function storeGeneratedVisual(input: StoreGeneratedVisualInput) {
   const file = Buffer.from(input.imageBase64, "base64");
   const fileSize = file.byteLength;
 
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    return {
-      storageProvider: "database_base64" as const,
-      imageBase64: input.imageBase64,
-      fileSize,
-    };
-  }
-
   const storageKey = [
     "generated-visuals",
     input.clientId,
@@ -38,16 +30,20 @@ export async function storeGeneratedVisual(input: StoreGeneratedVisualInput) {
     input.creativeAssetId,
     `${Date.now()}-${randomUUID()}.${extensionForMimeType(input.mimeType)}`,
   ].join("/");
-  const blob = await put(storageKey, file, {
-    access: "public",
-    contentType: input.mimeType,
-    token: process.env.BLOB_READ_WRITE_TOKEN,
-  });
+  const stored = await putPublicObject({ key: storageKey, body: file, contentType: input.mimeType });
+
+  if (!stored) {
+    return {
+      storageProvider: "database_base64" as const,
+      imageBase64: input.imageBase64,
+      fileSize,
+    };
+  }
 
   return {
-    storageProvider: "vercel_blob" as const,
-    imageUrl: blob.url,
-    storageKey: blob.pathname,
+    storageProvider: stored.provider,
+    imageUrl: stored.url,
+    storageKey: stored.key,
     fileSize,
   };
 }

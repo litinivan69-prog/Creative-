@@ -406,7 +406,7 @@ function PortalImage({ variant, alt, className }: { variant?: ClientPortalVarian
     return <img src={src} alt={alt} className={className} />;
   }
 
-  if (variant && variant.storageProvider !== "vercel_blob") {
+  if (variant && variant.storageProvider === "database_base64") {
     return (
       <div className={`${className} grid place-items-center bg-amber-50 p-4 text-center text-xs font-semibold leading-5 text-amber-800`}>
         Старый визуал хранится в базе. Новый вариант появится после подготовки.
