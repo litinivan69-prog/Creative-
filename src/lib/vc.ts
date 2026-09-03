@@ -248,6 +248,8 @@ export async function sendVcArticle(input: {
     await vcEditorRequest(`editor/${entryId}/publish`, active.session.accessToken, { method: "POST", body: new FormData() });
     return { ok: true as const, entryId, url: `https://vc.ru/${entryId}`, imagesSent: attachments.length, credential: active.credential };
   } catch (error) {
-    return { ok: false as const, error: error instanceof Error ? error.message : "Не удалось опубликовать статью в VC.ru." };
+    const message = error instanceof Error ? error.message : "Не удалось опубликовать статью в VC.ru.";
+    console.error("[vcru_publish_failed]", { authorId: input.authorId, message });
+    return { ok: false as const, error: message };
   }
 }
