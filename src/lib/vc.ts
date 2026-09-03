@@ -13,6 +13,16 @@ export type VcSession = {
 };
 
 type VcAuthor = { value?: number; label?: string; image?: string; badgeId?: string | null };
+type VcApiEntry = {
+  id?: number;
+  user_id?: number;
+  subsite_id?: number;
+  [key: string]: unknown;
+};
+type VcEditorData = {
+  entry?: VcApiEntry;
+  editor?: { authors?: VcAuthor[]; owners?: VcAuthor[] };
+};
 type VcApiEnvelope<T> = {
   message?: string;
   result?: T;
@@ -111,9 +121,16 @@ async function vcEditorRequest<T>(path: string, accessToken: string, init: Reque
   return readEnvelope<T>(response, "VC.ru временно не отвечает.");
 }
 
-async function loadVcAuthors(accessToken: string) {
-  const data = await vcEditorRequest<{ editor?: { authors?: VcAuthor[] } }>("editor/0", accessToken);
+async function loadVcEditor(accessToken: string) {
+  return vcEditorRequest<VcEditorData>("editor/0", accessToken);
+}
+
+function editorAuthors(data: VcEditorData) {
   return (data?.editor?.authors ?? []).filter((author) => Number.isInteger(author.value) && (author.value ?? 0) > 0);
+}
+
+async function loadVcAuthors(accessToken: string) {
+  return editorAuthors(await loadVcEditor(accessToken));
 }
 
 export async function connectVcAccount(email: string, password: string, requestedAuthorId?: number) {
@@ -231,6 +248,22 @@ export async function sendVcArticle(input: {
   let phase = "проверка подключения";
   try {
     const active = await activeVcSession(input.credential);
+    phase = "проверка редактора";
+    const editorData = await loadVcEditor(active.session.accessToken);
+    const authors = editorAuthors(editorData);
+    const author = authors.find((item) => item.value === input.authorId)
+      ?? authors.find((item) => item.value === editorData.entry?.user_id)
+      ?? authors[0];
+    if (!author?.value) throw new Error("В аккаунте не найден блог для публикации.");
+
+    const owners = (editorData.editor?.owners ?? [])
+      .filter((owner) => Number.isInteger(owner.value) && (owner.value ?? 0) > 0);
+    const defaultSubsiteId = Number(editorData.entry?.subsite_id) || 0;
+    const owner = owners.find((item) => item.value === defaultSubsiteId)
+      ?? owners.find((item) => item.value === author.value)
+      ?? owners[0];
+    const subsiteId = defaultSubsiteId || owner?.value || 0;
+
     const attachments: VcAttachment[] = [];
     for (const [index, imageUrl] of input.imageUrls.slice(0, 10).entries()) {
       phase = `загрузка изображения ${index + 1}`;
@@ -238,7 +271,8 @@ export async function sendVcArticle(input: {
     }
     phase = "создание черновика";
     const entry = {
-      id: 0, user_id: input.authorId, type: 1, subsite_id: 0,
+      ...(editorData.entry ?? {}),
+      id: 0, user_id: author.value, type: 1, subsite_id: subsiteId,
       title: input.title.trim(), entry: { blocks: articleBlocks(input.body, attachments) },
       external_access_link: "", path: "", is_editorial: false, is_advertisement: false,
       is_enabled_comments: true, is_enabled_likes: true, withheld: false, is_enabled_ad: true,
