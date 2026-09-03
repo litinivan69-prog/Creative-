@@ -34,7 +34,7 @@ export default async function BrandsPage() {
             </form>
           );
         })}
-        <a href="/start" className={`${darkCardClass} grid min-h-40 place-items-center border-dashed p-5 text-center transition hover:border-violet-400/30 hover:bg-violet-500/[0.06]`}><span><span className="block text-3xl text-violet-300">+</span><span className="mt-2 block text-sm font-semibold">Добавить бренд</span><span className="mt-1 block text-xs text-white/30">Заполнить новый короткий бриф</span></span></a>
+        <a href="/start/brief?reset=1" className={`${darkCardClass} grid min-h-40 place-items-center border-dashed p-5 text-center transition hover:border-violet-400/30 hover:bg-violet-500/[0.06]`}><span><span className="block text-3xl text-violet-300">+</span><span className="mt-2 block text-sm font-semibold">Добавить бренд</span><span className="mt-1 block text-xs text-white/30">Начать новый бриф с чистого листа</span></span></a>
       </div>
     </SelfServiceAppShell>
   );

@@ -25,5 +25,5 @@ export default async function BriefPage({ searchParams }: { searchParams: BriefS
     articles: first(params.articles),
   });
 
-  return <SelfServiceBrief selection={selection} />;
+  return <SelfServiceBrief selection={selection} resetDraft={first(params.reset) === "1"} />;
 }
