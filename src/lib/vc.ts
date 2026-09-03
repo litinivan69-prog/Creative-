@@ -228,10 +228,15 @@ export async function sendVcArticle(input: {
   body: string;
   imageUrls: string[];
 }) {
+  let phase = "проверка подключения";
   try {
     const active = await activeVcSession(input.credential);
     const attachments: VcAttachment[] = [];
-    for (const imageUrl of input.imageUrls.slice(0, 10)) attachments.push(await uploadVcImage(active.session.accessToken, imageUrl));
+    for (const [index, imageUrl] of input.imageUrls.slice(0, 10).entries()) {
+      phase = `загрузка изображения ${index + 1}`;
+      attachments.push(await uploadVcImage(active.session.accessToken, imageUrl));
+    }
+    phase = "создание черновика";
     const entry = {
       id: 0, user_id: input.authorId, type: 1, subsite_id: 0,
       title: input.title.trim(), entry: { blocks: articleBlocks(input.body, attachments) },
@@ -245,11 +250,13 @@ export async function sendVcArticle(input: {
     const saved = await vcEditorRequest<{ entry?: { id?: number } }>("editor", active.session.accessToken, { method: "POST", body: form });
     const entryId = saved?.entry?.id;
     if (!entryId) return { ok: false as const, error: "VC.ru не создал черновик статьи." };
+    phase = "публикация черновика";
     await vcEditorRequest(`editor/${entryId}/publish`, active.session.accessToken, { method: "POST", body: new FormData() });
     return { ok: true as const, entryId, url: `https://vc.ru/${entryId}`, imagesSent: attachments.length, credential: active.credential };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Не удалось опубликовать статью в VC.ru.";
-    console.error("[vcru_publish_failed]", { authorId: input.authorId, message });
-    return { ok: false as const, error: message };
+    const detailedMessage = `VC.ru: ${phase} — ${message}`;
+    console.error("[vcru_publish_failed]", { authorId: input.authorId, phase, message });
+    return { ok: false as const, error: detailedMessage };
   }
 }
