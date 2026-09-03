@@ -74,7 +74,7 @@ function CreateCabinetButton({ confirmed }: { confirmed: boolean }) {
   );
 }
 
-export function SelfServiceBrief({ selection }: { selection: SelfServiceSelection }) {
+export function SelfServiceBrief({ selection, resetDraft = false }: { selection: SelfServiceSelection; resetDraft?: boolean }) {
   const [storageReady, setStorageReady] = useState(false);
   const [values, setValues] = useState<BriefValues>(EMPTY_BRIEF);
   const [currentStep, setCurrentStep] = useState(1);
@@ -84,6 +84,14 @@ export function SelfServiceBrief({ selection }: { selection: SelfServiceSelectio
 
   useEffect(() => {
     try {
+      if (resetDraft) {
+        window.localStorage.removeItem(BRIEF_STORAGE_KEY);
+        window.localStorage.removeItem(BRIEF_STEP_STORAGE_KEY);
+        window.history.replaceState(null, "", window.location.pathname);
+        setValues(EMPTY_BRIEF);
+        setCurrentStep(1);
+        return;
+      }
       const saved = window.localStorage.getItem(BRIEF_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved) as Partial<Record<keyof BriefValues, unknown>>;
@@ -103,7 +111,7 @@ export function SelfServiceBrief({ selection }: { selection: SelfServiceSelectio
       window.localStorage.removeItem(BRIEF_STORAGE_KEY);
       window.localStorage.removeItem(BRIEF_STEP_STORAGE_KEY);
     } finally { setStorageReady(true); }
-  }, []);
+  }, [resetDraft]);
 
   useEffect(() => {
     if (!storageReady) return;

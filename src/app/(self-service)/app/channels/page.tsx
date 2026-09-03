@@ -8,6 +8,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getIntegrationSetting, getTelegramBotToken, TELEGRAM_BOT_USERNAME_KEY } from "@/lib/telegram";
 import { VK_ACCESS_TOKEN_KEY, VK_ACCOUNT_LABEL_KEY } from "@/lib/vk";
+import { isVkOauthConfigured } from "@/lib/vk-oauth";
 import { completeSelfServiceChannelOnboarding } from "@/lib/self-service/channel-actions";
 import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 
@@ -38,7 +39,7 @@ export default async function SelfServiceChannelsPage({ searchParams }: { search
   ]);
   const socialDefinitions = [
     { platform: "telegram" as const, label: "Telegram", description: "Бот публикует посты и карусели в ваш канал.", referencePlaceholder: "@название_канала", tokenPlaceholder: "123456:ABC...", platformToken: platformTelegramToken, platformHint: platformTelegramUsername ? `@${platformTelegramUsername}` : null },
-    { platform: "vk" as const, label: "VK", description: "Публикация полного текста и изображений в сообщество.", referencePlaceholder: "https://vk.com/сообщество", tokenPlaceholder: "Токен с правами wall, photos, groups", platformToken: platformVkToken, platformHint: platformVkLabel },
+    { platform: "vk" as const, label: "VK", description: "Публикация полного текста и изображений в сообщество.", referencePlaceholder: "https://vk.com/сообщество", tokenPlaceholder: "Ключ с правами публикации", platformToken: platformVkToken, platformHint: platformVkLabel, oauthAvailable: isVkOauthConfigured() },
     { platform: "vcru" as const, label: "VC.ru", description: "Статьи с обложкой и дополнительными изображениями по календарю.", referencePlaceholder: "", tokenPlaceholder: "", platformToken: false, platformHint: null },
   ];
   const channels = socialDefinitions.map((definition) => {
