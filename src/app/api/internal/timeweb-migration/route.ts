@@ -1,4 +1,11 @@
-import { createCipheriv, publicEncrypt, randomBytes, constants } from "node:crypto";
+import {
+  constants,
+  createCipheriv,
+  createHash,
+  publicEncrypt,
+  randomBytes,
+  timingSafeEqual,
+} from "node:crypto";
 import { auth } from "@/auth";
 import { isRibesAdminEmail } from "@/lib/self-service/admin-access";
 
@@ -15,6 +22,7 @@ wlzUtsxYSK749csZd4RogdjmPGtUN4PThs7C0OZ+dS7vEsyx5hgTdaNsp69fwlmP
 MBcwt0ixv0uSv1gtg/woeKp2rcYpnLNgs4OKHS4OJRqClgL5PQKw6G/JnP4sG6eu
 bLPnE4MoyleQe68bGWXU4g189h1mNP0RSRHGaz8BdluxAgMBAAE=
 -----END PUBLIC KEY-----`;
+const MIGRATION_TOKEN_SHA256 = "7061e1edfc94033e0c17200b9970bdf6b58b084d59e99410c6e26b340c579866";
 
 const MIGRATION_KEYS = [
   "ANTHROPIC_API_KEY",
@@ -59,9 +67,17 @@ const MIGRATION_KEYS = [
   "YOOKASSA_VAT_CODE",
 ] as const;
 
-export async function GET() {
+function validMigrationToken(request: Request) {
+  const provided = request.headers.get("x-ribes-migration-token") || "";
+  const providedHash = createHash("sha256").update(`${provided}\n`).digest();
+  const expectedHash = Buffer.from(MIGRATION_TOKEN_SHA256, "hex");
+  return providedHash.length === expectedHash.length && timingSafeEqual(providedHash, expectedHash);
+}
+
+export async function GET(request: Request) {
   const session = await auth();
-  if (!isRibesAdminEmail(session?.user?.email) || process.env.VERCEL_ENV !== "production") {
+  const authorized = isRibesAdminEmail(session?.user?.email) || validMigrationToken(request);
+  if (!authorized || process.env.VERCEL_ENV !== "production") {
     return new Response("Not found", { status: 404 });
   }
 
