@@ -1,0 +1,16 @@
+[Unit]
+Description=Process scheduled Ribes publications
+After=ribes.service
+Wants=ribes.service
+
+[Service]
+Type=oneshot
+User=ribes
+Group=ribes
+EnvironmentFile=/etc/ribes/ribes.env
+ExecStart=/usr/bin/node /opt/ribes/ops/ribes-autopublish.mjs
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
