@@ -6,9 +6,12 @@ export function isVkOauthConfigured() {
   return Boolean(process.env.VK_APP_ID?.trim() && process.env.VK_APP_SECRET?.trim());
 }
 
+export function publicAppUrl(origin?: string) {
+  return (process.env.NEXT_PUBLIC_APP_URL?.trim() || origin || "").replace(/\/$/, "");
+}
+
 export function vkOauthCallbackUrl(origin?: string) {
-  const base = process.env.NEXT_PUBLIC_APP_URL?.trim() || origin || "";
-  return `${base.replace(/\/$/, "")}/api/integrations/vk/callback`;
+  return `${publicAppUrl(origin)}/api/integrations/vk/callback`;
 }
 
 export async function exchangeVkOauthCode(code: string, redirectUri: string) {

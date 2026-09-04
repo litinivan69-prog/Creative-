@@ -5,10 +5,10 @@ import { encryptChannelCredential } from "@/lib/channel-credentials";
 import { prisma } from "@/lib/prisma";
 import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 import { verifyVkGroup, verifyVkToken } from "@/lib/vk";
-import { exchangeVkOauthCode, isVkOauthConfigured, VK_OAUTH_GROUP_COOKIE, VK_OAUTH_ONBOARDING_COOKIE, VK_OAUTH_STATE_COOKIE, vkOauthCallbackUrl } from "@/lib/vk-oauth";
+import { exchangeVkOauthCode, isVkOauthConfigured, publicAppUrl, VK_OAUTH_GROUP_COOKIE, VK_OAUTH_ONBOARDING_COOKIE, VK_OAUTH_STATE_COOKIE, vkOauthCallbackUrl } from "@/lib/vk-oauth";
 
 function finish(request: Request, params: { notice?: string; error?: string; onboarding?: boolean }) {
-  const target = new URL("/app/channels", request.url);
+  const target = new URL("/app/channels", publicAppUrl(new URL(request.url).origin));
   if (params.notice) target.searchParams.set("notice", params.notice);
   if (params.error) target.searchParams.set("error", params.error);
   if (params.onboarding) target.searchParams.set("from", "brief");
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   try {
     const session = await auth();
     const email = session?.user?.email?.trim().toLowerCase();
-    if (!email) return NextResponse.redirect(new URL("/sign-in?callbackUrl=/app/channels", request.url));
+    if (!email) return NextResponse.redirect(new URL("/sign-in?callbackUrl=/app/channels", publicAppUrl(current.origin)));
     if (!isVkOauthConfigured()) throw new Error("Вход через VK не настроен.");
     const state = current.searchParams.get("state") || "";
     const expectedState = cookieStore.get(VK_OAUTH_STATE_COOKIE)?.value || "";
