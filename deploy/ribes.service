@@ -1,0 +1,26 @@
+[Unit]
+Description=Ribes production web application
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ribes
+Group=ribes
+WorkingDirectory=/opt/ribes/current
+EnvironmentFile=/etc/ribes/ribes.env
+Environment=NODE_ENV=production
+Environment=PORT=3100
+Environment=HOSTNAME=127.0.0.1
+ExecStart=/usr/bin/node /opt/ribes/current/server.js
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/ribes
+
+[Install]
+WantedBy=multi-user.target
