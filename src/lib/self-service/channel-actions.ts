@@ -16,13 +16,14 @@ import { publishScheduledPublication } from "@/lib/telegram-publish";
 import { VK_ACCESS_TOKEN_KEY, verifyVkGroup, verifyVkToken } from "@/lib/vk";
 import { connectVcAccount, verifyVcCredential } from "@/lib/vc";
 
-const platforms = ["vk", "telegram", "dzen", "vcru"] as const;
+const platforms = ["vk", "telegram", "dzen", "vcru", "ok"] as const;
 
 const platformTitles: Record<(typeof platforms)[number], string> = {
   vk: "VK",
   telegram: "Telegram",
   dzen: "Дзен",
   vcru: "VC.ru",
+  ok: "Одноклассники",
 };
 
 function cleanUrl(value: FormDataEntryValue | null) {
@@ -187,6 +188,7 @@ export async function completeSelfServiceChannelOnboarding() {
 export async function publishSelfServiceMaterialNow(formData: FormData) {
   const membership = await currentMembership();
   const itemId = String(formData.get("itemId") ?? "").trim();
+  const force = formData.get("force") === "1";
   if (!membership) redirect(`/sign-in?callbackUrl=/app/month/${encodeURIComponent(itemId)}`);
 
   const item = await prisma.plannedContentItem.findFirst({
@@ -204,24 +206,26 @@ export async function publishSelfServiceMaterialNow(formData: FormData) {
   }
 
   const combinedCarousel = /vk|вконтакт/i.test(item.platformName) && /telegram|телеграм|\btg\b/i.test(item.platformName);
-  const targetPlatforms: Array<"vk" | "telegram" | "vcru"> = combinedCarousel
+  const targetPlatforms: Array<"vk" | "telegram" | "vcru" | "ok"> = combinedCarousel
     ? ["vk", "telegram"]
     : /vc\.ru|виси/i.test(item.platformName)
       ? ["vcru"]
       : /vk|вконтакт/i.test(item.platformName)
         ? ["vk"]
+        : /одноклассники|\bok\b|\bок\b/i.test(item.platformName)
+          ? ["ok"]
         : /telegram|телеграм|\btg\b/i.test(item.platformName)
           ? ["telegram"]
           : [];
   if (!targetPlatforms.length) redirect(`/app/month/${encodeURIComponent(itemId)}?error=manual_export_only`);
 
-  const outcome = await publishScheduledPublication(publication.id, { platforms: targetPlatforms });
+  const outcome = await publishScheduledPublication(publication.id, { platforms: targetPlatforms, force });
   revalidatePath("/app");
   revalidatePath("/app/month");
   revalidatePath(`/app/month/${itemId}`);
   revalidatePath("/app/results");
   if (!outcome.ok) redirect(`/app/month/${encodeURIComponent(itemId)}?error=${encodeURIComponent(outcome.error)}`);
-  redirect(`/app/month/${itemId}?notice=${outcome.alreadyPublished ? "already_published" : "published"}`);
+  redirect(`/app/month/${itemId}?notice=${force ? "republished" : outcome.alreadyPublished ? "already_published" : "published"}`);
 }
 
 export async function saveSelfServiceChannels(formData: FormData) {

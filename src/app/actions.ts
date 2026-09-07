@@ -1558,8 +1558,8 @@ function exactSelfServiceContentMix<T extends PairablePlanItem>(
     { count: configuration.vkPosts, platform: vk, format: "пост VK с визуалом", label: "Пост VK", goal: "Регулярное присутствие и вовлечение аудитории" },
     { count: configuration.telegramPosts, platform: telegram, format: "пост Telegram с визуалом", label: "Пост Telegram", goal: "Нативное общение с аудиторией канала" },
     { count: configuration.okPosts, platform: ok, format: "пост Одноклассники с визуалом", label: "Пост Одноклассники", goal: "Понятное и доверительное общение с аудиторией Одноклассников" },
-    { count: configuration.dzenArticles, platform: dzen, format: "экспертная статья Дзен с обложкой", label: "Статья Дзен", goal: "Экспертность и органический охват" },
-    { count: configuration.vcruArticles, platform: vcru, format: "деловая статья VC.ru с обложкой", label: "Статья VC.ru", goal: "Экспертность и доверие деловой аудитории" },
+    { count: configuration.dzenArticles, platform: dzen, format: "экспертная статья Дзен с обложкой", label: "Статья Дзен", goal: "Экспертность и органический охват", topicOverride: configuration.dzenArticleTopic },
+    { count: configuration.vcruArticles, platform: vcru, format: "деловая статья VC.ru с обложкой", label: "Статья VC.ru", goal: "Экспертность и доверие деловой аудитории", topicOverride: configuration.vcruArticleTopic },
     { count: configuration.carousels, platform: configuration.carouselPlatform === "both" && vk && telegram ? "VK + Telegram" : configuration.carouselPlatform === "telegram" ? (telegram ?? vk) : (vk ?? telegram), format: `карусель из ${configuration.carouselSlides} отдельных слайдов`, label: "Карусель", goal: `Наглядно раскрыть тему в ${configuration.carouselSlides} карточках` },
     { count: configuration.quickAnnouncements, platform: telegram ?? vk, format: "короткий анонс", label: "Анонс", goal: "Быстро сообщить важную новость или предложение" },
     { count: configuration.reviewReplies, platform: telegram ?? vk, format: "ответ на отзыв", label: "Ответ на отзыв", goal: "Подготовить корректный ответ в тоне бренда" },
@@ -1589,12 +1589,17 @@ function exactSelfServiceContentMix<T extends PairablePlanItem>(
     const day = candidateDays[candidateIndex];
     const theme = strategicThemes[targetIndex % Math.max(1, strategicThemes.length)];
     const useSourceTopic = targetIndex < samePlatform.length;
+    const requestedTopic = "topicOverride" in target && typeof target.topicOverride === "string"
+      ? target.topicOverride.trim()
+      : "";
     return {
       ...base,
       moduleType: /статья/i.test(target.format) ? "expert_articles" : "content_production",
       platformName: target.platform!,
       format: target.format,
-      topic: useSourceTopic ? base.topic : `${target.label} №${targetIndex + 1}${theme ? `: ${theme}` : ""}`,
+      topic: requestedTopic
+        ? targetIndex === 0 ? requestedTopic : `${requestedTopic} — дополнительный ракурс №${targetIndex + 1}`
+        : useSourceTopic ? base.topic : `${target.label} №${targetIndex + 1}${theme ? `: ${theme}` : ""}`,
       goal: target.goal,
       plannedDate: `${month}-${String(day).padStart(2, "0")}`,
       week: `Неделя ${Math.min(5, Math.floor((day - 1) / 7) + 1)}`,

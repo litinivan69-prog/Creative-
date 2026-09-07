@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useState } from "react";
 import { PlatformBrandIcon, type PlatformBrand } from "@/app/(self-service)/platform-brand-icon";
 import { RibesBrand, RibesMark } from "@/app/(self-service)/ribes-brand";
+import { CookieConsent } from "@/app/(self-service)/demo/cookie-consent";
 import {
   BILLING_DURATIONS,
   CREDIT_PLANS,
@@ -377,7 +378,7 @@ function ClientJourney() {
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-4 rounded-[24px] border border-violet-400/18 bg-violet-500/[0.07] px-5 py-4"><p className="text-xs text-white/46"><span className="font-semibold text-white/82">На пробном доступе:</span> пройдите бриф и получите первые материалы, не подключая площадки.</p><Link href="/start" className="text-xs font-semibold text-violet-200">Начать путь →</Link></div>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-4 rounded-[24px] border border-violet-400/18 bg-violet-500/[0.07] px-5 py-4"><p className="text-xs text-white/46"><span className="font-semibold text-white/82">На пробном доступе:</span> пройдите бриф и получите первые материалы, не подключая площадки.</p><a href="#pricing" className="text-xs font-semibold text-violet-200">Посмотреть тарифы →</a></div>
     </section>
   );
 }
@@ -416,6 +417,10 @@ function CreativeCommandStory() {
   );
 }
 
+function FreeTrialCallout() {
+  return <section className="mx-auto my-24 max-w-[1320px] px-4 sm:px-7 sm:my-28"><div className="overflow-hidden rounded-[36px] bg-[radial-gradient(circle_at_85%_10%,rgba(255,255,255,.9),transparent_30%),linear-gradient(135deg,#ddd4ff,#f4f0ff_55%,#e4ddff)] p-7 text-[#14111b] shadow-[0_40px_130px_rgba(78,54,145,.22)] sm:p-12 lg:p-14"><div className="grid gap-10 lg:grid-cols-[1.2fr_.8fr] lg:items-center"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-violet-700">Пробный доступ</p><h2 className="mt-5 max-w-4xl font-heading text-4xl font-semibold leading-[.98] tracking-[-0.055em] sm:text-6xl">Попробуйте Ribes бесплатно</h2><p className="mt-6 max-w-2xl text-sm leading-7 text-black/55">Получите {displayCredits(TRIAL_CREDITS)} пробных кредитов. Их хватит на полноценную статью, два поста с визуалами и одну адресную правку. Подписка и подключение площадок на этом этапе не нужны.</p><div className="mt-8"><a href="#pricing" className="inline-flex rounded-2xl bg-black px-7 py-4 text-center text-sm font-semibold text-white transition hover:bg-violet-700">Посмотреть тарифы ↓</a></div></div><div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">{[[displayCredits(TRIAL_CREDITS),"кредитов на знакомство"],["0 ₽","до выбора подписки"],["1 вопрос","на каждом экране брифа"]].map(([value,label],index)=><div key={label} className={`rounded-[22px] border border-black/[0.07] bg-white/55 p-5 backdrop-blur ${index === 1 ? "lg:ml-8" : index === 2 ? "lg:ml-16" : ""}`}><p className="text-2xl font-semibold tracking-[-0.04em]">{value}</p><p className="mt-2 text-[10px] text-black/42">{label}</p></div>)}</div></div></div></section>;
+}
+
 function FAQ() {
   return (
     <section id="faq" className="scroll-mt-24 border-t border-white/[0.06] py-24 sm:py-28">
@@ -442,7 +447,7 @@ function PublicPricing() {
           <h2 className="mt-3 max-w-3xl font-heading text-4xl font-semibold leading-[1.02] tracking-[-0.045em] sm:text-5xl">Выбирайте объём под себя</h2>
           <p className="mt-4 max-w-2xl text-sm leading-6 text-white/40">Кредиты можно распределить между постами, статьями, визуалами и каруселями в любой пропорции.</p>
         </div>
-        <Link href="/start" className="inline-flex w-fit rounded-2xl bg-white px-5 py-3 text-xs font-semibold text-black transition hover:bg-violet-100">Попробовать бесплатно</Link>
+        <Link href="/start" target="_blank" rel="noreferrer" className="inline-flex w-fit rounded-2xl bg-white px-6 py-3.5 text-xs font-semibold text-black transition hover:bg-violet-100">Начать в новом окне ↗</Link>
       </div>
 
       <div className="mx-auto mt-8 flex max-w-6xl flex-wrap gap-2 rounded-[18px] border border-white/[0.07] bg-white/[0.025] p-1.5">
@@ -456,7 +461,7 @@ function PublicPricing() {
           const totalPrice = subscriptionPriceMinor(plan.code, months);
           const monthlyPrice = Math.round(totalPrice / months);
           const saving = plan.monthlyPriceMinor * months - totalPrice;
-          return <article key={plan.code} className={`relative overflow-hidden rounded-[24px] border p-5 ${"featured" in plan && plan.featured ? "border-violet-400/30 bg-[linear-gradient(145deg,rgba(115,78,255,.18),rgba(255,255,255,.03))] shadow-[0_24px_70px_rgba(66,43,140,.16)]" : "border-white/[0.07] bg-white/[0.025]"}`}><div className="flex items-center justify-between gap-3"><p className="text-sm font-semibold text-white">{plan.name}</p>{"featured" in plan && plan.featured ? <span className="rounded-full bg-violet-500/16 px-2.5 py-1 text-[8px] font-bold uppercase tracking-[0.08em] text-violet-200">оптимальный</span> : null}</div><div className="mt-5 flex items-end gap-2"><p className="font-heading text-3xl font-semibold tracking-[-0.05em] text-white">{formatRubles(monthlyPrice)} ₽</p><span className="pb-1 text-[9px] text-white/28">в месяц</span></div><div className="mt-3 flex items-center justify-between rounded-xl bg-black/15 px-3 py-2"><span className="text-sm font-semibold text-violet-200">{displayCredits(plan.credits)} кредитов</span><span className="text-[8px] text-white/25">ежемесячно</span></div><ul className="mt-4 space-y-2 text-[11px] text-white/42"><li>✓ Любые форматы</li><li>✓ Тексты и визуалы под бренд</li><li>✓ Календарь и публикации</li></ul><p className="mt-4 min-h-8 text-[9px] leading-4 text-white/26">{plan.description}</p>{saving > 0 ? <p className="mt-2 text-[9px] font-semibold text-violet-300">Экономия {formatRubles(saving)} ₽ за период</p> : <p className="mt-2 text-[9px] text-white/20">Срок можно изменить</p>}<Link href="/start" className={`mt-4 flex justify-center rounded-xl px-4 py-3 text-[11px] font-semibold transition ${"featured" in plan && plan.featured ? "bg-violet-500 text-white hover:bg-violet-400" : "border border-white/[0.09] bg-white/[0.04] text-white/75 hover:bg-white/[0.08]"}`}>Выбрать</Link></article>;
+          return <article key={plan.code} className={`relative overflow-hidden rounded-[24px] border p-5 ${"featured" in plan && plan.featured ? "border-violet-400/30 bg-[linear-gradient(145deg,rgba(115,78,255,.18),rgba(255,255,255,.03))] shadow-[0_24px_70px_rgba(66,43,140,.16)]" : "border-white/[0.07] bg-white/[0.025]"}`}><div className="flex items-center justify-between gap-3"><p className="text-sm font-semibold text-white">{plan.name}</p>{"featured" in plan && plan.featured ? <span className="rounded-full bg-violet-500/16 px-2.5 py-1 text-[8px] font-bold uppercase tracking-[0.08em] text-violet-200">оптимальный</span> : null}</div><div className="mt-5 flex items-end gap-2"><p className="font-heading text-3xl font-semibold tracking-[-0.05em] text-white">{formatRubles(monthlyPrice)} ₽</p><span className="pb-1 text-[9px] text-white/28">в месяц</span></div><div className="mt-3 flex items-center justify-between rounded-xl bg-black/15 px-3 py-2"><span className="text-sm font-semibold text-violet-200">{displayCredits(plan.credits)} кредитов</span><span className="text-[8px] text-white/25">ежемесячно</span></div><ul className="mt-4 space-y-2 text-[11px] text-white/42"><li>✓ Любые форматы</li><li>✓ Тексты и визуалы под бренд</li><li>✓ Календарь и публикации</li></ul><p className="mt-4 min-h-8 text-[9px] leading-4 text-white/26">{plan.description}</p>{saving > 0 ? <p className="mt-2 text-[9px] font-semibold text-violet-300">Экономия {formatRubles(saving)} ₽ за период</p> : <p className="mt-2 text-[9px] text-white/20">Срок можно изменить</p>}<Link href="/start" target="_blank" rel="noreferrer" className={`mt-4 flex justify-center rounded-xl px-4 py-3 text-[11px] font-semibold transition ${"featured" in plan && plan.featured ? "bg-violet-500 text-white hover:bg-violet-400" : "border border-white/[0.09] bg-white/[0.04] text-white/75 hover:bg-white/[0.08]"}`}>Выбрать и начать ↗</Link></article>;
         })}
       </div>
 
@@ -476,15 +481,15 @@ export function AdaptivePresenceDemo() {
       <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#08070c]/80 backdrop-blur-xl">
         <div className="mx-auto flex h-20 max-w-[1320px] items-center justify-between gap-4 px-4 sm:px-7">
           <Link href="/" aria-label="Ribes"><BrandMark /></Link>
-          <nav className="hidden items-center gap-7 text-[11px] font-medium text-white/48 lg:flex"><a href="#product" className="transition hover:text-white">Продукт</a><a href="#formats" className="transition hover:text-white">Форматы</a><a href="#articles" className="transition hover:text-white">Статьи</a><a href="#outcomes" className="transition hover:text-white">Результат</a><a href="#pricing" className="transition hover:text-white">Тарифы</a><a href="#faq" className="transition hover:text-white">Вопросы</a><Link href="/sign-in" className="transition hover:text-white">Войти</Link></nav>
-          <div className="flex items-center gap-2"><button type="button" onClick={() => setMobileMenuOpen(value => !value)} className="grid h-10 w-10 place-items-center rounded-full border border-white/[0.08] text-sm text-white/70 lg:hidden" aria-label="Открыть меню">{mobileMenuOpen ? "×" : "≡"}</button><Link href="/start" className="rounded-full bg-white px-4 py-2.5 text-[11px] font-semibold text-black transition hover:bg-violet-100 sm:px-5">Попробовать</Link></div>
+          <nav className="hidden items-center gap-7 text-[11px] font-medium text-white/48 lg:flex"><a href="#product" className="transition hover:text-white">Продукт</a><a href="#formats" className="transition hover:text-white">Форматы</a><a href="#articles" className="transition hover:text-white">Статьи</a><a href="#outcomes" className="transition hover:text-white">Результат</a><a href="#pricing" className="transition hover:text-white">Тарифы</a><a href="#faq" className="transition hover:text-white">Вопросы</a><Link href="/sign-in" target="_blank" rel="noreferrer" className="transition hover:text-white">Войти</Link></nav>
+          <div className="flex items-center gap-2"><button type="button" onClick={() => setMobileMenuOpen(value => !value)} className="grid h-10 w-10 place-items-center rounded-full border border-white/[0.08] text-sm text-white/70 lg:hidden" aria-label="Открыть меню">{mobileMenuOpen ? "×" : "≡"}</button><a href="#pricing" className="rounded-full bg-white px-5 py-3 text-xs font-semibold text-black transition hover:bg-violet-100 sm:px-6">Попробовать</a></div>
         </div>
-        {mobileMenuOpen ? <nav className="grid gap-1 border-t border-white/[0.06] bg-[#0b0910] px-4 py-4 text-sm text-white/65 lg:hidden">{[["#product","Продукт"],["#formats","Форматы"],["#articles","Статьи"],["#outcomes","Результат"],["#pricing","Тарифы"],["#faq","Вопросы"]].map(([href,label])=><a key={href} href={href} onClick={()=>setMobileMenuOpen(false)} className="rounded-xl px-3 py-3 hover:bg-white/[0.04]">{label}</a>)}<Link href="/sign-in" className="rounded-xl px-3 py-3 hover:bg-white/[0.04]">Войти</Link></nav> : null}
+        {mobileMenuOpen ? <nav className="grid gap-1 border-t border-white/[0.06] bg-[#0b0910] px-4 py-4 text-sm text-white/65 lg:hidden">{[["#product","Продукт"],["#formats","Форматы"],["#articles","Статьи"],["#outcomes","Результат"],["#pricing","Тарифы"],["#faq","Вопросы"]].map(([href,label])=><a key={href} href={href} onClick={()=>setMobileMenuOpen(false)} className="rounded-xl px-3 py-3 hover:bg-white/[0.04]">{label}</a>)}<Link href="/sign-in" target="_blank" rel="noreferrer" className="rounded-xl px-3 py-3 hover:bg-white/[0.04]">Войти ↗</Link></nav> : null}
       </header>
 
       <div className="relative mx-auto max-w-[1320px] px-4 sm:px-7">
         <section className="grid min-h-[780px] items-center gap-12 pb-16 pt-16 lg:grid-cols-[1.02fr_.98fr] lg:py-24">
-          <div className="relative z-10"><span className="inline-flex items-center gap-2 rounded-full border border-violet-400/20 bg-violet-500/10 px-3 py-1.5 text-[10px] font-semibold text-violet-200"><span className="h-1.5 w-1.5 rounded-full bg-violet-300" />ИИ-система присутствия бренда</span><h1 className="mt-7 max-w-4xl font-heading text-5xl font-semibold leading-[.92] tracking-[-0.065em] text-white sm:text-7xl lg:text-[82px]">Ваш бренд<br />выходит <span className="bg-[linear-gradient(90deg,#d6cdff,#9a81ff,#7656ff)] bg-clip-text text-transparent">сам.</span></h1><p className="mt-7 max-w-xl text-base leading-7 text-white/46 sm:text-lg">Заполните бриф и получите готовый контент-месяц для российских площадок. Тексты, статьи, визуалы и даты публикаций появятся в одном кабинете.</p><div className="mt-8 flex flex-col gap-3 sm:flex-row"><Link href="/start" className="rounded-2xl bg-violet-500 px-6 py-3.5 text-center text-sm font-semibold text-white shadow-[0_18px_55px_rgba(112,78,255,.3)] transition hover:bg-violet-400">Собрать пробный месяц</Link><a href="#product" className="rounded-2xl border border-white/[0.09] bg-white/[0.04] px-6 py-3.5 text-center text-sm font-semibold text-white/75 transition hover:bg-white/[0.08] hover:text-white">Посмотреть кабинет</a></div><div className="mt-7 flex flex-wrap gap-x-6 gap-y-2 text-[10px] text-white/28"><span>500 пробных кредитов</span><span>работа без менеджера</span><span>старт за 10 минут</span></div></div>
+          <div className="relative z-10"><span className="inline-flex items-center gap-2 rounded-full border border-violet-400/20 bg-violet-500/10 px-3 py-1.5 text-[10px] font-semibold text-violet-200"><span className="h-1.5 w-1.5 rounded-full bg-violet-300" />ИИ-система присутствия бренда</span><h1 className="mt-7 max-w-4xl font-heading text-5xl font-semibold leading-[.92] tracking-[-0.065em] text-white sm:text-7xl lg:text-[82px]">Ваш бренд<br />выходит <span className="bg-[linear-gradient(90deg,#d6cdff,#9a81ff,#7656ff)] bg-clip-text text-transparent">сам.</span></h1><p className="mt-7 max-w-xl text-base leading-7 text-white/46 sm:text-lg">Заполните бриф и получите готовый контент-месяц для российских площадок. Тексты, статьи, визуалы и даты публикаций появятся в одном кабинете.</p><div className="mt-8 flex flex-col gap-3 sm:flex-row"><a href="#pricing" className="rounded-2xl bg-violet-500 px-7 py-4 text-center text-sm font-semibold text-white shadow-[0_18px_55px_rgba(112,78,255,.3)] transition hover:bg-violet-400">Посмотреть тарифы</a><a href="#product" className="rounded-2xl border border-white/[0.09] bg-white/[0.04] px-6 py-3.5 text-center text-sm font-semibold text-white/75 transition hover:bg-white/[0.08] hover:text-white">Посмотреть кабинет</a></div><div className="mt-7 flex flex-wrap gap-x-6 gap-y-2 text-[10px] text-white/28"><span>{displayCredits(TRIAL_CREDITS)} пробных кредитов</span><span>работа без менеджера</span><span>старт за 10 минут</span></div></div>
           <HeroProductMontage />
         </section>
 
@@ -496,6 +501,8 @@ export function AdaptivePresenceDemo() {
       </div>
 
       <PlatformFormats />
+
+      <FreeTrialCallout />
 
       <div className="mx-auto max-w-[1320px] px-4 sm:px-7">
         <ArticlePipeline />
@@ -510,22 +517,16 @@ export function AdaptivePresenceDemo() {
         <PublicPricing />
         <FAQ />
 
-        <section className="mb-20 overflow-hidden rounded-[36px] bg-[radial-gradient(circle_at_85%_10%,rgba(255,255,255,.9),transparent_30%),linear-gradient(135deg,#ddd4ff,#f4f0ff_55%,#e4ddff)] p-7 text-[#14111b] shadow-[0_40px_130px_rgba(78,54,145,.22)] sm:p-12 lg:p-14">
-          <div className="grid gap-10 lg:grid-cols-[1.2fr_.8fr] lg:items-center">
-            <div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-violet-700">Пробный доступ</p><h2 className="mt-5 max-w-4xl font-heading text-4xl font-semibold leading-[.98] tracking-[-0.055em] sm:text-6xl">Попробуйте Ribes бесплатно</h2><p className="mt-6 max-w-2xl text-sm leading-7 text-black/55">Получите {displayCredits(TRIAL_CREDITS)} пробных кредитов. Заполните бриф, соберите профиль бренда и откройте первые материалы. Подписка и подключение площадок на этом этапе не нужны.</p><div className="mt-8 flex flex-col gap-3 sm:flex-row"><Link href="/start" className="rounded-2xl bg-black px-6 py-3.5 text-center text-sm font-semibold text-white transition hover:bg-violet-700">Попробовать бесплатно →</Link><Link href="/sign-in" className="rounded-2xl border border-black/10 bg-white/45 px-6 py-3.5 text-center text-sm font-semibold text-black/65 transition hover:bg-white/70">Уже есть аккаунт</Link></div></div>
-            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">{[[displayCredits(TRIAL_CREDITS),"кредитов на знакомство"],["0 ₽","до выбора подписки"],["3 шага","бриф, профиль, материалы"]].map(([value,label],index)=><div key={label} className={`rounded-[22px] border border-black/[0.07] bg-white/55 p-5 backdrop-blur ${index === 1 ? "lg:ml-8" : index === 2 ? "lg:ml-16" : ""}`}><p className="text-2xl font-semibold tracking-[-0.04em]">{value}</p><p className="mt-2 text-[10px] text-black/42">{label}</p></div>)}</div>
-          </div>
-        </section>
-
         <footer className="border-t border-white/[0.06] py-10">
           <div className="grid gap-8 lg:grid-cols-[1fr_1fr_1.15fr]">
             <div><BrandMark /><p className="mt-5 max-w-xs text-[11px] leading-5 text-white/28">ИИ-система регулярного присутствия бренда. Продукт Creative Command.</p></div>
-            <div className="grid grid-cols-2 gap-x-10 gap-y-3 text-[11px] text-white/38"><a href="#product">Продукт</a><a href="#formats">Форматы</a><a href="#pricing">Тарифы</a><a href="#results">Результаты</a><a href="#faq">Вопросы</a><Link href="/sign-in">Войти</Link></div>
+            <div className="grid grid-cols-2 gap-x-10 gap-y-3 text-[11px] text-white/38"><a href="#product">Продукт</a><a href="#formats">Форматы</a><a href="#pricing">Тарифы</a><a href="#results">Результаты</a><Link href="/legal/privacy">Обработка данных</Link><Link href="/legal/terms">Условия и оферта</Link><Link href="/legal/cookies">Cookie</Link><button type="button" onClick={() => window.dispatchEvent(new Event("ribes:cookie-settings"))} className="text-left">Настройки cookie</button><Link href="/sign-in" target="_blank" rel="noreferrer">Войти ↗</Link></div>
             <a href="https://t.me/creative_command" target="_blank" rel="noreferrer" className="group rounded-[24px] border border-violet-400/16 bg-[linear-gradient(135deg,rgba(184,164,255,.16),rgba(255,255,255,.035))] p-5 transition hover:border-violet-300/28 hover:bg-violet-500/[0.1]"><div className="flex items-start justify-between gap-4"><div><p className="text-sm font-semibold text-white">Telegram-канал Creative Command</p><p className="mt-2 max-w-sm text-[10px] leading-5 text-white/32">Кейсы агентства, наблюдения о брендах и новости продукта.</p></div><TelegramMark /></div><span className="mt-5 inline-flex text-[10px] font-semibold text-violet-300 transition group-hover:text-violet-200">Открыть Telegram →</span></a>
           </div>
-          <div className="mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.05] pt-6 text-[9px] text-white/20"><p>© 2026 Creative Command · Ribes</p><p>Создано в России для российских площадок</p></div>
+          <div className="mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.05] pt-6 text-[9px] text-white/20"><p>© 2026 ООО «Криэйтив Комманд» · Ribes</p><p>ИНН 7816761274 · ОГРН 1257800117409 · КПП 781601001</p></div>
         </footer>
       </div>
+      <CookieConsent />
     </main>
   );
 }

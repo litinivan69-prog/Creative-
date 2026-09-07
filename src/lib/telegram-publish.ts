@@ -7,13 +7,16 @@ import { decryptChannelCredential, encryptChannelCredential } from "@/lib/channe
 import { sendVcArticle } from "@/lib/vc";
 import type { ArticleImage } from "@/lib/article-schema";
 import { cleanVisibleContentText } from "@/lib/content-draft-schema";
+import { sendOkPost } from "@/lib/ok";
+import { parseOkCredential } from "@/lib/ok-oauth";
 
 /** Maps a planned platform name (free text from the plan) to a channel platform. */
-function mapPublicationPlatform(name?: string | null): "vk" | "telegram" | "vcru" | null {
+function mapPublicationPlatform(name?: string | null): "vk" | "telegram" | "vcru" | "ok" | null {
   if (!name) return null;
   if (/vc\.ru|виси/i.test(name)) return "vcru";
   if (/vk|вконтакт/i.test(name)) return "vk";
   if (/telegram|телеграм|\btg\b/i.test(name)) return "telegram";
+  if (/одноклассники|\bok\b|\bок\b/i.test(name)) return "ok";
   return null;
 }
 
@@ -131,7 +134,7 @@ async function logIntegrationEvent(data: {
  */
 export async function publishScheduledPublication(
   scheduledPublicationId: string,
-  options: { force?: boolean; platforms?: Array<"vk" | "telegram" | "vcru"> } = {},
+  options: { force?: boolean; platforms?: Array<"vk" | "telegram" | "vcru" | "ok"> } = {},
 ): Promise<TelegramPublishOutcome> {
   const publication = await prisma.scheduledPublication.findUnique({
     where: { id: scheduledPublicationId },
@@ -163,7 +166,7 @@ export async function publishScheduledPublication(
     where: {
       clientId: publication.clientId,
       status: "active",
-      platform: { in: options.platforms?.length ? options.platforms : ["vk", "telegram"] },
+      platform: { in: options.platforms?.length ? options.platforms : ["vk", "telegram", "ok"] },
     },
     orderBy: { createdAt: "asc" },
     select: { id: true, channelId: true, platform: true, credentialEncrypted: true },
@@ -278,6 +281,28 @@ export async function publishScheduledPublication(
           : { channelId: channel.channelId, error: vk.error },
         ok: vk.ok,
         errorMessage: vk.ok ? undefined : vk.error,
+      });
+    } else if (channel.platform === "ok") {
+      const credential = parseOkCredential(decryptChannelCredential(channel.credentialEncrypted));
+      if (!credential) {
+        results.push({ platform: "ok", ok: false, error: "Одноклассники не подключены в настройках." });
+        continue;
+      }
+      const message = cleanVisibleContentText(stripCarouselSlideLabel(
+        [publication.contentDraft?.draftTitle || publication.topic, publication.contentDraft?.draftBody ?? ""]
+          .filter(Boolean)
+          .join("\n\n"),
+      ));
+      const ok = await sendOkPost({ credential, groupId: channel.channelId, message, imageUrls });
+      results.push(ok.ok
+        ? { platform: "ok", ok: true, url: ok.url, externalId: ok.topicId, imagesSent: ok.imagesSent }
+        : { platform: "ok", ok: false, error: ok.error });
+      await logIntegrationEvent({
+        eventType: "ok_publish",
+        relatedId: publication.id,
+        payload: ok.ok ? { groupId: channel.channelId, url: ok.url, imagesSent: ok.imagesSent } : { groupId: channel.channelId, error: ok.error },
+        ok: ok.ok,
+        errorMessage: ok.ok ? undefined : ok.error,
       });
     } else {
       const token = decryptChannelCredential(channel.credentialEncrypted)

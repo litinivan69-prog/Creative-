@@ -17,7 +17,9 @@ export const TEXT_MODEL_DEFAULT = process.env.TEXT_MODEL_DEFAULT ?? legacyModel 
 export const TEXT_MODEL_PREMIUM = process.env.TEXT_MODEL_PREMIUM ?? process.env.TEXT_MODEL_DEFAULT ?? legacyModel ?? "gpt-5.6-sol";
 export const TEXT_MODEL_FAST = process.env.TEXT_MODEL_FAST ?? legacyModel ?? "gpt-5.6-luna";
 export const TEXT_MODEL_STRATEGY = process.env.TEXT_MODEL_STRATEGY ?? TEXT_MODEL_PREMIUM;
-export const TEXT_MODEL_MONTHLY_PLAN = process.env.TEXT_MODEL_MONTHLY_PLAN ?? TEXT_MODEL_PREMIUM;
+// The plan is structured routing work. Terra is materially cheaper than Sol
+// and is sufficient here; Sol remains reserved for the once-per-brand strategy.
+export const TEXT_MODEL_MONTHLY_PLAN = process.env.TEXT_MODEL_MONTHLY_PLAN ?? TEXT_MODEL_DEFAULT;
 export const TEXT_MODEL_CONTENT = process.env.TEXT_MODEL_CONTENT ?? TEXT_MODEL_DEFAULT;
 export const TEXT_MODEL_CREATIVE_BRIEF = process.env.TEXT_MODEL_CREATIVE_BRIEF ?? TEXT_MODEL_DEFAULT;
 

@@ -179,7 +179,7 @@ export async function syncYooKassaPayment(providerPaymentId: string) {
             amount: creditsToGrant,
             balanceAfter: updatedWallet.balance,
             kind: current.purchaseKind === "top_up" ? "top_up" : "subscription_grant",
-            description: current.purchaseKind === "top_up" ? "Пополнение кредитов" : "Кредиты по тарифу",
+            description: current.purchaseKind === "top_up" ? "Пополнение кредитов Ribes" : "Кредиты по тарифу Ribes",
             referenceType: "billing_payment",
             referenceId: current.id,
             idempotencyKey: creditKey,

@@ -1,5 +1,6 @@
-// Enough for a real trial: two posts with visuals and one article with a cover.
-export const TRIAL_CREDITS = 9;
+// A useful trial: one complete article plus two posts with visuals, with a
+// small reserve for one directed visual revision.
+export const TRIAL_CREDITS = 15;
 export const CREDIT_DISPLAY_MULTIPLIER = 100;
 
 export function displayCredits(value: number) {
@@ -9,8 +10,8 @@ export function displayCredits(value: number) {
 export const CREDIT_PRODUCTS = {
   text_post: { label: "Пост без визуала", credits: 1 },
   visual_post: { label: "Пост с визуалом", credits: 2 },
-  article: { label: "Статья Дзен или VC.ru", credits: 4 },
-  article_with_cover: { label: "Статья с обложкой", credits: 5 },
+  article: { label: "Статья Дзен или VC.ru", credits: 8 },
+  article_with_cover: { label: "Статья с обложкой и иллюстрациями", credits: 10 },
   carousel: { label: "Карусель из 4 слайдов", credits: 5 },
   carousel_extra_slide: { label: "Дополнительный слайд", credits: 1 },
   visual_revision: { label: "Правка визуала по комментарию", credits: 1 },
@@ -60,7 +61,7 @@ export function resolveSubscriptionPurchase(planCode: string, months: number) {
     durationMonths: duration.months,
     amountMinor: subscriptionPriceMinor(plan.code, duration.months),
     credits: plan.credits * duration.months,
-    description: `Adaptive Presence — тариф «${plan.name}» на ${duration.label.toLowerCase()}`,
+    description: `Ribes — тариф «${plan.name}» на ${duration.label.toLowerCase()}`,
   };
 }
 
@@ -74,7 +75,7 @@ export function resolveTopUpPurchase(topUpCode: string) {
     durationMonths: null,
     amountMinor: topUp.priceMinor,
     credits: topUp.credits,
-    description: `Adaptive Presence — пополнение на ${displayCredits(topUp.credits)} кредитов`,
+    description: `Ribes — пополнение на ${displayCredits(topUp.credits)} кредитов`,
   };
 }
 

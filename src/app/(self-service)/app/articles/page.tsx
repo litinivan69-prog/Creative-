@@ -70,7 +70,7 @@ export default async function SelfServiceArticlesPage() {
       eyebrow="Статьи"
       title="Полноценные материалы для Дзена и VC.ru."
       description="Структура, полный текст, обложка и дополнительные изображения собраны в одном месте."
-      headerAction={<Link href="/app/month#materials" className="rounded-2xl border border-white/[0.08] bg-white/[0.04] px-5 py-3 text-xs font-semibold text-white/65 transition hover:bg-white/[0.07]">Открыть календарь</Link>}
+      headerAction={<div className="flex flex-wrap gap-2"><Link href="/app/articles/new" className="rounded-2xl bg-violet-500 px-5 py-3 text-xs font-semibold text-white transition hover:bg-violet-400">+ Статья по своей теме</Link><Link href="/app/month#materials" className="rounded-2xl border border-white/[0.08] bg-white/[0.04] px-5 py-3 text-xs font-semibold text-white/65 transition hover:bg-white/[0.07]">Открыть календарь</Link></div>}
     >
       <section className="grid gap-3 sm:grid-cols-3">
         {[
@@ -117,7 +117,7 @@ export default async function SelfServiceArticlesPage() {
           })}
         </section>
       ) : (
-        <section className={`${darkCardClass} mt-4 grid min-h-80 place-items-center p-8 text-center`}><div><span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-violet-500/10 text-lg text-violet-200">≡</span><h2 className="mt-5 text-xl font-semibold">Статьи появятся здесь</h2><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-white/32">Выберите Дзен или VC.ru при настройке контент-месяца. Система подготовит структуру, полный текст и обложку автоматически.</p><Link href="/app/month" className="mt-6 inline-flex rounded-2xl bg-violet-500 px-5 py-3 text-xs font-semibold text-white">Открыть месяц</Link></div></section>
+        <section className={`${darkCardClass} mt-4 grid min-h-80 place-items-center p-8 text-center`}><div><span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-violet-500/10 text-lg text-violet-200">≡</span><h2 className="mt-5 text-xl font-semibold">Статьи появятся здесь</h2><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-white/32">Задайте конкретную тему или добавьте статьи при сборке контент-месяца. Система подготовит структуру, полный текст и обложку автоматически.</p><Link href="/app/articles/new" className="mt-6 inline-flex rounded-2xl bg-violet-500 px-5 py-3 text-xs font-semibold text-white">Создать статью по теме</Link></div></section>
       )}
     </SelfServiceAppShell>
   );

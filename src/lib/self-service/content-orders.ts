@@ -24,14 +24,23 @@ export const SelfServiceContentOrderConfigurationSchema = z.object({
   carouselPlatform: z.enum(["vk", "telegram", "both"]).default("vk"),
   quickAnnouncements: z.number().int().min(0).max(100),
   reviewReplies: z.number().int().min(0).max(100),
+  dzenArticleTopic: z.string().trim().max(500).default(""),
+  vcruArticleTopic: z.string().trim().max(500).default(""),
 });
 
 export type SelfServiceContentOrderConfiguration = z.infer<typeof SelfServiceContentOrderConfigurationSchema>;
 
 export function contentOrderConfigurationFromFormData(formData: FormData) {
+  const specificArticleTopic = String(formData.get("specificArticleTopic") ?? "").trim();
+  const specificArticlePlatform = String(formData.get("specificArticlePlatform") ?? "");
+  const numericFields = Object.fromEntries(SELF_SERVICE_CONTENT_ORDER_FIELDS.map((field) => [field, Number(formData.get(field) ?? 0)]));
+  if (specificArticleTopic && specificArticlePlatform === "dzen") numericFields.dzenArticles = 1;
+  if (specificArticleTopic && specificArticlePlatform === "vcru") numericFields.vcruArticles = 1;
   return SelfServiceContentOrderConfigurationSchema.parse({
-    ...Object.fromEntries(SELF_SERVICE_CONTENT_ORDER_FIELDS.map((field) => [field, Number(formData.get(field) ?? 0)])),
+    ...numericFields,
     carouselPlatform: formData.get("carouselPlatform") ?? "vk",
+    dzenArticleTopic: formData.get("dzenArticleTopic") ?? (specificArticlePlatform === "dzen" ? specificArticleTopic : ""),
+    vcruArticleTopic: formData.get("vcruArticleTopic") ?? (specificArticlePlatform === "vcru" ? specificArticleTopic : ""),
   });
 }
 

@@ -59,6 +59,7 @@ type CalendarItem = {
   thumbnailVariantId: string | null;
   thumbnailUrl: string | null;
   slideCount: number;
+  articleId: string | null;
 };
 
 function activeVisualInfo(item: {
@@ -129,7 +130,7 @@ function MonthCalendar({ month, items }: { month: string; items: CalendarItem[] 
             <div key={`${day ?? "blank"}-${index}`} className={`relative min-h-[72px] min-w-0 overflow-hidden rounded-xl border sm:min-h-[128px] sm:rounded-2xl ${day ? "border-white/[0.055] bg-black/15" : "border-transparent bg-transparent"}`}>
               {day ? <span className={`absolute left-1.5 top-1.5 z-10 grid h-5 min-w-5 place-items-center rounded-full px-1 text-[9px] font-semibold backdrop-blur-md sm:left-2 sm:top-2 ${dayItems.length ? "bg-violet-500 text-white" : "bg-black/45 text-white/45"}`}>{day}</span> : null}
               {primaryItem ? (
-                <Link href={`/app/month/${primaryItem.id}`} title={primaryItem.topic} className="group absolute inset-0 block">
+                <Link href={primaryItem.articleId ? `/app/articles/${primaryItem.articleId}` : `/app/month/${primaryItem.id}`} title={primaryItem.topic} className="group absolute inset-0 block">
                   {thumbnail ? <img src={thumbnail} alt="" className="h-full w-full object-cover opacity-75 transition duration-300 group-hover:scale-[1.03] group-hover:opacity-90" /> : <div className="h-full w-full bg-[radial-gradient(circle_at_50%_20%,rgba(124,92,255,.18),transparent_55%),linear-gradient(145deg,rgba(255,255,255,.035),rgba(255,255,255,.01))]" />}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/25 to-transparent" />
                   <div className="absolute inset-x-0 bottom-0 p-1.5 sm:p-2.5">
@@ -207,7 +208,7 @@ export default async function SelfServiceMonthPage({
   const articleCovers = rawItems.length
     ? await prisma.article.findMany({
         where: { plannedContentItemId: { in: rawItems.map((item) => item.id) }, status: { not: "archived" } },
-        select: { plannedContentItemId: true, images: true },
+        select: { id: true, plannedContentItemId: true, images: true },
       })
     : [];
   const articleCoverByItemId = new Map(
@@ -216,10 +217,14 @@ export default async function SelfServiceMonthPage({
       return article.plannedContentItemId && cover ? [[article.plannedContentItemId, cover] as const] : [];
     }),
   );
+  const articleIdByItemId = new Map(
+    articleCovers.flatMap((article) => article.plannedContentItemId ? [[article.plannedContentItemId, article.id] as const] : []),
+  );
   const items: CalendarItem[] = rawItems.map((item) => ({
     ...item,
     ...activeVisualInfo(item),
     thumbnailUrl: articleCoverByItemId.get(item.id) ?? null,
+    articleId: articleIdByItemId.get(item.id) ?? null,
   }));
   const readyTexts = rawItems.filter((item) => item.contentDraft).length;
   const readyVisuals = items.filter((item) => item.thumbnailUrl || item.thumbnailVariantId).length;
@@ -298,7 +303,7 @@ export default async function SelfServiceMonthPage({
                   const thumbnail = materialThumbnailUrl(item);
                   const platform = platformBrandFromName(item.platformName);
                   return (
-                    <Link href={`/app/month/${item.id}`} key={item.id} className="group overflow-hidden rounded-[20px] border border-white/[0.06] bg-black/15 transition hover:-translate-y-0.5 hover:border-violet-400/20 hover:bg-white/[0.04]">
+                    <Link href={item.articleId ? `/app/articles/${item.articleId}` : `/app/month/${item.id}`} key={item.id} className="group overflow-hidden rounded-[20px] border border-white/[0.06] bg-black/15 transition hover:-translate-y-0.5 hover:border-violet-400/20 hover:bg-white/[0.04]">
                       <div className="relative aspect-[16/8] overflow-hidden bg-[radial-gradient(circle_at_50%_20%,rgba(124,92,255,.18),transparent_60%)]">{thumbnail ? <img src={thumbnail} alt="" className="h-full w-full object-cover opacity-82 transition duration-500 group-hover:scale-[1.03] group-hover:opacity-95" /> : <span className="grid h-full place-items-center text-2xl text-violet-300/45">◇</span>}<div className="absolute inset-0 bg-gradient-to-t from-[#0d0c12] via-transparent to-transparent" /><span className="absolute left-3 top-3">{platform ? <PlatformBrandIcon platform={platform} size="xs" /> : null}</span><span className="absolute bottom-2.5 right-3 text-[9px] font-semibold text-white/75">{formatDate(item.plannedDate)}</span>{item.slideCount > 0 ? <span className="absolute bottom-2.5 left-3 rounded-full bg-black/65 px-2 py-1 text-[8px] font-semibold text-white/75 backdrop-blur">Карусель · {item.slideCount}</span> : null}</div>
                       <div className="p-4"><div className="flex items-center justify-between gap-2"><span className="text-[9px] text-white/30">{platformLabel(item.platformName)} · #{String(index + 1).padStart(2, "0")}</span><span className={`rounded-full px-2 py-1 text-[8px] font-semibold ${state === "Готов" ? "bg-violet-500/12 text-violet-200" : "bg-white/[0.06] text-white/40"}`}>{state}</span></div><h3 className="mt-3 line-clamp-2 min-h-10 text-xs font-medium leading-5 text-white/82">{item.topic}</h3><p className="mt-3 line-clamp-1 border-t border-white/[0.05] pt-3 text-[9px] text-white/28">{item.goal}</p></div>
                     </Link>
