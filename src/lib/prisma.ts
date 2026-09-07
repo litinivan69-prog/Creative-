@@ -13,9 +13,10 @@ function getPrismaClient() {
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
   });
 
-  if (process.env.NODE_ENV !== "production") {
-    globalForPrisma.prisma = client;
-  }
+  // Keep one pool for the whole Node process in every environment. Creating a
+  // client on each property access exhausts PostgreSQL connections in
+  // production, especially when the publication timer runs every minute.
+  globalForPrisma.prisma = client;
 
   return client;
 }
