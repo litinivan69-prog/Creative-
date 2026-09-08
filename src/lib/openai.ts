@@ -1,6 +1,7 @@
-import OpenAI, { toFile } from "openai";
+import { toFile } from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import { z } from "zod";
+import { aiProviderAvailable, createAiClient, resolveAiModel } from "@/lib/ai-provider";
 import {
   ClientPresenceBlueprintSchema,
   validateBlueprintForPersistence,
@@ -185,16 +186,11 @@ export async function generateClientPresenceBlueprint(input: {
   rawBrief: string;
   brandContext?: string;
 }) {
-  if (!process.env.OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY is not configured.");
-  }
-
-  const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
+  if (!aiProviderAvailable()) throw new Error("AI_API_KEY is not configured.");
+  const openai = createAiClient();
 
   const response = await openai.responses.parse({
-    model: getTextModelForTask("strategy"),
+    model: resolveAiModel(getTextModelForTask("strategy")),
     ...getTextReasoningForTask("strategy"),
     input: [
       {
@@ -235,16 +231,11 @@ export async function generateMonthlyOperatingPlan(input: {
   blueprint: unknown;
   brandContext?: string;
 }) {
-  if (!process.env.OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY is not configured.");
-  }
-
-  const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
+  if (!aiProviderAvailable()) throw new Error("AI_API_KEY is not configured.");
+  const openai = createAiClient();
 
   const response = await openai.responses.parse({
-    model: getTextModelForTask("monthly_plan"),
+    model: resolveAiModel(getTextModelForTask("monthly_plan")),
     ...getTextReasoningForTask("monthly_plan"),
     input: [
       {
@@ -290,16 +281,11 @@ export async function generateMonthlyPlanRevisionProposal(input: {
   blueprint: unknown;
   brandContext?: string;
 }) {
-  if (!process.env.OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY is not configured.");
-  }
-
-  const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
+  if (!aiProviderAvailable()) throw new Error("AI_API_KEY is not configured.");
+  const openai = createAiClient();
 
   const response = await openai.responses.parse({
-    model: getTextModelForTask("monthly_plan"),
+    model: resolveAiModel(getTextModelForTask("monthly_plan")),
     ...getTextReasoningForTask("monthly_plan"),
     input: [
       {
@@ -347,16 +333,11 @@ export async function generateContentDraft(input: {
   goal: string;
   brandContext?: string;
 }) {
-  if (!process.env.OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY is not configured.");
-  }
-
-  const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
+  if (!aiProviderAvailable()) throw new Error("AI_API_KEY is not configured.");
+  const openai = createAiClient();
 
   const response = await openai.responses.parse({
-    model: getTextModelForTask("content_draft"),
+    model: resolveAiModel(getTextModelForTask("content_draft")),
     ...getTextReasoningForTask("content_draft"),
     input: [
       {
@@ -407,11 +388,11 @@ export async function generateInstantSelfServiceText(input: {
   rating?: number | null;
   brandContext?: string;
 }) {
-  if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured.");
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  if (!aiProviderAvailable()) throw new Error("AI_API_KEY is not configured.");
+  const openai = createAiClient();
   const isReview = input.kind === "yandex_review_reply";
   const response = await openai.responses.parse({
-    model: getTextModelForTask("fast"),
+    model: resolveAiModel(getTextModelForTask("fast")),
     ...getTextReasoningForTask("fast"),
     input: [
       {
@@ -453,16 +434,11 @@ export async function generateCreativeAssetBrief(input: {
   topic: string;
   brandContext?: string;
 }) {
-  if (!process.env.OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY is not configured.");
-  }
-
-  const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
+  if (!aiProviderAvailable()) throw new Error("AI_API_KEY is not configured.");
+  const openai = createAiClient();
 
   const response = await openai.responses.parse({
-    model: getTextModelForTask("creative_brief"),
+    model: resolveAiModel(getTextModelForTask("creative_brief")),
     ...getTextReasoningForTask("creative_brief"),
     input: [
       {
@@ -617,13 +593,8 @@ function premiumVisualPrompt(input: CreativeVisualVariantInput, textMode: Visual
 }
 
 async function generateVisualWithOpenAI(input: CreativeVisualVariantInput) {
-  if (!process.env.OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY is not configured.");
-  }
-
-  const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
+  if (!aiProviderAvailable()) throw new Error("AI_API_KEY is not configured.");
+  const openai = createAiClient();
 
   const prompt = premiumVisualPrompt(input, visualTextMode);
 
@@ -680,7 +651,7 @@ async function generateVisualWithOpenAI(input: CreativeVisualVariantInput) {
         if (input.sourceVisualUrl) referenceFiles.push(await loadReferenceImage(input.sourceVisualUrl, "current-visual"));
         if (input.brandLogoUrl) referenceFiles.push(await loadReferenceImage(input.brandLogoUrl, "client-logo"));
         return await openai.images.edit({
-          model: imageModel,
+          model: resolveAiModel(imageModel),
           image: referenceFiles.length === 1 ? referenceFiles[0] : referenceFiles,
           prompt,
           n: 1,
@@ -693,7 +664,7 @@ async function generateVisualWithOpenAI(input: CreativeVisualVariantInput) {
     }
 
     return openai.images.generate({
-      model: imageModel,
+      model: resolveAiModel(imageModel),
       prompt: input.sourceVisualUrl || input.brandLogoUrl
         ? `${prompt}\nThe requested image references were unavailable for this request. Do not invent a logo or brand mark.`
         : prompt,

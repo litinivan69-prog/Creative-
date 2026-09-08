@@ -74,6 +74,7 @@ import {
 } from "@/lib/self-service/content-orders";
 import { spendCredits } from "@/lib/self-service/credits";
 import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
+import { isUnsupportedAiRegionError } from "@/lib/ai-provider";
 
 function formText(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -2217,6 +2218,9 @@ export async function startSelfServiceMonth() {
     await ensureBlueprintForBrief(brief.id);
   } catch (error) {
     console.error("Self-service blueprint generation failed", error);
+    if (isUnsupportedAiRegionError(error)) {
+      redirect("/app/month?error=ai_provider_region");
+    }
     redirect("/app/month?error=blueprint_failed");
   }
 
@@ -2250,6 +2254,12 @@ export async function continueSelfServiceMonth() {
       blueprintId = (await ensureBlueprintForBrief(brief.id)).blueprintId;
     } catch (error) {
       console.error("Self-service blueprint generation failed", error);
+      if (isUnsupportedAiRegionError(error)) {
+        return {
+          ok: false as const,
+          message: "Генератор временно недоступен на сервере. Бриф и кредиты сохранены — повторять запуск не нужно.",
+        };
+      }
       return { ok: false as const, message: "Не удалось подготовить профиль бренда с первого раза. Кредиты сохранены за заказом — можно повторить безопасно." };
     }
   }

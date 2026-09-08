@@ -249,13 +249,16 @@ export default async function SelfServiceMonthPage({
               <p className="mx-auto mt-3 max-w-xl text-xs leading-5 text-slate-400">Система сама подготовит темы, тексты и визуалы. Повторный запуск не создаёт уже готовые материалы заново.</p>
               {query.notice === "channels_saved" ? <p className="mx-auto mt-5 max-w-xl rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm font-medium text-violet-900">Площадки сохранены. Теперь можно собрать первый месяц — публикации сразу появятся в календаре.</p> : null}
               {query.notice === "order_confirmed" ? <p className="mx-auto mt-5 max-w-xl rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm font-medium text-violet-900">Набор подтверждён, кредиты списаны. Собираем темы, даты и материалы автоматически.</p> : null}
+              {query.error === "ai_provider_region" ? <p className="mx-auto mt-5 max-w-xl rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">Генератор временно недоступен на сервере. Бриф и кредиты сохранены — повторять запуск не нужно.</p> : null}
               {query.error === "blueprint_failed" ? <p className="mx-auto mt-5 max-w-xl rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">Не удалось подготовить профиль с первого раза. Бриф сохранён — можно повторить безопасно.</p> : null}
               {query.autostart === "1" ? (
                 <SelfServiceMonthStarter active />
               ) : (
-                <form action={startSelfServiceMonth} className="mt-7">
-                  <button className="inline-flex rounded-2xl bg-violet-600 px-6 py-3.5 text-sm font-semibold text-white shadow-[0_14px_35px_rgba(124,58,237,0.22)] transition hover:bg-violet-700">Собрать первый месяц</button>
-                </form>
+                query.error === "ai_provider_region" ? null : (
+                  <form action={startSelfServiceMonth} className="mt-7">
+                    <button className="inline-flex rounded-2xl bg-violet-600 px-6 py-3.5 text-sm font-semibold text-white shadow-[0_14px_35px_rgba(124,58,237,0.22)] transition hover:bg-violet-700">Собрать первый месяц</button>
+                  </form>
+                )
               )}
             </div>
           </section>

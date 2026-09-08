@@ -1,8 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
-import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import type { ZodType } from "zod";
 import { TEXT_MODEL_PREMIUM } from "@/lib/openai";
+import { aiProviderAvailable, createAiClient, resolveAiModel } from "@/lib/ai-provider";
 
 export type WriterProvider = "openai" | "anthropic";
 
@@ -14,7 +14,7 @@ export function anthropicAvailable() {
 }
 
 export function openaiAvailable() {
-  return Boolean(process.env.OPENAI_API_KEY);
+  return aiProviderAvailable();
 }
 
 export type ResolvedWriter = { provider: WriterProvider; model: string };
@@ -84,9 +84,9 @@ export async function writerText(input: WriterTextInput): Promise<string> {
     return text;
   }
 
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const openai = createAiClient();
   const response = await openai.responses.create({
-    model: input.writer.model,
+    model: resolveAiModel(input.writer.model),
     input: [
       { role: "system", content: input.system },
       { role: "user", content: input.prompt },
@@ -136,9 +136,9 @@ export async function writerJson<T>(input: WriterJsonInput<T>): Promise<T> {
     }
   }
 
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const openai = createAiClient();
   const response = await openai.responses.parse({
-    model: input.writer.model,
+    model: resolveAiModel(input.writer.model),
     input: [
       { role: "system", content: input.system },
       { role: "user", content: input.prompt },
