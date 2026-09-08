@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { isVkOauthConfigured, publicAppUrl, VK_OAUTH_GROUP_COOKIE, VK_OAUTH_ONBOARDING_COOKIE, VK_OAUTH_STATE_COOKIE, vkOauthCallbackUrl } from "@/lib/vk-oauth";
+import { isVkOauthConfigured, publicAppUrl, resolveVkCommunity, VK_OAUTH_GROUP_COOKIE, VK_OAUTH_GROUP_ID_COOKIE, VK_OAUTH_ONBOARDING_COOKIE, VK_OAUTH_STATE_COOKIE, vkOauthCallbackUrl } from "@/lib/vk-oauth";
 
 export async function GET(request: Request) {
   const publicBase = publicAppUrl(new URL(request.url).origin);
@@ -13,6 +13,9 @@ export async function GET(request: Request) {
   if (!group) return NextResponse.redirect(new URL(`/app/channels?error=${encodeURIComponent("Укажите ссылку на сообщество VK.")}`, publicBase));
   if (!isVkOauthConfigured()) return NextResponse.redirect(new URL(`/app/channels?error=${encodeURIComponent("Вход через VK ещё не включён владельцем Ribes.")}`, publicBase));
 
+  const groupId = await resolveVkCommunity(group);
+  if (!groupId) return NextResponse.redirect(new URL(`/app/channels?error=${encodeURIComponent("Не удалось найти сообщество по этой ссылке. Проверьте адрес и попробуйте ещё раз.")}`, publicBase));
+
   const state = randomBytes(24).toString("base64url");
   const redirectUri = vkOauthCallbackUrl(current.origin);
   const authorize = new URL("https://oauth.vk.com/authorize");
@@ -20,7 +23,8 @@ export async function GET(request: Request) {
     client_id: process.env.VK_APP_ID!.trim(),
     display: "page",
     redirect_uri: redirectUri,
-    scope: "wall,photos,groups,offline",
+    group_ids: String(groupId),
+    scope: "manage,photos",
     response_type: "code",
     v: "5.199",
     state,
@@ -30,6 +34,7 @@ export async function GET(request: Request) {
   const cookie = { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" as const, path: "/", maxAge: 10 * 60 };
   response.cookies.set(VK_OAUTH_STATE_COOKIE, state, cookie);
   response.cookies.set(VK_OAUTH_GROUP_COOKIE, group, cookie);
+  response.cookies.set(VK_OAUTH_GROUP_ID_COOKIE, String(groupId), cookie);
   response.cookies.set(VK_OAUTH_ONBOARDING_COOKIE, onboarding ? "1" : "0", cookie);
   return response;
 }
