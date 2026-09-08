@@ -13,13 +13,14 @@ export async function resolveVkCommunity(reference: string) {
   if (numeric) return Number(numeric[1]);
   if (!candidate) return null;
   const body = new URLSearchParams({
-    screen_name: candidate,
+    group_id: candidate,
     access_token: process.env.VK_SERVICE_TOKEN?.trim() || "",
     v: "5.199",
   });
-  const response = await fetch("https://api.vk.com/method/utils.resolveScreenName", { method: "POST", body, signal: AbortSignal.timeout(15000) });
-  const data = await response.json() as { response?: { type?: string; object_id?: number }; error?: unknown };
-  return data.response?.type === "group" && data.response.object_id ? data.response.object_id : null;
+  const response = await fetch("https://api.vk.com/method/groups.getById", { method: "POST", body, signal: AbortSignal.timeout(15000) });
+  const data = await response.json() as { response?: { groups?: Array<{ id?: number }> } | Array<{ id?: number }>; error?: unknown };
+  const groups = Array.isArray(data.response) ? data.response : data.response?.groups ?? [];
+  return groups[0]?.id || null;
 }
 
 export function publicAppUrl(origin?: string) {
