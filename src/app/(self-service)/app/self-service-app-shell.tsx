@@ -2,10 +2,11 @@ import Link from "next/link";
 import { signOutSelfService } from "@/lib/self-service/auth-actions";
 import { RibesBrand, RibesMark } from "@/app/(self-service)/ribes-brand";
 
-export type SelfServiceAppView = "overview" | "calendar" | "materials" | "articles" | "autoposting" | "results" | "channels" | "credits" | "builder" | "quick" | "reputation";
+export type SelfServiceAppView = "overview" | "brain" | "calendar" | "materials" | "articles" | "autoposting" | "results" | "channels" | "credits" | "builder" | "quick" | "reputation";
 
 const navItems: Array<{ id: SelfServiceAppView; label: string; href: string; icon: string }> = [
   { id: "overview", label: "Обзор", href: "/app", icon: "⌁" },
+  { id: "brain", label: "Мозг бренда", href: "/app/brand-brain", icon: "✦" },
   { id: "builder", label: "Собрать месяц", href: "/app/plan-builder", icon: "+" },
   { id: "calendar", label: "Календарь", href: "/app/month#calendar", icon: "□" },
   { id: "materials", label: "Материалы", href: "/app/month#materials", icon: "◇" },

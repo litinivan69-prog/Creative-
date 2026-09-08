@@ -103,6 +103,10 @@ export default async function SelfServicePreviewPage() {
       description="Профиль бренда уже собран. Теперь выберите пробный набор материалов — стоимость в кредитах будет видна до запуска."
       headerAction={<Link href="/app/plan-builder" className="rounded-2xl bg-violet-500 px-5 py-3 text-sm font-semibold text-white shadow-[0_16px_45px_rgba(112,78,255,.28)] transition hover:bg-violet-400">Собрать пробный набор</Link>}
     >
+      <section className="mb-4 flex flex-wrap items-center justify-between gap-4 rounded-[22px] border border-violet-400/15 bg-[linear-gradient(120deg,rgba(124,92,255,.14),rgba(255,255,255,.025))] p-5">
+        <div><p className="text-sm font-semibold text-white">Хотите, чтобы первый результат был точнее?</p><p className="mt-1 max-w-2xl text-xs leading-5 text-white/38">Расскажите Ribes о бренде в коротком чате. Один вопрос за раз; остановиться можно в любой момент.</p></div>
+        <div className="flex flex-wrap gap-2"><Link href="/app/brand-brain" className="rounded-full bg-white px-4 py-2.5 text-xs font-semibold text-black">Улучшить знания</Link><Link href="/app/plan-builder" className="rounded-full border border-white/[.09] px-4 py-2.5 text-xs font-semibold text-white/55">Попробовать сейчас</Link></div>
+      </section>
       <section className="grid gap-4 lg:grid-cols-[1.08fr_.92fr]">
         <article className={`${darkCardClass} p-6 sm:p-7`}>
           <div className="flex flex-wrap items-start justify-between gap-4">
