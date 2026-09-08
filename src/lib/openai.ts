@@ -1,5 +1,6 @@
 import { toFile } from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
+import sharp from "sharp";
 import { z } from "zod";
 import { aiProviderAvailable, createAiClient, resolveAiModel } from "@/lib/ai-provider";
 import {
@@ -578,7 +579,7 @@ function premiumVisualPrompt(input: CreativeVisualVariantInput, textMode: Visual
     "Produce a realistic premium advertising photograph or high-end editorial visual appropriate to the asset type. Use an intentional focal point, clean composition, restrained color discipline, thoughtful lighting, and platform-native framing.",
     "Avoid cheap stock-photo aesthetics, generic AI poster composition, decorative clutter, fake clinic or company names, fake logos, any unrequested text, fake certificates, fake reviews, unsupported medical claims, guarantees, before-and-after comparisons, and unrealistic treatment or business results.",
     input.brandLogoUrl
-      ? "The attached input image is the client's exact logo. If the composition uses it, preserve its symbol, wordmark, spelling, proportions, colors, and geometry exactly. Never redraw, reinterpret, replace, or invent any part of it. Keep it small, clean, and naturally integrated. If exact preservation is not possible, omit the logo entirely."
+      ? "The attached input image is the client's exact logo and MUST be visibly used once in the finished visual. Preserve its symbol, wordmark, spelling, proportions, colors, and geometry exactly. Never redraw, reinterpret, replace, or invent any part of it. Keep it small, clean, legible, and naturally integrated."
       : "No verified client logo was supplied. Do not invent, approximate, redraw, imitate, or display any logo, wordmark, company name, watermark, or fake brand mark.",
     "Keep one coherent visual language across the whole client month: the same restrained palette, lighting logic, level of realism, composition discipline, and editorial character. Do not randomly switch design styles between VK, Telegram, articles, or carousel slides.",
     "When people appear, render natural anatomy, credible hands, expressive but realistic faces, and professional context. Do not depict misleading procedures or outcomes.",
@@ -630,7 +631,6 @@ async function generateVisualWithOpenAI(input: CreativeVisualVariantInput) {
       contentType = (referenceResponse.headers.get("content-type") || "").split(";")[0].toLowerCase();
       imageBuffer = Buffer.from(await referenceResponse.arrayBuffer());
       if (contentType === "image/svg+xml" || referenceUrl.pathname.toLowerCase().endsWith(".svg")) {
-        const { default: sharp } = await import("sharp");
         imageBuffer = await sharp(imageBuffer, { density: 300 }).png().toBuffer();
         contentType = "image/png";
       }
@@ -660,6 +660,9 @@ async function generateVisualWithOpenAI(input: CreativeVisualVariantInput) {
         });
       } catch (error) {
         console.error("Visual reference could not be supplied to the image model", error);
+        if (input.brandLogoUrl) {
+          throw new Error("BRAND_LOGO_REFERENCE_FAILED", { cause: error });
+        }
       }
     }
 
