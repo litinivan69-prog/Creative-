@@ -8,7 +8,6 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getIntegrationSetting, getTelegramBotToken, TELEGRAM_BOT_USERNAME_KEY } from "@/lib/telegram";
 import { VK_ACCESS_TOKEN_KEY, VK_ACCOUNT_LABEL_KEY } from "@/lib/vk";
-import { isVkOauthConfigured } from "@/lib/vk-oauth";
 import { isOkOauthConfigured } from "@/lib/ok-oauth";
 import { completeSelfServiceChannelOnboarding } from "@/lib/self-service/channel-actions";
 import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
@@ -40,13 +39,15 @@ export default async function SelfServiceChannelsPage({ searchParams }: { search
   ]);
   const socialDefinitions = [
     { platform: "telegram" as const, label: "Telegram", description: "Бот публикует посты и карусели в ваш канал.", referencePlaceholder: "@название_канала", tokenPlaceholder: "123456:ABC...", platformToken: platformTelegramToken, platformHint: platformTelegramUsername ? `@${platformTelegramUsername}` : null },
-    { platform: "vk" as const, label: "VK", description: "Публикация полного текста и изображений в сообщество.", referencePlaceholder: "https://vk.com/сообщество", tokenPlaceholder: "Ключ с правами публикации", platformToken: platformVkToken, platformHint: platformVkLabel, oauthAvailable: isVkOauthConfigured() },
+    { platform: "vk" as const, label: "VK", description: "Публикация полного текста и изображений в сообщество.", referencePlaceholder: "https://vk.com/сообщество", tokenPlaceholder: "Вставьте ключ сообщества", platformToken: platformVkToken, platformHint: platformVkLabel, oauthAvailable: false },
     { platform: "vcru" as const, label: "VC.ru", description: "Статьи с обложкой и дополнительными изображениями по календарю.", referencePlaceholder: "", tokenPlaceholder: "", platformToken: false, platformHint: null },
     { platform: "ok" as const, label: "Одноклассники", description: "Текст и изображения публикуются в группу после подтверждения.", referencePlaceholder: "https://ok.ru/ваша-группа", tokenPlaceholder: "", platformToken: false, platformHint: null, oauthAvailable: isOkOauthConfigured(), approvalPending: !isOkOauthConfigured() },
   ];
   const channels = socialDefinitions.map((definition) => {
     const saved = membership.client.channels.find((channel) => channel.platform === definition.platform);
-    const connected = saved?.status === "active" && (Boolean(saved.credentialEncrypted) || definition.platformToken);
+    const connected = saved?.status === "active"
+      && (Boolean(saved.credentialEncrypted) || definition.platformToken)
+      && (definition.platform !== "vk" || saved?.credentialHint?.startsWith("Ключ сообщества"));
     return {
       ...definition,
       id: saved?.id ?? null,

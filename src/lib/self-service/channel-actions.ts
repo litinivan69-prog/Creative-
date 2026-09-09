@@ -118,7 +118,7 @@ export async function connectSelfServiceSocialChannel(formData: FormData) {
     if (suppliedToken) {
       const account = await verifyVkToken(token);
       if (!account.ok) connectRedirect({ error: account.error ?? "VK не принял токен." });
-      credentialHint = account.label || "VK";
+      credentialHint = `Ключ сообщества · ${account.label || "VK"}`;
       credentialEncrypted = encryptChannelCredential(token);
     }
     const group = await verifyVkGroup(token, reference);
