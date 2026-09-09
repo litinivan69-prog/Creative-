@@ -130,27 +130,35 @@ export async function verifyVkMediaUpload(token: string, groupId: number) {
 }
 
 async function uploadVkMessagePhoto(token: string, groupId: number, buffer: Buffer) {
-  const server = await vkCall<{ upload_url: string }>(token, "photos.getMessagesUploadServer", {});
-  if (!server.ok) return { ok: false as const, error: server.error };
-  try {
-    const form = new FormData();
-    form.append("photo", new Blob([new Uint8Array(buffer)], { type: "image/jpeg" }), "visual.jpg");
-    const response = await fetch(server.result.upload_url, { method: "POST", body: form });
-    const uploaded = (await response.json()) as { server?: number; photo?: string; hash?: string; error?: string };
-    if (!response.ok || !uploaded.photo || uploaded.photo === "[]" || !uploaded.hash) {
-      return { ok: false as const, error: uploaded.error || "VK не принял фотографию." };
+  let lastError = "VK не принял фотографию.";
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const server = await vkCall<{ upload_url: string }>(token, "photos.getMessagesUploadServer", {});
+    if (!server.ok) return { ok: false as const, error: server.error };
+    try {
+      const form = new FormData();
+      form.append("photo", new Blob([new Uint8Array(buffer)], { type: "image/jpeg" }), "visual.jpg");
+      const response = await fetch(server.result.upload_url, { method: "POST", body: form });
+      const uploaded = (await response.json()) as { server?: number; photo?: string; hash?: string; error?: string };
+      if (!response.ok || !uploaded.photo || uploaded.photo === "[]" || !uploaded.hash) {
+        lastError = uploaded.error || "VK не принял фотографию.";
+      } else {
+        const saved = await vkCall<Array<{ owner_id: number; id: number; access_key?: string }>>(token, "photos.saveMessagesPhoto", {
+          photo: uploaded.photo,
+          server: String(uploaded.server ?? ""),
+          hash: uploaded.hash,
+        });
+        const photo = saved.ok ? saved.result[0] : null;
+        if (saved.ok && photo) {
+          return { ok: true as const, attachment: `photo${photo.owner_id}_${photo.id}${photo.access_key ? `_${photo.access_key}` : ""}` };
+        }
+        lastError = saved.ok ? "VK не вернул фотографию." : saved.error;
+      }
+    } catch {
+      lastError = "Соединение с сервером загрузки VK прервалось.";
     }
-    const saved = await vkCall<Array<{ owner_id: number; id: number; access_key?: string }>>(token, "photos.saveMessagesPhoto", {
-      photo: uploaded.photo,
-      server: String(uploaded.server ?? ""),
-      hash: uploaded.hash,
-    });
-    const photo = saved.ok ? saved.result[0] : null;
-    if (!saved.ok || !photo) return { ok: false as const, error: saved.ok ? "VK не вернул фотографию." : saved.error };
-    return { ok: true as const, attachment: `photo${photo.owner_id}_${photo.id}${photo.access_key ? `_${photo.access_key}` : ""}` };
-  } catch {
-    return { ok: false as const, error: "Соединение с сервером загрузки VK прервалось." };
+    if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 600));
   }
+  return { ok: false as const, error: lastError };
 }
 
 async function uploadVkWallDocument(token: string, groupId: number, buffer: Buffer, index: number) {
@@ -197,6 +205,7 @@ export async function sendVkPost(options: {
 
   const attachments: string[] = [];
   let visualError: string | null = null;
+  let wallUploadUnavailable = false;
   for (const [index, url] of images.entries()) {
     const buffer = await fetchAndPrepareImage(url);
     if (!buffer) {
@@ -204,10 +213,13 @@ export async function sendVkPost(options: {
       break;
     }
 
-    const uploadServer = await vkCall<{ upload_url: string }>(mediaToken, "photos.getWallUploadServer", {
-      group_id: String(options.groupId),
-    });
+    const uploadServer = wallUploadUnavailable
+      ? { ok: false as const, error: "Загрузка на стену недоступна для ключа сообщества." }
+      : await vkCall<{ upload_url: string }>(mediaToken, "photos.getWallUploadServer", {
+          group_id: String(options.groupId),
+        });
     if (!uploadServer.ok) {
+      wallUploadUnavailable = true;
       const messagePhoto = await uploadVkMessagePhoto(mediaToken, options.groupId, buffer);
       if (messagePhoto.ok) {
         attachments.push(messagePhoto.attachment);
