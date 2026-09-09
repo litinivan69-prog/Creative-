@@ -124,21 +124,33 @@ export async function sendVkPost(options: {
   }
 
   const attachments: string[] = [];
+  let visualError: string | null = null;
   for (const url of images) {
     const buffer = await fetchAndPrepareImage(url);
-    if (!buffer) continue;
+    if (!buffer) {
+      visualError = "Ribes не смог подготовить изображение для VK. Попробуйте публикацию ещё раз.";
+      break;
+    }
 
     const uploadServer = await vkCall<{ upload_url: string }>(options.token, "photos.getWallUploadServer", {
       group_id: String(options.groupId),
     });
-    if (!uploadServer.ok) break;
+    if (!uploadServer.ok) {
+      visualError = uploadServer.error.includes("group auth")
+        ? "VK не разрешил этому ключу загружать фотографии. Текст не опубликован без визуала — подключите доступ к фотографиям и повторите попытку."
+        : `VK не разрешил загрузить изображение: ${uploadServer.error}`;
+      break;
+    }
 
     try {
       const form = new FormData();
       form.append("photo", new Blob([new Uint8Array(buffer)], { type: "image/jpeg" }), "visual.jpg");
       const uploadResponse = await fetch(uploadServer.result.upload_url, { method: "POST", body: form });
       const uploaded = (await uploadResponse.json()) as { server?: number; photo?: string; hash?: string };
-      if (!uploaded.photo || uploaded.photo === "[]" || !uploaded.hash) continue;
+      if (!uploaded.photo || uploaded.photo === "[]" || !uploaded.hash) {
+        visualError = "VK принял файл, но не создал фотографию. Попробуйте публикацию ещё раз.";
+        break;
+      }
 
       const saved = await vkCall<Array<{ owner_id: number; id: number }>>(options.token, "photos.saveWallPhoto", {
         group_id: String(options.groupId),
@@ -148,10 +160,18 @@ export async function sendVkPost(options: {
       });
       if (saved.ok && saved.result[0]) {
         attachments.push(`photo${saved.result[0].owner_id}_${saved.result[0].id}`);
+      } else {
+        visualError = saved.ok ? "VK не вернул сохранённую фотографию." : `VK не сохранил фотографию: ${saved.error}`;
+        break;
       }
     } catch {
-      // Skip this visual, keep the post going.
+      visualError = "Во время загрузки изображения в VK оборвалось соединение. Попробуйте ещё раз.";
+      break;
     }
+  }
+
+  if (images.length > 0 && (visualError || attachments.length !== images.length)) {
+    return { ok: false, error: visualError || "Не все изображения удалось загрузить в VK. Пост не опубликован без полного комплекта визуалов." };
   }
 
   const post = await vkCall<{ post_id: number }>(options.token, "wall.post", {
