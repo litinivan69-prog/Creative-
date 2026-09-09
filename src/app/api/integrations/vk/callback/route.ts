@@ -28,7 +28,6 @@ export async function GET(request: Request) {
     if (!isVkOauthConfigured()) throw new Error("Вход через VK не настроен.");
     const state = current.searchParams.get("state") || "";
     const expectedState = cookieStore.get(VK_OAUTH_STATE_COOKIE)?.value || "";
-    const groupReference = cookieStore.get(VK_OAUTH_GROUP_COOKIE)?.value || "";
     const groupId = Number(cookieStore.get(VK_OAUTH_GROUP_ID_COOKIE)?.value || "");
     if (!state || !expectedState || state !== expectedState) throw new Error("Сессия подключения VK истекла. Начните ещё раз.");
     if (!Number.isInteger(groupId) || groupId <= 0) throw new Error("Не удалось определить сообщество VK. Начните подключение ещё раз.");
@@ -38,7 +37,7 @@ export async function GET(request: Request) {
     const membership = await prisma.workspaceMembership.findFirst({ where: await selfServiceMembershipWhere(email), select: { clientId: true } });
     if (!membership) throw new Error("Сначала создайте бренд в Ribes.");
     const exchanged = await exchangeVkOauthCode(code, vkOauthCallbackUrl(current.origin), groupId);
-    const [account, group] = await Promise.all([verifyVkToken(exchanged.accessToken), verifyVkGroup(exchanged.accessToken, groupReference)]);
+    const [account, group] = await Promise.all([verifyVkToken(exchanged.accessToken), verifyVkGroup(exchanged.accessToken, String(groupId))]);
     if (!account.ok) throw new Error(account.error || "VK не подтвердил доступ.");
     if (!group.ok || !group.groupId) throw new Error(group.error || "Сообщество VK не найдено.");
 
