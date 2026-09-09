@@ -121,7 +121,7 @@ export async function connectSelfServiceSocialChannel(formData: FormData) {
       credentialHint = `Ключ сообщества · ${account.label || "VK"}`;
       credentialEncrypted = encryptChannelCredential(token);
     }
-    const group = await verifyVkGroup(token, reference);
+    const group = await verifyVkGroup(token, reference, process.env.VK_SERVICE_TOKEN?.trim() || token);
     if (!group.ok || !group.groupId) connectRedirect({ error: group.error ?? "Сообщество VK не найдено." });
     channelId = String(group.groupId);
     title = group.title || "VK";

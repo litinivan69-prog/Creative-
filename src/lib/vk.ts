@@ -49,22 +49,38 @@ export async function verifyVkToken(token: string): Promise<{ ok: boolean; label
 export async function verifyVkGroup(
   token: string,
   reference: string,
+  lookupToken = token,
 ): Promise<{ ok: boolean; groupId?: number; title?: string; error?: string }> {
-  let candidate = reference
-    .trim()
-    .replace(/^https?:\/\/(www\.)?vk\.com\//i, "")
-    .replace(/^@/, "");
+  let candidate = reference.trim();
+  try {
+    const withProtocol = /^https?:\/\//i.test(candidate) ? candidate : `https://${candidate}`;
+    const parsed = new URL(withProtocol);
+    if (/^(?:www\.|m\.)?(?:vk\.com|vk\.ru)$/i.test(parsed.hostname)) {
+      candidate = parsed.pathname.split("/").filter(Boolean)[0] ?? "";
+    }
+  } catch {
+    // Plain screen names and numeric IDs are handled below.
+  }
+  candidate = candidate
+    .replace(/^https?:\/\/(?:www\.|m\.)?(?:vk\.com|vk\.ru)\//i, "")
+    .split(/[/?#]/)[0]
+    .replace(/^@/, "")
+    .trim();
+
+  if (!candidate) {
+    return { ok: false, error: "Вставьте ссылку на сообщество VK целиком — Ribes сам определит его ID." };
+  }
 
   let groupId: number | null = null;
   const numeric = candidate.match(/^-?(\d+)$/) ?? candidate.match(/^(?:club|public)(\d+)$/i);
   if (numeric) {
     groupId = Number(numeric[1]);
   } else {
-    const resolved = await vkCall<{ type?: string; object_id?: number }>(token, "utils.resolveScreenName", {
+    const resolved = await vkCall<{ type?: string; object_id?: number }>(lookupToken, "utils.resolveScreenName", {
       screen_name: candidate,
     });
     if (!resolved.ok || resolved.result?.type !== "group" || !resolved.result.object_id) {
-      return { ok: false, error: "Сообщество не найдено. Укажите адрес вида vk.com/имя или его ID." };
+      return { ok: false, error: "Не удалось распознать ссылку. Откройте главную страницу сообщества и скопируйте адрес из браузера." };
     }
     groupId = resolved.result.object_id;
   }
