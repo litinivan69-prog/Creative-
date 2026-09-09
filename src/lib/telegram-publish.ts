@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getIntegrationSetting, getTelegramBotToken, sendTelegramPost } from "@/lib/telegram";
 import { VK_ACCESS_TOKEN_KEY, sendVkPost } from "@/lib/vk";
 import { decryptChannelCredential, encryptChannelCredential } from "@/lib/channel-credentials";
+import { parseVkOauthCredential, refreshVkOauthCredential, serializeVkOauthCredential } from "@/lib/vk-oauth";
 import { sendVcArticle } from "@/lib/vc";
 import type { ArticleImage } from "@/lib/article-schema";
 import { cleanVisibleContentText } from "@/lib/content-draft-schema";
@@ -255,20 +256,34 @@ export async function publishScheduledPublication(
         errorMessage: vc.ok ? undefined : vc.error,
       });
     } else if (channel.platform === "vk") {
-      const vkToken = decryptChannelCredential(channel.credentialEncrypted)
+      const storedVkCredential = decryptChannelCredential(channel.credentialEncrypted)
         ?? await getIntegrationSetting(VK_ACCESS_TOKEN_KEY);
-      const vkMediaToken = vkToken;
-      if (!vkToken) {
+      const parsedVkCredential = parseVkOauthCredential(storedVkCredential);
+      if (!parsedVkCredential) {
         results.push({ platform: "vk", ok: false, error: "VK не подключён в настройках." });
         continue;
       }
+      let activeVkCredential;
+      try {
+        activeVkCredential = await refreshVkOauthCredential(parsedVkCredential);
+      } catch (error) {
+        results.push({ platform: "vk", ok: false, error: error instanceof Error ? error.message : "VK попросил подключить сообщество заново." });
+        continue;
+      }
+      if (activeVkCredential !== parsedVkCredential) {
+        await prisma.clientChannel.update({
+          where: { id: channel.id },
+          data: { credentialEncrypted: encryptChannelCredential(serializeVkOauthCredential(activeVkCredential)) },
+        }).catch(() => {});
+      }
+      const vkToken = activeVkCredential.accessToken;
       // Legacy drafts may still carry the service slide label — never publish it.
       const message = cleanVisibleContentText(stripCarouselSlideLabel(
         [publication.contentDraft?.draftTitle || publication.topic, publication.contentDraft?.draftBody ?? ""]
           .filter(Boolean)
           .join("\n\n"),
       ));
-      const vk = await sendVkPost({ token: vkToken, mediaToken: vkMediaToken, groupId: Number(channel.channelId), message, imageUrls });
+      const vk = await sendVkPost({ token: vkToken, groupId: Number(channel.channelId), message, imageUrls });
       if (vk.ok) {
         results.push({ platform: "vk", ok: true, url: vk.url, externalId: String(vk.postId), imagesSent: vk.imagesSent });
       } else {

@@ -4,8 +4,8 @@ import { auth } from "@/auth";
 import { encryptChannelCredential } from "@/lib/channel-credentials";
 import { prisma } from "@/lib/prisma";
 import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
-import { verifyVkGroup, verifyVkToken } from "@/lib/vk";
-import { exchangeVkOauthCode, isVkOauthConfigured, publicAppUrl, VK_OAUTH_GROUP_COOKIE, VK_OAUTH_GROUP_ID_COOKIE, VK_OAUTH_ONBOARDING_COOKIE, VK_OAUTH_STATE_COOKIE, VK_OAUTH_VERIFIER_COOKIE, vkOauthCallbackUrl } from "@/lib/vk-oauth";
+import { verifyVkGroup, verifyVkMediaUpload, verifyVkToken } from "@/lib/vk";
+import { exchangeVkOauthCode, isVkOauthConfigured, publicAppUrl, serializeVkOauthCredential, VK_OAUTH_GROUP_COOKIE, VK_OAUTH_GROUP_ID_COOKIE, VK_OAUTH_ONBOARDING_COOKIE, VK_OAUTH_STATE_COOKIE, VK_OAUTH_VERIFIER_COOKIE, vkOauthCallbackUrl } from "@/lib/vk-oauth";
 
 function finish(request: Request, params: { notice?: string; error?: string; onboarding?: boolean }) {
   const target = new URL("/app/channels", publicAppUrl(new URL(request.url).origin));
@@ -43,8 +43,10 @@ export async function GET(request: Request) {
     const [account, group] = await Promise.all([verifyVkToken(exchanged.accessToken), verifyVkGroup(exchanged.accessToken, String(groupId))]);
     if (!account.ok) throw new Error(account.error || "VK не подтвердил доступ.");
     if (!group.ok || !group.groupId) throw new Error(group.error || "Сообщество VK не найдено.");
+    const media = await verifyVkMediaUpload(exchanged.accessToken, group.groupId);
+    if (!media.ok) throw new Error("VK не выдал приложению право загружать фотографии. В кабинете VK ID откройте «Доступы» и запросите для Ribes права photos и wall, затем подключите сообщество ещё раз.");
 
-    const channelData = { channelId: String(group.groupId), title: group.title || "VK", status: "active", credentialEncrypted: encryptChannelCredential(exchanged.accessToken), credentialHint: account.label || "Вход через VK", autopublishEnabled: true, connectedAt: new Date() };
+    const channelData = { channelId: String(group.groupId), title: group.title || "VK", status: "active", credentialEncrypted: encryptChannelCredential(serializeVkOauthCredential(exchanged)), credentialHint: account.label || "Вход через VK", autopublishEnabled: true, connectedAt: new Date() };
     const existing = await prisma.clientChannel.findFirst({ where: { clientId: membership.clientId, platform: "vk" }, orderBy: { createdAt: "asc" }, select: { id: true } });
     if (existing) await prisma.clientChannel.update({ where: { id: existing.id }, data: channelData });
     else await prisma.clientChannel.create({ data: { clientId: membership.clientId, platform: "vk", ...channelData } });
