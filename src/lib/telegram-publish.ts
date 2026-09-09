@@ -257,12 +257,7 @@ export async function publishScheduledPublication(
     } else if (channel.platform === "vk") {
       const vkToken = decryptChannelCredential(channel.credentialEncrypted)
         ?? await getIntegrationSetting(VK_ACCESS_TOKEN_KEY);
-      // VK ID produces a user token that can upload wall photos. Older manually
-      // connected community keys can publish text, but require the legacy user
-      // token specifically for media uploads.
-      const vkMediaToken = channel.credentialHint?.startsWith("Ключ сообщества")
-        ? await getIntegrationSetting(VK_ACCESS_TOKEN_KEY)
-        : vkToken;
+      const vkMediaToken = vkToken;
       if (!vkToken) {
         results.push({ platform: "vk", ok: false, error: "VK не подключён в настройках." });
         continue;
