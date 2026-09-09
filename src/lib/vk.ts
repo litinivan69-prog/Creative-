@@ -16,10 +16,17 @@ async function vkCall<T>(token: string, method: string, params: Record<string, s
     const response = await fetch(`${VK_API}/${method}`, { method: "POST", body });
     const data = (await response.json()) as { response?: T; error?: { error_code?: number; error_msg?: string } };
     if (data.error || data.response === undefined) {
+      const apiMessage = data.error?.error_msg || "";
+      if (/group messages are disabled/i.test(apiMessage)) {
+        return {
+          ok: false,
+          error: "В сообществе выключены сообщения. Откройте VK: Управление → Сообщения → включите «Сообщения сообщества», затем повторите публикацию. Новый ключ создавать не нужно.",
+        };
+      }
       if (data.error?.error_code === 9) {
         return { ok: false, error: "VK временно ограничил частые повторные запросы. Подождите 5–10 минут и попробуйте ещё раз." };
       }
-      return { ok: false, error: data.error?.error_msg || "VK API отклонил запрос." };
+      return { ok: false, error: apiMessage || "VK API отклонил запрос." };
     }
     return { ok: true, result: data.response };
   } catch {
