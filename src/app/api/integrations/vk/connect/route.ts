@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   authorize.search = new URLSearchParams({
     client_id: process.env.VK_APP_ID!.trim(),
     redirect_uri: redirectUri,
-    scope: "wall photos groups offline",
+    scope: "wall photos groups",
     response_type: "code",
     code_challenge: challenge,
     code_challenge_method: "s256",
