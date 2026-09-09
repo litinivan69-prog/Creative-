@@ -44,14 +44,24 @@ export function ChannelSetupForm({ channels, onboarding = false }: { channels: S
               <label className="grid gap-1.5"><span className="text-[10px] font-semibold text-white/42">Почта VC.ru</span><input type="email" name="vcEmail" required={!channel.tokenAvailable} autoComplete="username" placeholder={channel.tokenAvailable ? channel.credentialHint || "Подключена" : "name@example.ru"} className="rounded-xl border border-white/[0.08] bg-black/20 px-4 py-3 text-xs text-white/75 outline-none transition placeholder:text-white/18 focus:border-violet-400/40" /></label>
               <label className="grid gap-1.5"><span className="text-[10px] font-semibold text-white/42">Пароль VC.ru</span><input type="password" name="vcPassword" required={!channel.tokenAvailable} autoComplete="current-password" placeholder={channel.tokenAvailable ? "Не нужен для проверки" : "Введите пароль"} className="rounded-xl border border-white/[0.08] bg-black/20 px-4 py-3 text-xs text-white/75 outline-none transition placeholder:text-white/18 focus:border-violet-400/40" /></label>
             </> : <>
-              {channel.platform === "vk" ? <div className="rounded-2xl border border-[#2787F5]/20 bg-[#2787F5]/[0.07] p-4">
-                <p className="text-xs font-semibold text-white/78">Подключение VK за один раз</p>
-                <ol className="mt-3 space-y-2 text-[10px] leading-4 text-white/42">
-                  <li><span className="mr-2 text-[#6eaff8]">1.</span>Откройте свои сообщества и выберите нужное.</li>
-                  <li><span className="mr-2 text-[#6eaff8]">2.</span>Нажмите «Управление» → «Работа с API» → «Создать ключ».</li>
-                  <li><span className="mr-2 text-[#6eaff8]">3.</span>Разрешите управление и фотографии, затем вставьте ключ ниже.</li>
-                </ol>
-                <Link href="https://vk.com/groups?tab=admin" target="_blank" className="mt-3 inline-flex rounded-xl bg-[#2787F5] px-4 py-2.5 text-[11px] font-semibold text-white transition hover:brightness-110">Открыть мои сообщества VK</Link>
+              {channel.platform === "vk" ? <div className="rounded-2xl border border-[#2787F5]/25 bg-[#2787F5]/[0.08] p-4 sm:p-5">
+                <p className="text-sm font-semibold text-white/85">Сначала откройте VK по синей кнопке</p>
+                <p className="mt-1 text-[10px] leading-4 text-white/38">Откроется список сообществ, которыми вы управляете. Выберите то, куда Ribes должен публиковать.</p>
+                <Link href="https://vk.com/groups?tab=admin" target="_blank" className="mt-4 flex w-full items-center justify-center rounded-xl bg-[#2787F5] px-4 py-3 text-xs font-semibold text-white shadow-[0_12px_30px_rgba(39,135,245,.25)] transition hover:brightness-110">1. Открыть мои сообщества VK →</Link>
+                <div className="mt-4 grid gap-2">
+                  {[
+                    ["2", "Откройте нужное сообщество", "Нажмите на название или аватар сообщества."],
+                    ["3", "Нажмите «Управление»", "Кнопка находится на странице сообщества."],
+                    ["4", "Откройте «Дополнительно»", "В меню управления сначала раскройте этот раздел."],
+                    ["5", "Выберите «Работа с API»", "Затем откройте «Ключи доступа» и нажмите «Создать ключ»."],
+                  ].map(([number, title, hint]) => <div key={number} className="flex gap-3 rounded-xl border border-white/[0.06] bg-black/15 p-3"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#2787F5]/20 text-[10px] font-bold text-[#8bc2ff]">{number}</span><div><p className="text-[11px] font-semibold text-white/65">{title}</p><p className="mt-0.5 text-[9px] leading-4 text-white/28">{hint}</p></div></div>)}
+                </div>
+                <div className="mt-3 rounded-xl border border-emerald-400/15 bg-emerald-400/[0.06] p-3">
+                  <p className="text-[10px] font-semibold text-emerald-200/80">При создании ключа включите три пункта:</p>
+                  <div className="mt-2 flex flex-wrap gap-2">{["Управление сообществом", "Фотографии", "Стена"].map((permission) => <span key={permission} className="rounded-full border border-emerald-300/15 bg-emerald-300/[0.07] px-2.5 py-1 text-[9px] text-emerald-100/65">✓ {permission}</span>)}</div>
+                  <p className="mt-2 text-[9px] leading-4 text-white/25">Если пункта «Стена» нет, включите управление и фотографии — Ribes проверит доступ автоматически.</p>
+                </div>
+                <p className="mt-3 text-[10px] leading-4 text-white/38"><span className="font-semibold text-white/60">6.</span> Скопируйте появившийся ключ, вернитесь сюда и вставьте его в поле ниже.</p>
               </div> : null}
               {channel.platform === "telegram" && channel.tokenAvailable && channel.credentialHint ? <div className="rounded-2xl border border-sky-400/15 bg-sky-500/[0.06] p-4"><p className="text-xs font-semibold text-white/70">1. Добавьте бота в канал</p><p className="mt-1 text-[10px] leading-4 text-white/30">Telegram сам предложит выбрать канал и выдаст боту право публиковать.</p><Link href={`https://t.me/${channel.credentialHint.replace(/^@/, "")}?startchannel&admin=post_messages+edit_messages+delete_messages`} target="_blank" className="mt-3 inline-flex rounded-xl bg-[#229ED9] px-4 py-2.5 text-[11px] font-semibold text-white transition hover:brightness-110">Добавить {channel.credentialHint}</Link></div> : null}
               <label className="grid gap-1.5"><span className="text-[10px] font-semibold text-white/42">{channel.platform === "telegram" ? "Адрес канала" : channel.platform === "ok" ? "Ссылка на группу" : "Ссылка на сообщество"}</span><input name="reference" required defaultValue={channel.reference} placeholder={channel.referencePlaceholder} className="rounded-xl border border-white/[0.08] bg-black/20 px-4 py-3 text-xs text-white/75 outline-none transition placeholder:text-white/18 focus:border-violet-400/40" /></label>
