@@ -5,7 +5,7 @@ import { encryptChannelCredential } from "@/lib/channel-credentials";
 import { prisma } from "@/lib/prisma";
 import { selfServiceMembershipWhere } from "@/lib/self-service/workspace";
 import { verifyVkGroup, verifyVkToken } from "@/lib/vk";
-import { exchangeVkOauthCode, isVkOauthConfigured, publicAppUrl, VK_OAUTH_GROUP_COOKIE, VK_OAUTH_GROUP_ID_COOKIE, VK_OAUTH_ONBOARDING_COOKIE, VK_OAUTH_STATE_COOKIE, vkOauthCallbackUrl } from "@/lib/vk-oauth";
+import { exchangeVkOauthCode, isVkOauthConfigured, publicAppUrl, VK_OAUTH_GROUP_COOKIE, VK_OAUTH_GROUP_ID_COOKIE, VK_OAUTH_ONBOARDING_COOKIE, VK_OAUTH_STATE_COOKIE, VK_OAUTH_VERIFIER_COOKIE, vkOauthCallbackUrl } from "@/lib/vk-oauth";
 
 function finish(request: Request, params: { notice?: string; error?: string; onboarding?: boolean }) {
   const target = new URL("/app/channels", publicAppUrl(new URL(request.url).origin));
@@ -13,7 +13,7 @@ function finish(request: Request, params: { notice?: string; error?: string; onb
   if (params.error) target.searchParams.set("error", params.error);
   if (params.onboarding) target.searchParams.set("from", "brief");
   const redirect = NextResponse.redirect(target);
-  for (const name of [VK_OAUTH_STATE_COOKIE, VK_OAUTH_GROUP_COOKIE, VK_OAUTH_GROUP_ID_COOKIE, VK_OAUTH_ONBOARDING_COOKIE]) redirect.cookies.delete(name);
+  for (const name of [VK_OAUTH_STATE_COOKIE, VK_OAUTH_GROUP_COOKIE, VK_OAUTH_GROUP_ID_COOKIE, VK_OAUTH_ONBOARDING_COOKIE, VK_OAUTH_VERIFIER_COOKIE]) redirect.cookies.delete(name);
   return redirect;
 }
 
@@ -32,11 +32,14 @@ export async function GET(request: Request) {
     if (!state || !expectedState || state !== expectedState) throw new Error("Сессия подключения VK истекла. Начните ещё раз.");
     if (!Number.isInteger(groupId) || groupId <= 0) throw new Error("Не удалось определить сообщество VK. Начните подключение ещё раз.");
     const code = current.searchParams.get("code");
+    const deviceId = current.searchParams.get("device_id") || "";
+    const verifier = cookieStore.get(VK_OAUTH_VERIFIER_COOKIE)?.value || "";
     if (!code) throw new Error(current.searchParams.get("error_description") || "VK не подтвердил подключение.");
+    if (!deviceId || !verifier) throw new Error("Сессия подключения VK истекла. Начните ещё раз.");
 
     const membership = await prisma.workspaceMembership.findFirst({ where: await selfServiceMembershipWhere(email), select: { clientId: true } });
     if (!membership) throw new Error("Сначала создайте бренд в Ribes.");
-    const exchanged = await exchangeVkOauthCode(code, vkOauthCallbackUrl(current.origin), groupId);
+    const exchanged = await exchangeVkOauthCode(code, vkOauthCallbackUrl(current.origin), deviceId, verifier);
     const [account, group] = await Promise.all([verifyVkToken(exchanged.accessToken), verifyVkGroup(exchanged.accessToken, String(groupId))]);
     if (!account.ok) throw new Error(account.error || "VK не подтвердил доступ.");
     if (!group.ok || !group.groupId) throw new Error(group.error || "Сообщество VK не найдено.");

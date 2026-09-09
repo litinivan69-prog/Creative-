@@ -1,7 +1,7 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { isVkOauthConfigured, publicAppUrl, resolveVkCommunity, VK_OAUTH_GROUP_COOKIE, VK_OAUTH_GROUP_ID_COOKIE, VK_OAUTH_ONBOARDING_COOKIE, VK_OAUTH_STATE_COOKIE, vkOauthCallbackUrl } from "@/lib/vk-oauth";
+import { isVkOauthConfigured, publicAppUrl, resolveVkCommunity, VK_OAUTH_GROUP_COOKIE, VK_OAUTH_GROUP_ID_COOKIE, VK_OAUTH_ONBOARDING_COOKIE, VK_OAUTH_STATE_COOKIE, VK_OAUTH_VERIFIER_COOKIE, vkOauthCallbackUrl } from "@/lib/vk-oauth";
 
 export async function GET(request: Request) {
   const publicBase = publicAppUrl(new URL(request.url).origin);
@@ -17,15 +17,17 @@ export async function GET(request: Request) {
   if (!groupId) return NextResponse.redirect(new URL(`/app/channels?error=${encodeURIComponent("Не удалось найти сообщество по этой ссылке. Проверьте адрес и попробуйте ещё раз.")}`, publicBase));
 
   const state = randomBytes(24).toString("base64url");
+  const verifier = randomBytes(48).toString("base64url");
+  const challenge = createHash("sha256").update(verifier).digest("base64url");
   const redirectUri = vkOauthCallbackUrl(current.origin);
-  const authorize = new URL("https://oauth.vk.com/authorize");
+  const authorize = new URL("https://id.vk.ru/authorize");
   authorize.search = new URLSearchParams({
     client_id: process.env.VK_APP_ID!.trim(),
-    display: "page",
     redirect_uri: redirectUri,
-    scope: "wall,photos,groups,offline",
+    scope: "wall photos groups offline",
     response_type: "code",
-    v: "5.199",
+    code_challenge: challenge,
+    code_challenge_method: "s256",
     state,
   }).toString();
 
@@ -35,5 +37,6 @@ export async function GET(request: Request) {
   response.cookies.set(VK_OAUTH_GROUP_COOKIE, group, cookie);
   response.cookies.set(VK_OAUTH_GROUP_ID_COOKIE, String(groupId), cookie);
   response.cookies.set(VK_OAUTH_ONBOARDING_COOKIE, onboarding ? "1" : "0", cookie);
+  response.cookies.set(VK_OAUTH_VERIFIER_COOKIE, verifier, cookie);
   return response;
 }

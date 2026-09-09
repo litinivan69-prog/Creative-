@@ -2,6 +2,7 @@ export const VK_OAUTH_STATE_COOKIE = "ribes_vk_oauth_state";
 export const VK_OAUTH_GROUP_COOKIE = "ribes_vk_oauth_group";
 export const VK_OAUTH_ONBOARDING_COOKIE = "ribes_vk_oauth_onboarding";
 export const VK_OAUTH_GROUP_ID_COOKIE = "ribes_vk_oauth_group_id";
+export const VK_OAUTH_VERIFIER_COOKIE = "ribes_vk_oauth_verifier";
 
 export function isVkOauthConfigured() {
   return Boolean(process.env.VK_APP_ID?.trim() && process.env.VK_APP_SECRET?.trim() && process.env.VK_SERVICE_TOKEN?.trim());
@@ -31,24 +32,24 @@ export function vkOauthCallbackUrl(origin?: string) {
   return `${publicAppUrl(origin)}/api/integrations/vk/callback`;
 }
 
-export async function exchangeVkOauthCode(code: string, redirectUri: string, groupId: number) {
+export async function exchangeVkOauthCode(code: string, redirectUri: string, deviceId: string, codeVerifier: string) {
   const query = new URLSearchParams({
+    grant_type: "authorization_code",
     client_id: process.env.VK_APP_ID?.trim() || "",
-    client_secret: process.env.VK_APP_SECRET?.trim() || "",
     redirect_uri: redirectUri,
-    code,
+    device_id: deviceId,
+    code_verifier: codeVerifier,
   });
-  const response = await fetch(`https://oauth.vk.com/access_token?${query}`, { signal: AbortSignal.timeout(30000) });
+  const response = await fetch(`https://id.vk.ru/oauth2/auth?${query}`, {
+    method: "POST",
+    body: new URLSearchParams({ code }),
+    signal: AbortSignal.timeout(30000),
+  });
   const data = await response.json() as {
     access_token?: string;
-    groups?: Array<{ group_id?: number; access_token?: string }>;
     error?: string;
     error_description?: string;
-  } & Record<string, unknown>;
-  const keyedToken = data[`access_token_${groupId}`];
-  const accessToken = data.groups?.find((group) => group.group_id === groupId)?.access_token
-    || (typeof keyedToken === "string" ? keyedToken : undefined)
-    || data.access_token;
-  if (!response.ok || !accessToken) throw new Error(data.error_description || data.error || "VK не выдал доступ к сообществу.");
-  return { accessToken };
+  };
+  if (!response.ok || !data.access_token) throw new Error(data.error_description || data.error || "VK не выдал доступ к публикации.");
+  return { accessToken: data.access_token };
 }
