@@ -146,10 +146,12 @@ async function uploadVkWallDocument(token: string, groupId: number, buffer: Buff
  */
 export async function sendVkPost(options: {
   token: string;
+  mediaToken?: string | null;
   groupId: number;
   message: string;
   imageUrls?: string[];
 }): Promise<VkPostResult> {
+  const mediaToken = options.mediaToken?.trim() || options.token;
   const message = options.message.trim().slice(0, VK_TEXT_LIMIT);
   const images = (options.imageUrls ?? []).filter((url) => /^https?:\/\//.test(url)).slice(0, VK_ATTACHMENTS_LIMIT);
 
@@ -166,11 +168,11 @@ export async function sendVkPost(options: {
       break;
     }
 
-    const uploadServer = await vkCall<{ upload_url: string }>(options.token, "photos.getWallUploadServer", {
+    const uploadServer = await vkCall<{ upload_url: string }>(mediaToken, "photos.getWallUploadServer", {
       group_id: String(options.groupId),
     });
     if (!uploadServer.ok) {
-      const document = await uploadVkWallDocument(options.token, options.groupId, buffer, index);
+      const document = await uploadVkWallDocument(mediaToken, options.groupId, buffer, index);
       if (document.ok) {
         attachments.push(document.attachment);
         continue;
@@ -191,7 +193,7 @@ export async function sendVkPost(options: {
         break;
       }
 
-      const saved = await vkCall<Array<{ owner_id: number; id: number }>>(options.token, "photos.saveWallPhoto", {
+      const saved = await vkCall<Array<{ owner_id: number; id: number }>>(mediaToken, "photos.saveWallPhoto", {
         group_id: String(options.groupId),
         photo: uploaded.photo,
         server: String(uploaded.server ?? ""),

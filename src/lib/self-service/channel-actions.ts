@@ -123,8 +123,9 @@ export async function connectSelfServiceSocialChannel(formData: FormData) {
     }
     const group = await verifyVkGroup(token, reference, process.env.VK_SERVICE_TOKEN?.trim() || token);
     if (!group.ok || !group.groupId) connectRedirect({ error: group.error ?? "Сообщество VK не найдено." });
-    const media = await verifyVkMediaUpload(token, group.groupId);
-    if (!media.ok) connectRedirect({ error: "Сообщество подключено для текста. Для визуалов нажмите «Разрешить фотографии через VK»." });
+    const platformMediaToken = await getIntegrationSetting(VK_ACCESS_TOKEN_KEY);
+    const media = await verifyVkMediaUpload(platformMediaToken || token, group.groupId);
+    if (!media.ok) connectRedirect({ error: media.error });
     channelId = String(group.groupId);
     title = group.title || "VK";
   }

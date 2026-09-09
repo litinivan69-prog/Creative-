@@ -257,6 +257,7 @@ export async function publishScheduledPublication(
     } else if (channel.platform === "vk") {
       const vkToken = decryptChannelCredential(channel.credentialEncrypted)
         ?? await getIntegrationSetting(VK_ACCESS_TOKEN_KEY);
+      const vkMediaToken = await getIntegrationSetting(VK_ACCESS_TOKEN_KEY);
       if (!vkToken) {
         results.push({ platform: "vk", ok: false, error: "VK не подключён в настройках." });
         continue;
@@ -267,7 +268,7 @@ export async function publishScheduledPublication(
           .filter(Boolean)
           .join("\n\n"),
       ));
-      const vk = await sendVkPost({ token: vkToken, groupId: Number(channel.channelId), message, imageUrls });
+      const vk = await sendVkPost({ token: vkToken, mediaToken: vkMediaToken, groupId: Number(channel.channelId), message, imageUrls });
       if (vk.ok) {
         results.push({ platform: "vk", ok: true, url: vk.url, externalId: String(vk.postId), imagesSent: vk.imagesSent });
       } else {
