@@ -119,69 +119,10 @@ export type VkPostResult =
 export async function verifyVkMediaUpload(token: string, groupId: number) {
   const photo = await vkCall<{ upload_url: string }>(token, "photos.getWallUploadServer", { group_id: String(groupId) });
   if (photo.ok) return { ok: true as const, mode: "photo" as const };
-  const messagePhoto = await vkCall<{ upload_url: string }>(token, "photos.getMessagesUploadServer", {});
-  if (messagePhoto.ok) return { ok: true as const, mode: "message_photo" as const };
-  const document = await vkCall<{ upload_url: string }>(token, "docs.getWallUploadServer", { group_id: String(groupId) });
-  if (document.ok) return { ok: true as const, mode: "document" as const };
   return {
     ok: false as const,
-    error: `VK не разрешил загрузку изображений этим ключом: ${messagePhoto.error}`,
+    error: `VK не выдал этому подключению право публиковать фотографии на стене: ${photo.error}`,
   };
-}
-
-async function uploadVkMessagePhoto(token: string, groupId: number, buffer: Buffer) {
-  let lastError = "VK не принял фотографию.";
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const server = await vkCall<{ upload_url: string }>(token, "photos.getMessagesUploadServer", {});
-    if (!server.ok) return { ok: false as const, error: server.error };
-    try {
-      const form = new FormData();
-      form.append("photo", new Blob([new Uint8Array(buffer)], { type: "image/jpeg" }), "visual.jpg");
-      const response = await fetch(server.result.upload_url, { method: "POST", body: form });
-      const uploaded = (await response.json()) as { server?: number; photo?: string; hash?: string; error?: string };
-      if (!response.ok || !uploaded.photo || uploaded.photo === "[]" || !uploaded.hash) {
-        lastError = uploaded.error || "VK не принял фотографию.";
-      } else {
-        const saved = await vkCall<Array<{ owner_id: number; id: number; access_key?: string }>>(token, "photos.saveMessagesPhoto", {
-          photo: uploaded.photo,
-          server: String(uploaded.server ?? ""),
-          hash: uploaded.hash,
-        });
-        const photo = saved.ok ? saved.result[0] : null;
-        if (saved.ok && photo) {
-          return { ok: true as const, attachment: `photo${photo.owner_id}_${photo.id}${photo.access_key ? `_${photo.access_key}` : ""}` };
-        }
-        lastError = saved.ok ? "VK не вернул фотографию." : saved.error;
-      }
-    } catch {
-      lastError = "Соединение с сервером загрузки VK прервалось.";
-    }
-    if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 600));
-  }
-  return { ok: false as const, error: lastError };
-}
-
-async function uploadVkWallDocument(token: string, groupId: number, buffer: Buffer, index: number) {
-  const server = await vkCall<{ upload_url: string }>(token, "docs.getWallUploadServer", { group_id: String(groupId) });
-  if (!server.ok) return { ok: false as const, error: server.error };
-  try {
-    const form = new FormData();
-    form.append("file", new Blob([new Uint8Array(buffer)], { type: "image/jpeg" }), `visual-${index + 1}.jpg`);
-    const response = await fetch(server.result.upload_url, { method: "POST", body: form });
-    const uploaded = (await response.json()) as { file?: string; error?: string };
-    if (!response.ok || !uploaded.file) return { ok: false as const, error: uploaded.error || "VK не принял файл." };
-    const saved = await vkCall<{
-      type?: string;
-      doc?: { owner_id?: number; id?: number };
-      graffiti?: { owner_id?: number; id?: number };
-    }>(token, "docs.save", { file: uploaded.file, title: `Визуал ${index + 1}` });
-    if (!saved.ok) return { ok: false as const, error: saved.error };
-    const document = saved.result.doc ?? saved.result.graffiti;
-    if (!document?.owner_id || !document.id) return { ok: false as const, error: "VK не вернул сохранённый визуал." };
-    return { ok: true as const, attachment: `doc${document.owner_id}_${document.id}` };
-  } catch {
-    return { ok: false as const, error: "Соединение с сервером загрузки VK прервалось." };
-  }
 }
 
 /**
@@ -205,32 +146,18 @@ export async function sendVkPost(options: {
 
   const attachments: string[] = [];
   let visualError: string | null = null;
-  let wallUploadUnavailable = false;
-  for (const [index, url] of images.entries()) {
+  for (const url of images) {
     const buffer = await fetchAndPrepareImage(url);
     if (!buffer) {
       visualError = "Ribes не смог подготовить изображение для VK. Попробуйте публикацию ещё раз.";
       break;
     }
 
-    const uploadServer = wallUploadUnavailable
-      ? { ok: false as const, error: "Загрузка на стену недоступна для ключа сообщества." }
-      : await vkCall<{ upload_url: string }>(mediaToken, "photos.getWallUploadServer", {
-          group_id: String(options.groupId),
-        });
+    const uploadServer = await vkCall<{ upload_url: string }>(mediaToken, "photos.getWallUploadServer", {
+      group_id: String(options.groupId),
+    });
     if (!uploadServer.ok) {
-      wallUploadUnavailable = true;
-      const messagePhoto = await uploadVkMessagePhoto(mediaToken, options.groupId, buffer);
-      if (messagePhoto.ok) {
-        attachments.push(messagePhoto.attachment);
-        continue;
-      }
-      const document = await uploadVkWallDocument(mediaToken, options.groupId, buffer, index);
-      if (document.ok) {
-        attachments.push(document.attachment);
-        continue;
-      }
-      visualError = `VK не разрешил загрузить визуал: ${messagePhoto.error}`;
+      visualError = "VK разрешил этому ключу публиковать текст, но запретил фотографии на стене. Пост не опубликован без визуалов. Подключите пользовательский доступ VK ID с правами photos и wall.";
       break;
     }
 
