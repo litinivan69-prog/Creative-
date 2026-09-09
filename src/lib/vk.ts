@@ -112,20 +112,18 @@ export type VkPostResult =
 export async function verifyVkMediaUpload(token: string, groupId: number) {
   const photo = await vkCall<{ upload_url: string }>(token, "photos.getWallUploadServer", { group_id: String(groupId) });
   if (photo.ok) return { ok: true as const, mode: "photo" as const };
-  const messagePhoto = await vkCall<{ upload_url: string }>(token, "photos.getMessagesUploadServer", { peer_id: String(-groupId) });
+  const messagePhoto = await vkCall<{ upload_url: string }>(token, "photos.getMessagesUploadServer", {});
   if (messagePhoto.ok) return { ok: true as const, mode: "message_photo" as const };
   const document = await vkCall<{ upload_url: string }>(token, "docs.getWallUploadServer", { group_id: String(groupId) });
   if (document.ok) return { ok: true as const, mode: "document" as const };
   return {
     ok: false as const,
-    error: "Для публикации визуалов включите у ключа сообщества право «Документы» и подключите его заново.",
+    error: `VK не разрешил загрузку изображений этим ключом: ${messagePhoto.error}`,
   };
 }
 
 async function uploadVkMessagePhoto(token: string, groupId: number, buffer: Buffer) {
-  const server = await vkCall<{ upload_url: string }>(token, "photos.getMessagesUploadServer", {
-    peer_id: String(-groupId),
-  });
+  const server = await vkCall<{ upload_url: string }>(token, "photos.getMessagesUploadServer", {});
   if (!server.ok) return { ok: false as const, error: server.error };
   try {
     const form = new FormData();
