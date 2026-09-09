@@ -169,7 +169,7 @@ export async function publishScheduledPublication(
       platform: { in: options.platforms?.length ? options.platforms : ["vk", "telegram", "ok"] },
     },
     orderBy: { createdAt: "asc" },
-    select: { id: true, channelId: true, platform: true, credentialEncrypted: true },
+    select: { id: true, channelId: true, platform: true, credentialEncrypted: true, credentialHint: true },
   });
 
   if (channels.length === 0) {
@@ -257,7 +257,12 @@ export async function publishScheduledPublication(
     } else if (channel.platform === "vk") {
       const vkToken = decryptChannelCredential(channel.credentialEncrypted)
         ?? await getIntegrationSetting(VK_ACCESS_TOKEN_KEY);
-      const vkMediaToken = await getIntegrationSetting(VK_ACCESS_TOKEN_KEY);
+      // VK ID produces a user token that can upload wall photos. Older manually
+      // connected community keys can publish text, but require the legacy user
+      // token specifically for media uploads.
+      const vkMediaToken = channel.credentialHint?.startsWith("Ключ сообщества")
+        ? await getIntegrationSetting(VK_ACCESS_TOKEN_KEY)
+        : vkToken;
       if (!vkToken) {
         results.push({ platform: "vk", ok: false, error: "VK не подключён в настройках." });
         continue;
