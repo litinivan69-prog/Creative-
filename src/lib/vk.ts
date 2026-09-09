@@ -106,6 +106,40 @@ export type VkPostResult =
   | { ok: true; url: string; postId: number; imagesSent: number }
   | { ok: false; error: string };
 
+export async function verifyVkMediaUpload(token: string, groupId: number) {
+  const photo = await vkCall<{ upload_url: string }>(token, "photos.getWallUploadServer", { group_id: String(groupId) });
+  if (photo.ok) return { ok: true as const, mode: "photo" as const };
+  const document = await vkCall<{ upload_url: string }>(token, "docs.getWallUploadServer", { group_id: String(groupId) });
+  if (document.ok) return { ok: true as const, mode: "document" as const };
+  return {
+    ok: false as const,
+    error: "Для публикации визуалов включите у ключа сообщества право «Документы» и подключите его заново.",
+  };
+}
+
+async function uploadVkWallDocument(token: string, groupId: number, buffer: Buffer, index: number) {
+  const server = await vkCall<{ upload_url: string }>(token, "docs.getWallUploadServer", { group_id: String(groupId) });
+  if (!server.ok) return { ok: false as const, error: server.error };
+  try {
+    const form = new FormData();
+    form.append("file", new Blob([new Uint8Array(buffer)], { type: "image/jpeg" }), `visual-${index + 1}.jpg`);
+    const response = await fetch(server.result.upload_url, { method: "POST", body: form });
+    const uploaded = (await response.json()) as { file?: string; error?: string };
+    if (!response.ok || !uploaded.file) return { ok: false as const, error: uploaded.error || "VK не принял файл." };
+    const saved = await vkCall<{
+      type?: string;
+      doc?: { owner_id?: number; id?: number };
+      graffiti?: { owner_id?: number; id?: number };
+    }>(token, "docs.save", { file: uploaded.file, title: `Визуал ${index + 1}` });
+    if (!saved.ok) return { ok: false as const, error: saved.error };
+    const document = saved.result.doc ?? saved.result.graffiti;
+    if (!document?.owner_id || !document.id) return { ok: false as const, error: "VK не вернул сохранённый визуал." };
+    return { ok: true as const, attachment: `doc${document.owner_id}_${document.id}` };
+  } catch {
+    return { ok: false as const, error: "Соединение с сервером загрузки VK прервалось." };
+  }
+}
+
 /**
  * Publishes a post to the community wall: uploads normalized visuals as wall
  * photos (up to 10), then wall.post with the FULL text (VK has no 1024 limit).
@@ -125,7 +159,7 @@ export async function sendVkPost(options: {
 
   const attachments: string[] = [];
   let visualError: string | null = null;
-  for (const url of images) {
+  for (const [index, url] of images.entries()) {
     const buffer = await fetchAndPrepareImage(url);
     if (!buffer) {
       visualError = "Ribes не смог подготовить изображение для VK. Попробуйте публикацию ещё раз.";
@@ -136,9 +170,14 @@ export async function sendVkPost(options: {
       group_id: String(options.groupId),
     });
     if (!uploadServer.ok) {
-      visualError = uploadServer.error.includes("group auth")
-        ? "VK не разрешил этому ключу загружать фотографии. Текст не опубликован без визуала — подключите доступ к фотографиям и повторите попытку."
-        : `VK не разрешил загрузить изображение: ${uploadServer.error}`;
+      const document = await uploadVkWallDocument(options.token, options.groupId, buffer, index);
+      if (document.ok) {
+        attachments.push(document.attachment);
+        continue;
+      }
+      visualError = document.error.includes("scope") || document.error.includes("Access denied")
+        ? "У ключа сообщества нет права «Документы». Добавьте это право, подключите VK заново и повторите публикацию."
+        : `VK не разрешил загрузить визуал: ${document.error}`;
       break;
     }
 

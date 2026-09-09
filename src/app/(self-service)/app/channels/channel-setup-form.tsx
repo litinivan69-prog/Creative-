@@ -58,8 +58,8 @@ export function ChannelSetupForm({ channels, onboarding = false }: { channels: S
                 </div>
                 <div className="mt-3 rounded-xl border border-emerald-400/15 bg-emerald-400/[0.06] p-3">
                   <p className="text-[10px] font-semibold text-emerald-200/80">При создании ключа включите три пункта:</p>
-                  <div className="mt-2 flex flex-wrap gap-2">{["Управление сообществом", "Фотографии", "Стена"].map((permission) => <span key={permission} className="rounded-full border border-emerald-300/15 bg-emerald-300/[0.07] px-2.5 py-1 text-[9px] text-emerald-100/65">✓ {permission}</span>)}</div>
-                  <p className="mt-2 text-[9px] leading-4 text-white/25">Если пункта «Стена» нет, включите управление и фотографии — Ribes проверит доступ автоматически.</p>
+                  <div className="mt-2 flex flex-wrap gap-2">{["Управление сообществом", "Фотографии", "Документы", "Стена"].map((permission) => <span key={permission} className="rounded-full border border-emerald-300/15 bg-emerald-300/[0.07] px-2.5 py-1 text-[9px] text-emerald-100/65">✓ {permission}</span>)}</div>
+                  <p className="mt-2 text-[9px] leading-4 text-white/25">«Документы» нужны VK для передачи изображений в пост. Ribes проверит доступ до первой публикации.</p>
                 </div>
                 <p className="mt-3 text-[10px] leading-4 text-white/38"><span className="font-semibold text-white/60">6.</span> Скопируйте появившийся ключ, вернитесь сюда и вставьте его в поле ниже.</p>
               </div> : null}

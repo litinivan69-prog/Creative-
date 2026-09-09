@@ -13,7 +13,7 @@ import {
   verifyTelegramChannel,
 } from "@/lib/telegram";
 import { publishScheduledPublication } from "@/lib/telegram-publish";
-import { VK_ACCESS_TOKEN_KEY, verifyVkGroup, verifyVkToken } from "@/lib/vk";
+import { VK_ACCESS_TOKEN_KEY, verifyVkGroup, verifyVkMediaUpload, verifyVkToken } from "@/lib/vk";
 import { connectVcAccount, verifyVcCredential } from "@/lib/vc";
 
 const platforms = ["vk", "telegram", "dzen", "vcru", "ok"] as const;
@@ -123,6 +123,8 @@ export async function connectSelfServiceSocialChannel(formData: FormData) {
     }
     const group = await verifyVkGroup(token, reference, process.env.VK_SERVICE_TOKEN?.trim() || token);
     if (!group.ok || !group.groupId) connectRedirect({ error: group.error ?? "Сообщество VK не найдено." });
+    const media = await verifyVkMediaUpload(token, group.groupId);
+    if (!media.ok) connectRedirect({ error: media.error });
     channelId = String(group.groupId);
     title = group.title || "VK";
   }
